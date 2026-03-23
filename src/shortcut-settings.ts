@@ -444,8 +444,25 @@ function updateTabSelect(): void {
 
   addTabBtn.hidden = tabs.length >= MAX_TABS
 
-  viewingFolderId = null
   renderList()
+}
+
+function syncFromStore(): void {
+  const tabs = getTabs()
+  if (selectedTabId && !tabs.find((t) => t.id === selectedTabId)) {
+    selectedTabId = tabs.length > 0 ? tabs[0].id : null
+    viewingFolderId = null
+  }
+  if (viewingFolderId && selectedTabId) {
+    const tab = tabs.find((t) => t.id === selectedTabId)
+    if (
+      !tab ||
+      !tab.items.find((i) => i.id === viewingFolderId && i.type === "folder")
+    ) {
+      viewingFolderId = null
+    }
+  }
+  updateTabSelect()
 }
 
 export function initShortcutSettings(): void {
@@ -481,6 +498,7 @@ export function initShortcutSettings(): void {
     const tabs = addTab(getTabs(), result.name)
     save(tabs)
     selectedTabId = tabs[tabs.length - 1].id
+    viewingFolderId = null
     updateTabSelect()
   })
 
@@ -489,6 +507,7 @@ export function initShortcutSettings(): void {
     const tabs = deleteTab(getTabs(), selectedTabId)
     save(tabs)
     selectedTabId = tabs.length > 0 ? tabs[0].id : null
+    viewingFolderId = null
     updateTabSelect()
   })
 
@@ -533,7 +552,5 @@ export function initShortcutSettings(): void {
   })
 
   updateTabSelect()
-  store.local.subscribe("shortcuts", () => {
-    updateTabSelect()
-  })
+  store.local.subscribe("shortcuts", syncFromStore)
 }

@@ -25,8 +25,9 @@ function renderDockItem(item: TabItem): HTMLElement {
     el.addEventListener("click", (e) => {
       e.stopPropagation()
       if (openPopover) {
+        const wasThisFolder = openPopover.dataset.folderId === item.id
         closeDockPopover()
-        return
+        if (wasThisFolder) return
       }
       showFolderPopover(item, el)
     })
@@ -45,6 +46,7 @@ function showFolderPopover(folder: Folder, anchor: HTMLElement): void {
   const popover = document.createElement("div")
   popover.className =
     "fixed bg-gray-800 rounded-lg shadow-lg p-2 flex flex-col gap-1 min-w-[150px]"
+  popover.dataset.folderId = folder.id
 
   for (const child of folder.children) {
     const btn = document.createElement("button")
