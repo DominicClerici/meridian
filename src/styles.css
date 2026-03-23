@@ -1,1 +1,12 @@
 @import "tailwindcss";
+
+/* Active color button ring */
+button[aria-pressed="true"] {
+  outline: 3px solid white;
+  outline-offset: 2px;
+}
+
+/* Transition for body background color */
+body {
+  transition: background-color 0.2s ease;
+}
