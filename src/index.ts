@@ -3,6 +3,9 @@ import { applyBgColor, initSettings } from "./settings"
 import { initDock } from "./dock"
 import { initShortcutSettings } from "./shortcut-settings"
 import { initSearch } from "./search"
+import { initClock } from "./clock"
+import { initTodo } from "./todo"
+import { initWeather } from "./weather"
 
 applyBgColor(store.sync.get("bgColor"))
 store.sync.subscribe("bgColor", applyBgColor)
@@ -13,4 +16,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   initDock()
   initShortcutSettings()
   initSearch()
+  initClock()
+  initTodo()
+  initWeather()
 })
