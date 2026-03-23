@@ -68,22 +68,42 @@ store
 3. Remove from browser.storage (async)
 4. Fire subscribers with the default value
 
-**localStorage key namespacing:** Keys are prefixed to avoid collisions: `sync:bgColor`, `local:someKey`.
+**localStorage key namespacing:** Keys are prefixed with a project namespace to avoid collisions: `sp:sync:bgColor`, `sp:local:someKey`.
 
-**Subscribe pattern:** Callback-based. Returns an unsubscribe function.
+**Subscribe pattern:** Callback-based. Callback receives only the new value. Returns an unsubscribe function.
 
 ```ts
 const unsub = store.sync.subscribe("bgColor", (value) => {
-  // called when bgColor changes
+  // called when bgColor changes, receives new value only
 });
 unsub(); // cleanup
 ```
+
+**Subscriber notification is optimistic:** Subscribers fire immediately after the in-memory cache is updated, before the async `browser.storage` write completes. A failed browser.storage write does not roll back the notification. This is intentional — the cache and localStorage are already consistent, and browser.storage failures are rare.
+
+**Cross-tab synchronization:** During `init()`, register a `browser.storage.onChanged` listener. When a change arrives from another tab or context:
+
+1. Update the in-memory cache with the new value
+2. Update localStorage mirror
+3. Fire subscribers for the changed keys
+
+To avoid echo (a local `set()` triggering `onChanged` back on the same tab), the listener compares the incoming value against the current cache. If they match, it skips subscriber notification.
+
+**Error handling:** If `browser.storage` is unavailable (e.g., running outside the extension context during development, or quota exceeded), the store silently falls back to localStorage-only operation. The in-memory cache and localStorage continue to function normally.
+
+**Pre-init guard:** Calling `get()` before `init()` returns the default value for the key. The cache is initialized from defaults at construction time; `init()` enriches it from localStorage and then browser.storage. This means `get()` is always safe to call.
+
+**Post-delete semantics:** After `delete(key)`, the key is removed from all persistence layers (localStorage and browser.storage). `get(key)` returns the default value. On next page load, the default will be used again since no persisted value exists.
+
+**Browser compatibility:** The store module uses the same `globalThis.browser || globalThis.chrome` shim established in `index.ts` to work in both Chrome and Firefox.
 
 ## Settings Dialog & UI
 
 ### Background Color
 
 On init, after the store loads, read `store.sync.get("bgColor")` and apply a Tailwind class on `document.body` (`bg-red-500`, `bg-green-500`, `bg-blue-500`). Subscribe to changes for live updates.
+
+**Tailwind safelist note:** These background classes must appear as full string literals in source code (not dynamically constructed via template literals like `` `bg-${color}-500` ``) so that Tailwind's scanner includes them in the CSS output.
 
 ### Settings Button
 
@@ -94,14 +114,14 @@ A fixed-position button in the top-left corner. Clicking it calls `dialog.showMo
 Uses the native HTML `<dialog>` element. Benefits: focus trapping, Escape-to-close, backdrop overlay — all built-in.
 
 ```html
-<dialog id="settings-dialog">
+<dialog id="settings-dialog" aria-labelledby="settings-title">
   <div>
-    <h2>Settings</h2>
+    <h2 id="settings-title">Settings</h2>
     <fieldset>
       <legend>Background Color</legend>
-      <button data-color="red">Red</button>
-      <button data-color="green">Green</button>
-      <button data-color="blue">Blue</button>
+      <button data-color="red" aria-pressed="false">Red</button>
+      <button data-color="green" aria-pressed="false">Green</button>
+      <button data-color="blue" aria-pressed="false">Blue</button>
     </fieldset>
     <button id="settings-close">Close</button>
   </div>
