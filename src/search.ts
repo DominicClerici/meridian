@@ -115,6 +115,19 @@ export function initSearch(): void {
   input.addEventListener("input", runQuery)
 
   input.addEventListener("keydown", (e: KeyboardEvent) => {
+    if (e.key === "Escape") {
+      if (debounceTimer !== null) {
+        clearTimeout(debounceTimer)
+        debounceTimer = null
+      }
+      input.value = ""
+      currentResults = []
+      activeIndex = 0
+      render(resultsEl)
+      updateVisibility(input, resultsEl)
+      return
+    }
+
     if (currentResults.length === 0) return
 
     if (e.key === "ArrowDown") {
@@ -129,16 +142,6 @@ export function initSearch(): void {
     } else if (e.key === "Enter") {
       e.preventDefault()
       currentResults[activeIndex]?.action()
-    } else if (e.key === "Escape") {
-      if (debounceTimer !== null) {
-        clearTimeout(debounceTimer)
-        debounceTimer = null
-      }
-      input.value = ""
-      currentResults = []
-      activeIndex = 0
-      render(resultsEl)
-      updateVisibility(input, resultsEl)
     }
   })
 
