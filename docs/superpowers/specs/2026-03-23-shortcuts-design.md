@@ -51,13 +51,17 @@ IDs generated via `crypto.randomUUID()`.
 
 A horizontal bar fixed to the bottom of the screen.
 
+### Active Tab
+
+The selected tab is not persisted — it resets to the first tab on every page load. This is in-memory state only, tracked in `dock.ts`.
+
 ### Tab Selector
 
-Positioned to the left of the dock. Clickable tab names — selecting one switches the displayed items. First tab selected by default. If no tabs exist, the dock area is empty.
+Positioned to the left of the dock. Clickable tab names — selecting one switches the displayed items. First tab selected by default. If no tabs exist, the entire dock is hidden (not rendered).
 
 ### Dock Contents
 
-Displays the selected tab's `items` left-to-right. Shortcuts and folders both appear as clickable elements.
+Displays the selected tab's `items` left-to-right. Each item renders as a text label (shortcut name or folder name). Folders display with a folder icon prefix to distinguish them from shortcuts. No favicon fetching for now — text-only.
 
 - **Clicking a shortcut:** Opens `url` in a new tab via `window.open(url, "_blank")`.
 - **Clicking a folder:** Opens a popover above the folder showing its `children` as shortcuts. Clicking a shortcut in the popover opens its URL in a new tab. Popover closes on outside click.
@@ -66,14 +70,15 @@ No drag-and-drop on the dock — reordering is settings-only.
 
 ## Settings UI — Shortcut Management
 
-Located in the settings dialog below the background color fieldset.
+Located in the settings dialog between the background color fieldset and the close button.
 
 ### Top-Level Controls
 
-- Tab selector (dropdown or tabs) to pick the tab being edited
-- "Add Tab" button — prompts for name (default "New Tab"), hidden/disabled at 10 tabs
-- "Add Shortcut" and "Add Folder" buttons — only visible when a tab is selected
-- Delete tab button next to tab name — removes tab and all contents
+- Tab selector (dropdown or tabs) to pick the tab being edited. On tab deletion, selection moves to the first remaining tab, or to the empty state if none remain. Switching tabs exits folder view.
+- "Add Tab" button — opens a small dialog with a name field (default "New Tab"), confirmed by a save button. Hidden/disabled at 10 tabs.
+- "Add Shortcut" button — opens a small dialog with name and URL fields. URL is stored as-is (no validation/normalization for now). Only visible when a tab is selected.
+- "Add Folder" button — opens a small dialog with a name field (default "New Folder"). Only visible when a tab is selected.
+- Delete tab button next to tab name — removes tab and all contents.
 
 ### Item List
 
@@ -81,7 +86,7 @@ Vertical list of the selected tab's items. Each row shows:
 
 - Drag handle
 - Name (and URL for shortcuts, type indicator for folders)
-- Edit button (modify name/url)
+- Edit button — opens same dialog as "Add" but pre-filled with current values
 - Delete button (immediate, no confirmation)
 
 ### Folder View
@@ -111,7 +116,7 @@ Dragging between items reorders the array. A visual indicator (line/gap) shows t
 
 - Target shortcut highlights distinctly (different from reorder indicator)
 - On drop: dialog prompts to create a new folder (input pre-filled "New Folder")
-  - **Confirm:** New folder created at the position of the first shortcut, containing both shortcuts. Both removed from top-level.
+  - **Confirm:** New folder created at the drop target's position, containing both shortcuts (drop target first, dragged shortcut second). Both removed from top-level.
   - **Cancel:** List reverts to pre-drag state, no changes.
 
 ### Folder Drag
