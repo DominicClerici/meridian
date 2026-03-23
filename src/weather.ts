@@ -247,7 +247,10 @@ export function initWeather(): void {
   })
 
   store.sync.subscribe("weatherUnit", () => {
-    try { localStorage.removeItem(LS_LAST_FETCH) } catch { /* */ }
+    try {
+      localStorage.removeItem(LS_LAST_FETCH)
+      localStorage.removeItem(LS_CACHED_DATA)
+    } catch { /* */ }
     fetchWeather()
   })
 
