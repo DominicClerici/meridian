@@ -73,7 +73,7 @@ build() {
   mkdir -p dist
   copy_static
   "$TAILWIND" -i src/styles.css -o dist/styles.css --minify
-  "$ESBUILD" src/index.js --outfile=dist/index.js --minify
+  "$ESBUILD" src/index.ts --bundle --outfile=dist/index.js --minify
   echo "Build complete. Output in dist/"
 }
 
@@ -85,12 +85,12 @@ watch() {
 
   # Initial build so dist/ is complete before watchers take over
   "$TAILWIND" -i src/styles.css -o dist/styles.css --minify
-  "$ESBUILD" src/index.js --outfile=dist/index.js --minify
+  "$ESBUILD" src/index.ts --bundle --outfile=dist/index.js --minify
 
   # Start watchers in background
   "$TAILWIND" -i src/styles.css -o dist/styles.css --watch &
   TAILWIND_PID=$!
-  "$ESBUILD" src/index.js --outfile=dist/index.js --watch=forever &
+  "$ESBUILD" src/index.ts --bundle --outfile=dist/index.js --watch=forever &
   ESBUILD_PID=$!
 
   # Trap to kill background processes on exit
