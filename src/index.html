@@ -14,8 +14,22 @@
         <circle cx="12" cy="12" r="3"/>
       </svg>
     </button>
+    <div id="widgets" class="fixed top-4 right-4 flex items-center gap-2">
+      <button id="weather-trigger" class="flex items-center gap-1 p-2 rounded-lg bg-white/20 hover:bg-white/30 transition-colors text-white text-sm" hidden></button>
+      <button id="todo-trigger" class="relative flex items-center gap-1 p-2 rounded-lg bg-white/20 hover:bg-white/30 transition-colors text-white" aria-label="Todos" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M11 18H3"/>
+          <path d="M11 12H3"/>
+          <path d="M11 6H3"/>
+          <path d="m15 9 3 3-3 3"/>
+        </svg>
+        <span id="todo-badge-count" class="absolute -top-1 -right-1 text-[10px] bg-white/90 text-black rounded-full min-w-[18px] h-[18px] flex items-center justify-center font-semibold" hidden></span>
+        <span id="todo-badge-overdue" class="absolute -top-1 -left-1 text-[10px] bg-red-500 text-white rounded-full min-w-[18px] h-[18px] flex items-center justify-center font-semibold" hidden></span>
+      </button>
+    </div>
     <div id="search-wrapper" class="fixed inset-0 flex items-center justify-center pointer-events-none">
       <div class="w-full max-w-lg pointer-events-auto">
+        <div id="clock" class="text-center text-white mb-4 tabular-nums"></div>
         <input id="search-input" type="text" placeholder="Search..."
           class="w-full px-4 py-3 rounded-xl bg-black/30 text-white placeholder-white/50 outline-none text-lg">
         <div id="search-results" class="mt-1 rounded-xl bg-black/30 overflow-hidden" hidden></div>
@@ -71,6 +85,83 @@
           </div>
         </div>
       </fieldset>
+      <fieldset id="settings-clock" class="border-0 p-0 m-0 mt-4">
+        <legend class="text-sm font-medium mb-2">Clock</legend>
+        <div class="flex flex-col gap-2">
+          <div class="flex items-center gap-2">
+            <input type="checkbox" id="settings-clock-enabled" class="rounded">
+            <label for="settings-clock-enabled" class="text-sm">Show clock</label>
+          </div>
+          <div class="flex items-center gap-2">
+            <input type="checkbox" id="settings-clock-seconds" class="rounded">
+            <label for="settings-clock-seconds" class="text-sm">Show seconds</label>
+          </div>
+          <div class="flex items-center gap-2">
+            <input type="checkbox" id="settings-clock-24h" class="rounded">
+            <label for="settings-clock-24h" class="text-sm">24-hour format</label>
+          </div>
+          <div id="settings-clock-ampm-row" class="flex items-center gap-2">
+            <input type="checkbox" id="settings-clock-ampm" class="rounded">
+            <label for="settings-clock-ampm" class="text-sm">Show AM/PM</label>
+          </div>
+          <div class="flex items-center gap-2">
+            <input type="checkbox" id="settings-clock-date" class="rounded">
+            <label for="settings-clock-date" class="text-sm">Show date</label>
+          </div>
+          <div id="settings-clock-date-format-row" class="flex items-center gap-2">
+            <label for="settings-clock-date-format" class="text-sm">Date format</label>
+            <select id="settings-clock-date-format" class="text-sm rounded px-2 py-1 border border-gray-300">
+              <option value="long">January 24th</option>
+              <option value="short">Jan. 24th</option>
+              <option value="abbr">Jan 24</option>
+              <option value="numeric">01/24/2024</option>
+              <option value="numericShort">01/24</option>
+            </select>
+          </div>
+          <div class="flex items-center gap-2">
+            <label for="settings-clock-size" class="text-sm">Size</label>
+            <select id="settings-clock-size" class="text-sm rounded px-2 py-1 border border-gray-300">
+              <option value="small">Small</option>
+              <option value="medium">Medium</option>
+              <option value="large">Large</option>
+            </select>
+          </div>
+        </div>
+      </fieldset>
+      <fieldset id="settings-todo" class="border-0 p-0 m-0 mt-4">
+        <legend class="text-sm font-medium mb-2">Todo</legend>
+        <div class="flex flex-col gap-2">
+          <div class="flex items-center gap-2">
+            <input type="checkbox" id="settings-todo-enabled" class="rounded">
+            <label for="settings-todo-enabled" class="text-sm">Enable todo widget</label>
+          </div>
+          <div class="flex items-center gap-2">
+            <input type="checkbox" id="settings-todo-badges" class="rounded">
+            <label for="settings-todo-badges" class="text-sm">Show badges</label>
+          </div>
+          <button id="settings-todo-clear" type="button" class="text-xs px-2 py-1 rounded bg-red-500 text-white hover:bg-red-600 self-start">Clear all todos</button>
+        </div>
+      </fieldset>
+      <fieldset id="settings-weather" class="border-0 p-0 m-0 mt-4">
+        <legend class="text-sm font-medium mb-2">Weather</legend>
+        <div class="flex flex-col gap-2">
+          <div class="flex items-center gap-2">
+            <input type="checkbox" id="settings-weather-enabled" class="rounded">
+            <label for="settings-weather-enabled" class="text-sm">Enable weather</label>
+          </div>
+          <div class="flex items-center gap-2">
+            <label for="settings-weather-unit" class="text-sm">Temperature unit</label>
+            <select id="settings-weather-unit" class="text-sm rounded px-2 py-1 border border-gray-300">
+              <option value="f">Fahrenheit</option>
+              <option value="c">Celsius</option>
+            </select>
+          </div>
+          <div id="settings-weather-location-row">
+            <button id="settings-weather-grant" type="button" class="text-xs px-2 py-1 rounded bg-blue-500 text-white hover:bg-blue-600">Grant location access</button>
+            <p id="settings-weather-location-help" class="text-xs text-gray-500 mt-1" hidden>Location access was denied. Please enable it in your browser settings for this extension.</p>
+          </div>
+        </div>
+      </fieldset>
       <button id="settings-close" class="mt-6 px-4 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 transition-colors text-sm">Close</button>
     </div>
   </dialog>
@@ -83,6 +174,20 @@
       <div class="flex gap-2 justify-end">
         <button type="button" id="sc-prompt-cancel" class="text-xs px-3 py-1 rounded bg-gray-200 hover:bg-gray-300">Cancel</button>
         <button type="submit" id="sc-prompt-save" class="text-xs px-3 py-1 rounded bg-blue-500 text-white hover:bg-blue-600">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="todo-prompt-dialog" class="rounded-xl p-0 backdrop:bg-black/50">
+    <form method="dialog" class="p-4 min-w-[300px] flex flex-col gap-3">
+      <h3 id="todo-prompt-title" class="text-sm font-semibold"></h3>
+      <input id="todo-prompt-title-input" type="text" placeholder="Title" class="text-sm rounded px-2 py-1 border border-gray-300" required maxlength="256">
+      <textarea id="todo-prompt-desc" placeholder="Description (optional)" class="text-sm rounded px-2 py-1 border border-gray-300 resize-y" rows="3" maxlength="1024"></textarea>
+      <input id="todo-prompt-url" type="url" placeholder="URL (optional)" class="text-sm rounded px-2 py-1 border border-gray-300">
+      <input id="todo-prompt-due" type="date" class="text-sm rounded px-2 py-1 border border-gray-300">
+      <div class="flex gap-2 justify-end">
+        <button type="button" id="todo-prompt-cancel" class="text-xs px-3 py-1 rounded bg-gray-200 hover:bg-gray-300">Cancel</button>
+        <button type="submit" id="todo-prompt-save" class="text-xs px-3 py-1 rounded bg-blue-500 text-white hover:bg-blue-600">Save</button>
       </div>
     </form>
   </dialog>
