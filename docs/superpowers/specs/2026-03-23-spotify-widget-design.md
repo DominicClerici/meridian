@@ -6,30 +6,45 @@ A floating player card that shows the user's current Spotify playback state. Dis
 
 ## Storage
 
-New keys in `SyncSettings` (in `src/defaults.ts`):
+**`SyncSettings`** (synced across devices):
 
 | Key | Type | Default |
 |-----|------|---------|
 | `spotifyEnabled` | `boolean` | `true` |
+
+**`LocalSettings`** (device-only — tokens are device-specific and should not sync):
+
+| Key | Type | Default |
+|-----|------|---------|
 | `spotifyAccessToken` | `string \| null` | `null` |
 | `spotifyRefreshToken` | `string \| null` | `null` |
 | `spotifyTokenExpiry` | `number \| null` | `null` |
 
-The Client ID is a hardcoded constant in `spotify.ts`, not stored.
+The Client ID is a hardcoded constant in `spotify.ts`, not stored. Each user uses the same project-level Spotify Developer App.
 
 ## OAuth Flow
 
 Uses Authorization Code + PKCE via `browser.identity.launchWebAuthFlow`.
 
+### Redirect URI
+
+The redirect URI is obtained at runtime via `browser.identity.getRedirectURL()`, which returns:
+- Chrome: `https://<extension-id>.chromiumapp.org/`
+- Firefox: `https://<extension-id>.extensions.allizom.org/`
+
+This URI must be registered in the Spotify Developer Dashboard as a valid redirect URI.
+
 ### Steps
+
+The entire flow executes within a single async function so the `code_verifier` is retained in scope across all steps.
 
 1. User clicks "Connect Spotify" in settings dialog.
 2. Generate random `code_verifier` (128 chars), derive `code_challenge` (SHA-256, base64url).
 3. Call `browser.identity.launchWebAuthFlow({ url, interactive: true })` targeting Spotify's `/authorize` endpoint.
 4. Scopes requested: `user-read-playback-state user-modify-playback-state user-read-currently-playing`.
-5. Spotify redirects to `https://<extension-id>.chromiumapp.org/` with an auth code.
-6. Exchange auth code + code_verifier for tokens via `POST /api/token` (no client secret — PKCE).
-7. Store `accessToken`, `refreshToken`, `tokenExpiry` in `store.sync`.
+5. Spotify redirects to the URI from `getRedirectURL()` with an auth code.
+6. Extract auth code from the returned URL, exchange code + code_verifier for tokens via `POST /api/token` (no client secret — PKCE).
+7. Store `accessToken`, `refreshToken`, `tokenExpiry` in `store.local`.
 
 ### Token Refresh
 
@@ -39,7 +54,7 @@ Uses Authorization Code + PKCE via `browser.identity.launchWebAuthFlow`.
 
 ### Disconnect
 
-Clears `spotifyAccessToken`, `spotifyRefreshToken`, `spotifyTokenExpiry` from the store.
+Clears `spotifyAccessToken`, `spotifyRefreshToken`, `spotifyTokenExpiry` from `store.local`.
 
 ### Manifest Change
 
@@ -57,17 +72,20 @@ Add `"identity"` to the `permissions` array in `manifest.json`.
 - On page load (if enabled + authenticated): fetch immediately.
 - Poll every 5 seconds via `setInterval`.
 - Stop polling when `spotifyEnabled` toggled off or tokens cleared.
+- Pause polling when the tab is not visible (`document.visibilitychange`). Resume on visibility.
 - After a control action resolves: fetch immediately instead of waiting for next tick.
 
 ### Error Handling
 
 - 401: attempt token refresh, retry once. If refresh fails, clear tokens, stop polling.
+- 429 (rate limited): read the `Retry-After` header, pause polling for that duration, then resume.
 - Other errors: silently skip that poll cycle.
 
 ### Premium Detection
 
-- Call `GET /v1/me` once after authentication to check `product === "premium"`.
+- Call `GET /v1/me` once on page load (after confirming valid tokens) to check `product === "premium"`.
 - Stored in a local variable (not persisted). Re-checked each page load.
+- Default to `true` if the call fails (show controls; let control API errors surface naturally).
 - Non-premium users: playback controls are hidden entirely.
 
 ## Player Controls
@@ -103,7 +121,7 @@ Three buttons (premium only): Previous, Play/Pause, Next.
 ### DOM
 
 - No trigger button in the top-right widgets bar.
-- Card created/destroyed dynamically in `spotify.ts` (not pre-built in `index.html`).
+- Card created/destroyed dynamically in `spotify.ts`. This deviates from other widgets (which use pre-built HTML toggled via `hidden`) because the card's existence is entirely conditional on playback state — there is no persistent trigger element.
 
 ## Settings UI
 
@@ -122,8 +140,9 @@ Single file: `src/spotify.ts`. Follows the same pattern as `weather.ts` — comb
 | File | Change |
 |------|--------|
 | `src/spotify.ts` | New file — auth, API, polling, rendering |
-| `src/defaults.ts` | Add 4 new `SyncSettings` keys |
+| `src/defaults.ts` | Add `spotifyEnabled` to `SyncSettings`, add 3 token keys to `LocalSettings` |
 | `src/settings.ts` | Wire Spotify enable toggle + connect/disconnect buttons |
 | `src/index.html` | Add Spotify settings section to the dialog |
 | `src/index.ts` | Import and call `initSpotify()` |
+| `src/browser.d.ts` | Add `identity` types (`launchWebAuthFlow`, `getRedirectURL`) |
 | `manifest.json` | Add `"identity"` permission |
