@@ -119,8 +119,9 @@ const SIX_MONTHS = 6 * 30 * 24 * 60 * 60 * 1000
 export function purgeStale(todos: Todo[]): Todo[] {
   const now = Date.now()
   return todos.filter((t) => {
-    if (t.completed && t.completedAt) {
-      return now - new Date(t.completedAt).getTime() < THREE_DAYS
+    if (t.completed) {
+      const ref = t.completedAt ?? t.updatedAt
+      return now - new Date(ref).getTime() < THREE_DAYS
     }
     return now - new Date(t.updatedAt).getTime() < SIX_MONTHS
   })
