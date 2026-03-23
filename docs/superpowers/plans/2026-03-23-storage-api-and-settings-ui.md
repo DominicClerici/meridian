@@ -287,9 +287,7 @@ export const store = {
               : null;
         if (!ns) return;
         for (const [key, change] of Object.entries(changes)) {
-          if ("newValue" in change) {
-            ns.handleExternalChange(key, change.newValue);
-          }
+          ns.handleExternalChange(key, change.newValue);
         }
       });
     } catch {
@@ -315,7 +313,7 @@ git commit -m "feat: add unified store with sync/local namespaces and localStora
 
 Now that `index.ts` imports other modules, esbuild needs `--bundle` to resolve and inline them.
 
-- [ ] **Step 1: Add `--bundle` flag to all four esbuild invocations in `build.sh`**
+- [ ] **Step 1: Add `--bundle` flag to all three esbuild invocations in `build.sh`**
 
 Change line 76 (build function):
 ```
