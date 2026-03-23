@@ -57,7 +57,9 @@ function createNamespace<T extends Record<string, unknown>>(
 
     set<K extends keyof T>(key: K, value: T[K]): void {
       cache[key] = value;
-      localStorage.setItem(`${prefix}${String(key)}`, JSON.stringify(value));
+      try {
+        localStorage.setItem(`${prefix}${String(key)}`, JSON.stringify(value));
+      } catch { /* quota or security error */ }
       storage?.set({ [key as string]: value }).catch(() => {});
       notify(key, value);
     },
@@ -65,7 +67,9 @@ function createNamespace<T extends Record<string, unknown>>(
     delete<K extends keyof T>(key: K): void {
       const defaultVal = defaults[key];
       cache[key] = defaultVal;
-      localStorage.removeItem(`${prefix}${String(key)}`);
+      try {
+        localStorage.removeItem(`${prefix}${String(key)}`);
+      } catch { /* security error */ }
       storage?.remove(String(key)).catch(() => {});
       notify(key, defaultVal);
     },
@@ -90,7 +94,9 @@ function createNamespace<T extends Record<string, unknown>>(
             const val = result[key] as T[keyof T];
             if (JSON.stringify(cache[key as keyof T]) !== JSON.stringify(val)) {
               (cache as any)[key] = val;
-              localStorage.setItem(`${prefix}${key}`, JSON.stringify(val));
+              try {
+                localStorage.setItem(`${prefix}${key}`, JSON.stringify(val));
+              } catch { /* quota or security error */ }
               notify(key as keyof T, val);
             }
           }
@@ -107,11 +113,13 @@ function createNamespace<T extends Record<string, unknown>>(
       const val = (newValue === undefined ? defaults[k] : newValue) as T[keyof T];
       if (JSON.stringify(cache[k]) !== JSON.stringify(val)) {
         cache[k] = val;
-        if (newValue === undefined) {
-          localStorage.removeItem(`${prefix}${key}`);
-        } else {
-          localStorage.setItem(`${prefix}${key}`, JSON.stringify(val));
-        }
+        try {
+          if (newValue === undefined) {
+            localStorage.removeItem(`${prefix}${key}`);
+          } else {
+            localStorage.setItem(`${prefix}${key}`, JSON.stringify(val));
+          }
+        } catch { /* quota or security error */ }
         notify(k, val);
       }
     },
