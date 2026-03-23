@@ -9,8 +9,10 @@ const BG_CLASSES: Record<SyncSettings["bgColor"], string> = {
 };
 
 export function applyBgColor(color: SyncSettings["bgColor"]): void {
+  const cls = BG_CLASSES[color];
+  if (!cls) return;
   document.body.classList.remove("bg-red-500", "bg-green-500", "bg-blue-500");
-  document.body.classList.add(BG_CLASSES[color]);
+  document.body.classList.add(cls);
 }
 
 export function initSettings(): void {
