@@ -29,7 +29,7 @@ export const shortcutsProvider: SearchProvider = {
     const all = flattenShortcuts(store.local.get("shortcuts"))
     const matches: SearchResult[] = []
     for (const sc of all) {
-      if (matches.length >= 3) break
+      if (matches.length >= this.maxResults) break
       if (
         sc.name.toLowerCase().includes(trimmed) ||
         sc.url.toLowerCase().includes(trimmed)

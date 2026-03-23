@@ -130,6 +130,10 @@ export function initSearch(): void {
       e.preventDefault()
       currentResults[activeIndex]?.action()
     } else if (e.key === "Escape") {
+      if (debounceTimer !== null) {
+        clearTimeout(debounceTimer)
+        debounceTimer = null
+      }
       input.value = ""
       currentResults = []
       activeIndex = 0
