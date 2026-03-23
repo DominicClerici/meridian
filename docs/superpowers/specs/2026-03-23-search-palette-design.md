@@ -87,9 +87,11 @@ Folders themselves are not matchable — only `Shortcut` objects.
 When `store.sync.get("debounceSearch")` is `true`, the palette applies a 400ms debounce to any provider with `debounced: true`. The palette manages the debounce timer — on each input change:
 
 1. Providers without `debounced` (or `debounced: false`) are called immediately via `query()`
-2. For providers with `debounced: true`, the palette starts/resets a 400ms timer. During the window, these providers are not queried — they contribute zero results. When the timer fires, their `query()` is called and the result list re-renders.
+2. For providers with `debounced: true`, the palette starts/resets a 400ms timer. During the window, these providers are not queried — they contribute zero results. When the timer fires, all providers (debounced and non-debounced) are re-queried and the full result list is rebuilt from scratch.
 
 This means during the debounce window, the dropdown shows only the search engine result. When the timer fires, shortcut results appear. The active selection resets to index 0 whenever the result list is re-rendered.
+
+The palette reads `store.sync.get("debounceSearch")` on each input event (cheap — synchronous cache read). This ensures runtime changes from the settings dialog take effect immediately without requiring a subscription or page reload.
 
 When `debounceSearch` is `false`, all providers are queried immediately regardless of the `debounced` flag.
 
@@ -148,7 +150,7 @@ Clicking a result item calls its `action()` directly (no need to select first th
 
 - The dropdown is visible when the input is focused and the result list is non-empty
 - When the result list is empty (input is empty, or no providers returned results), the dropdown hides
-- Clicking outside the input and dropdown hides the dropdown
+- Clicking outside the input and dropdown hides the dropdown. Use a `mousedown` listener on `document` — do not use `focusout`, which fires before `click` and would prevent result item clicks from reaching their handler.
 - The search input is not auto-focused on page load
 
 ### Active Item Styling
@@ -181,4 +183,4 @@ Both are wired in `src/settings.ts`, following the same read-then-subscribe patt
 - `src/defaults.ts` — Add `searchEngine` and `debounceSearch` to `SyncSettings` with defaults
 - `src/settings.ts` — Wire search engine select and debounce toggle
 - `src/index.html` — Add search bar markup centered in viewport; add settings controls markup
-- `src/index.ts` — Add `import { initSearch } from "./search"` and call `initSearch()` after existing init calls
+- `src/index.ts` — Add `import { initSearch } from "./search"` and call `initSearch()` after `await store.init()` and the existing init calls, inside the `DOMContentLoaded` handler
