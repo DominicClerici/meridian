@@ -14,6 +14,13 @@
         <circle cx="12" cy="12" r="3"/>
       </svg>
     </button>
+    <div id="search-wrapper" class="fixed inset-0 flex items-center justify-center pointer-events-none">
+      <div class="w-full max-w-lg pointer-events-auto">
+        <input id="search-input" type="text" placeholder="Search..."
+          class="w-full px-4 py-3 rounded-xl bg-black/30 text-white placeholder-white/50 outline-none text-lg">
+        <div id="search-results" class="mt-1 rounded-xl bg-black/30 overflow-hidden" hidden></div>
+      </div>
+    </div>
     <div id="dock" class="fixed bottom-0 left-0 right-0 flex items-center gap-2 p-2 bg-black/30" hidden>
       <div id="dock-tabs" class="flex gap-1 border-r border-white/20 pr-2 mr-2"></div>
       <div id="dock-items" class="flex gap-2 overflow-x-auto"></div>
@@ -42,6 +49,27 @@
           <button id="sc-back" class="text-xs px-2 py-1 rounded bg-gray-500 text-white hover:bg-gray-600" hidden>Back</button>
         </div>
         <div id="sc-list" class="flex flex-col gap-1 max-h-48 overflow-y-auto"></div>
+      </fieldset>
+      <fieldset class="border-0 p-0 m-0 mt-4">
+        <legend class="text-sm font-medium mb-2">Search</legend>
+        <div class="flex flex-col gap-3">
+          <div class="flex items-center gap-2">
+            <label for="settings-search-engine" class="text-sm">Search Engine</label>
+            <select id="settings-search-engine" class="text-sm rounded px-2 py-1 border border-gray-300">
+              <option value="google">Google</option>
+              <option value="bing">Bing</option>
+              <option value="yahoo">Yahoo</option>
+              <option value="duckduckgo">DuckDuckGo</option>
+              <option value="ecosia">Ecosia</option>
+              <option value="qwant">Qwant</option>
+              <option value="startpage">Startpage</option>
+            </select>
+          </div>
+          <div class="flex items-center gap-2">
+            <input type="checkbox" id="settings-debounce-search" class="rounded">
+            <label for="settings-debounce-search" class="text-sm">Debounce shortcut search</label>
+          </div>
+        </div>
       </fieldset>
       <button id="settings-close" class="mt-6 px-4 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 transition-colors text-sm">Close</button>
     </div>
