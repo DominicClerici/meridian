@@ -49,6 +49,8 @@ weatherLon: number | null         // default: null
 
 ### Raw localStorage (not store API)
 
+These are ephemeral cache values that don't need reactivity or cross-tab sync. They bypass the store API to avoid unnecessary overhead. The `sp:weather:` prefix is a third namespace distinct from `sp:sync:` and `sp:local:`.
+
 | Key | Purpose |
 |-----|---------|
 | `sp:weather:lastFetch` | Timestamp (ms) of last successful weather fetch |
@@ -99,6 +101,8 @@ Nesting logic in the settings dialog:
   - If enabled: Date format (select)
 - Size (select: small / medium / large)
 
+When `clock24Hour` is true, the `clockShowAmPm` setting is ignored by the rendering code (the toggle is hidden in the UI). The stored value is preserved so switching back to 12-hour mode restores the user's previous preference.
+
 ### Reactivity
 
 Each setting has a `store.sync.subscribe` call. Changes re-render the clock immediately. When `clockEnabled` is toggled off, the clock element is hidden and the interval is cleared. When toggled back on, the interval restarts.
@@ -120,13 +124,13 @@ type Todo = {
   completedAt: string | null // ISO timestamp, set when completed
   createdAt: string          // ISO timestamp
   updatedAt: string          // ISO timestamp
-  order: number              // manual sort order within overdue/todo sections
+  order: number              // global sort order — used to sort within overdue/todo sections
 }
 ```
 
 ### Pure Functions (`src/todos.ts`)
 
-- `addTodo(todos, data)` — creates a new todo with generated id, timestamps, order
+- `addTodo(todos, data)` — creates a new todo with generated id, timestamps, order. Enforces `MAX_TODOS = 500`; returns unchanged if at limit.
 - `editTodo(todos, id, data)` — updates fields, bumps `updatedAt`
 - `deleteTodo(todos, id)` — removes by id
 - `toggleTodo(todos, id)` — flips `completed`, sets/clears `completedAt`
@@ -207,7 +211,7 @@ Cancel and Save buttons. On save: validates, calls `addTodo` or `editTodo`, pers
 
 ### Auto-Deletion
 
-`purgeStale()` runs once during `initTodo()`:
+`purgeStale()` runs once during `initTodo()` and again each time the popover is opened:
 - Completed todos with `completedAt` older than 3 days → deleted
 - Active/overdue todos with `updatedAt` older than 6 months → deleted
 
@@ -237,7 +241,9 @@ Hidden entirely when `weatherEnabled` is false.
 - When weather is enabled and a fetch is needed, call `navigator.geolocation.getCurrentPosition()` to get fresh coordinates
 - Save coordinates to `store.local` (`weatherLat`, `weatherLon`)
 - If the user denies the permission prompt, enter "no permission" state
-- Every fetch cycle refreshes coordinates before making the API call
+- Every fetch cycle attempts to refresh coordinates before making the API call
+- If `getCurrentPosition` fails (timeout, denied after initial grant), fall back to the last stored coordinates in `store.local`. If no stored coordinates exist either, enter "no permission" state.
+- Once the browser has permanently denied geolocation, `getCurrentPosition` will fail immediately without a prompt. The "Grant location access" button in settings will show a help message in this case explaining that the user must re-enable location in browser settings.
 
 ### Fetch & Cooldown
 
@@ -286,6 +292,17 @@ Static lookup table mapping WMO weather codes to `{ icon: string, condition: str
 | 85, 86 | Snow showers | ❄️ |
 | 95 | Thunderstorm | ⛈️ |
 | 96, 99 | Thunderstorm with hail | ⛈️ |
+
+### Error Handling
+
+| Scenario | Behavior |
+|----------|----------|
+| HTTP error (4xx, 5xx) | Use cached data if available; otherwise show a retry icon on the trigger |
+| Network timeout | Same as HTTP error |
+| Malformed JSON response | Same as HTTP error |
+| `getCurrentPosition` fails | Fall back to stored coordinates; if none, enter "no permission" state |
+
+On fetch failure, `sp:weather:lastFetch` is not updated, so the next tab open or interval tick will retry.
 
 ### Popover
 
