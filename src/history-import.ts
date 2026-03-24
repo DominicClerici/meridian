@@ -96,10 +96,12 @@ function getAllShortcutUrls(): Set<string> {
   return urls
 }
 
+const BLOCKED_SCHEMES = ["chrome:", "chrome-extension:", "edge:", "about:", "moz-extension:", "brave:"]
+
 function getTopEntries(entries: HistoryEntry[]): HistoryEntry[] {
   const existing = getAllShortcutUrls()
   return entries
-    .filter((e) => !existing.has(e.url))
+    .filter((e) => !existing.has(e.url) && BLOCKED_SCHEMES.every((s) => !e.url.startsWith(s)))
     .sort((a, b) => b.visitCount - a.visitCount)
     .slice(0, MAX_RESULTS)
 }
@@ -122,16 +124,19 @@ function getSelectedTabId(): string | null {
   return select?.value || null
 }
 
-function prependShortcut(url: string, name: string): void {
+function prependShortcut(url: string, name: string): boolean {
   const tabId = getSelectedTabId()
-  if (!tabId) return
+  if (!tabId) return false
   const tabs: Tab[] = store.local.get("shortcuts")
+  let added = false
   const updated = tabs.map((t) => {
     if (t.id !== tabId || t.items.length >= MAX_ITEMS_PER_TAB) return t
+    added = true
     const sc: Shortcut = { type: "shortcut", id: crypto.randomUUID(), name, url }
     return { ...t, items: [sc, ...t.items] }
   })
-  store.local.set("shortcuts", updated)
+  if (added) store.local.set("shortcuts", updated)
+  return added
 }
 
 function renderResults(
@@ -175,7 +180,7 @@ function renderResults(
     }
 
     addBtn.addEventListener("click", () => {
-      prependShortcut(entry.url, extractHostname(entry.url))
+      if (!prependShortcut(entry.url, extractHostname(entry.url))) return
       row.remove()
       const currentTabId = getSelectedTabId()
       if (currentTabId) {
