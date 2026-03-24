@@ -27,6 +27,7 @@ export type SyncSettings = {
   weatherUnit: "f" | "c";
   spotifyEnabled: boolean;
   recommendationsEnabled: boolean;
+  calendarEnabled: boolean;
 };
 
 export type LocalSettings = {
@@ -38,6 +39,7 @@ export type LocalSettings = {
   spotifyRefreshToken: string | null
   spotifyTokenExpiry: number | null
   recommendationData: RecommendationData | null
+  calendarConnected: boolean
 }
 
 export const syncDefaults: SyncSettings = {
@@ -57,6 +59,7 @@ export const syncDefaults: SyncSettings = {
   weatherUnit: "f",
   spotifyEnabled: true,
   recommendationsEnabled: false,
+  calendarEnabled: false,
 }
 
 export const localDefaults: LocalSettings = {
@@ -68,4 +71,5 @@ export const localDefaults: LocalSettings = {
   spotifyRefreshToken: null,
   spotifyTokenExpiry: null,
   recommendationData: null,
+  calendarConnected: false,
 }

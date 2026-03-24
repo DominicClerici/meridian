@@ -22,9 +22,16 @@ declare global {
     onChanged: BrowserStorageOnChanged;
   }
 
+  interface GetAuthTokenResult {
+    token: string;
+    grantedScopes?: string[];
+  }
+
   interface BrowserIdentity {
     launchWebAuthFlow(details: { url: string; interactive: boolean }): Promise<string>;
     getRedirectURL(): string;
+    getAuthToken(details: { interactive: boolean }): Promise<GetAuthTokenResult>;
+    removeCachedAuthToken(details: { token: string }): Promise<void>;
   }
 
   interface HistoryItem {

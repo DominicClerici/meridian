@@ -1,6 +1,7 @@
 import { store } from "./store"
 import type { SyncSettings } from "./defaults"
 import { authenticate as spotifyAuthenticate, clearTokens as spotifyClearTokens } from "./spotify"
+import { authenticate as calendarAuthenticate, disconnect as calendarDisconnect } from "./calendar"
 
 const BG_CLASSES: Record<SyncSettings["bgColor"], string> = {
   red: "bg-red-500",
@@ -207,4 +208,36 @@ export function initSettings(): void {
 
   store.sync.subscribe("spotifyEnabled", (v) => { spotifyEnabled.checked = v })
   store.local.subscribe("spotifyAccessToken", () => updateSpotifyAuthUI())
+
+  const calendarEnabled = document.getElementById("settings-calendar-enabled") as HTMLInputElement
+  const calendarConnectRow = document.getElementById("settings-calendar-connect-row") as HTMLElement
+  const calendarDisconnectRow = document.getElementById("settings-calendar-disconnect-row") as HTMLElement
+  const calendarConnectBtn = document.getElementById("settings-calendar-connect") as HTMLButtonElement
+  const calendarDisconnectBtn = document.getElementById("settings-calendar-disconnect") as HTMLButtonElement
+
+  calendarEnabled.checked = store.sync.get("calendarEnabled")
+
+  function updateCalendarAuthUI(): void {
+    const connected = store.local.get("calendarConnected")
+    calendarConnectRow.hidden = connected
+    calendarDisconnectRow.hidden = !connected
+  }
+  updateCalendarAuthUI()
+
+  calendarEnabled.addEventListener("change", () => store.sync.set("calendarEnabled", calendarEnabled.checked))
+  calendarConnectBtn.addEventListener("click", async () => {
+    calendarConnectBtn.disabled = true
+    calendarConnectBtn.textContent = "Signing in..."
+    const success = await calendarAuthenticate()
+    calendarConnectBtn.disabled = false
+    calendarConnectBtn.textContent = "Sign in with Google"
+    if (success) updateCalendarAuthUI()
+  })
+  calendarDisconnectBtn.addEventListener("click", async () => {
+    await calendarDisconnect()
+    updateCalendarAuthUI()
+  })
+
+  store.sync.subscribe("calendarEnabled", (v) => { calendarEnabled.checked = v })
+  store.local.subscribe("calendarConnected", () => updateCalendarAuthUI())
 }

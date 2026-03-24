@@ -9,6 +9,7 @@ import { initWeather } from "./weather"
 import { initSpotify } from "./spotify"
 import { initHistoryImport } from "./history-import"
 import { initRecommendations } from "./recommendations"
+import { initCalendar } from "./calendar"
 
 applyBgColor(store.sync.get("bgColor"))
 store.sync.subscribe("bgColor", applyBgColor)
@@ -25,4 +26,5 @@ document.addEventListener("DOMContentLoaded", async () => {
   initWeather()
   initSpotify()
   initRecommendations()
+  initCalendar()
 })
