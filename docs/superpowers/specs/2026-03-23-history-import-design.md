@@ -9,24 +9,36 @@ A new modal dialog allows users to import their most-visited URLs as shortcuts. 
 ## Browser API Access
 
 ```ts
-const api = typeof browser !== "undefined" ? browser : chrome
+const api = globalThis.browser ?? globalThis.chrome
 ```
 
-All history API calls use callbacks (not promises) for Chrome compatibility. Each callback-based call is wrapped in a Promise for ergonomic async/await usage:
+Consistent with the existing pattern used in `store.ts` and `spotify.ts`.
+
+All history API calls use callbacks (not promises) for Chrome compatibility. Each callback-based call is wrapped in a Promise that checks `chrome.runtime.lastError`:
 
 ```ts
-function historySearch(query: HistoryQuery): Promise<HistoryItem[]> {
-  return new Promise((resolve) => {
-    api.history.search(query, (results) => resolve(results))
+function historySearch(query: {
+  text: string; startTime?: number; endTime?: number; maxResults?: number
+}): Promise<HistoryItem[]> {
+  return new Promise((resolve, reject) => {
+    api.history.search(query, (results) => {
+      if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message))
+      else resolve(results)
+    })
   })
 }
 
 function historyGetVisits(details: { url: string }): Promise<VisitItem[]> {
-  return new Promise((resolve) => {
-    api.history.getVisits(details, (results) => resolve(results))
+  return new Promise((resolve, reject) => {
+    api.history.getVisits(details, (results) => {
+      if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message))
+      else resolve(results)
+    })
   })
 }
 ```
+
+Note: `chrome.runtime.lastError` is accessed via the global `chrome` object directly (not via the `api` variable), since `runtime.lastError` is a Chrome-specific mechanism. In Firefox, callback errors throw instead. No new type declarations are needed for this — `chrome` is already declared as `BrowserAPI | undefined` in `browser.d.ts`, and `runtime.lastError` access is untyped (accessed dynamically).
 
 ## Batched History Fetching
 
@@ -47,7 +59,7 @@ Controlled by a `USE_VISIT_COUNT` constant at the top of `history-import.ts`, de
 
 ## Grouping & Ranking
 
-`history.search()` returns unique URLs (one `HistoryItem` per URL). Duplicates across batches should not occur, but the Map keyed by exact URL acts as a safety net — if a URL appears again, the higher visitCount is kept.
+`history.search()` returns unique URLs (one `HistoryItem` per URL). Duplicates across batches should not occur, but the Map keyed by exact URL acts as a safety net — if a URL appears again, the higher visitCount is kept. (When `USE_VISIT_COUNT` is `false`, the Map values collected during fetching are discarded and replaced by the `getVisits()`-derived counts, so the dedup logic only matters for the default path.)
 
 After collection:
 1. Filter out URLs that already exist as shortcuts (exact URL match across all tabs, including inside folders)
