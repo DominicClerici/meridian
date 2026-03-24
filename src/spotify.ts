@@ -287,4 +287,92 @@ let cardEl: HTMLElement | null = null
 let controlsDisabled = false
 let loadingAction: string | null = null
 
-function renderCard(): void {}
+const SPINNER_SVG = `<svg class="animate-spin" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>`
+
+function escapeHtml(str: string): string {
+  const div = document.createElement("div")
+  div.textContent = str
+  return div.innerHTML
+}
+
+function btnIcon(action: string, isPlaying: boolean): string {
+  if (loadingAction === action) return SPINNER_SVG
+  switch (action) {
+    case "previous": return `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>`
+    case "next": return `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>`
+    default: return isPlaying
+      ? `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M6 4h4v16H6zm8 0h4v16h-4z"/></svg>`
+      : `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>`
+  }
+}
+
+function renderCard(): void {
+  if (!store.sync.get("spotifyEnabled") || !currentPlayerState) {
+    if (cardEl) {
+      cardEl.remove()
+      cardEl = null
+    }
+    return
+  }
+
+  const isNew = !cardEl
+  if (isNew) {
+    cardEl = document.createElement("div")
+    cardEl.className = "fixed bottom-4 right-4 bg-black/70 backdrop-blur-sm text-white rounded-xl p-3 flex gap-3 items-center shadow-lg"
+    cardEl.style.width = "320px"
+    cardEl.style.zIndex = "50"
+    cardEl.addEventListener("click", handleControlClick)
+    document.body.appendChild(cardEl)
+  }
+
+  const { track, isPlaying } = currentPlayerState
+  const playPauseAction = isPlaying ? "pause" : "play"
+
+  const albumHtml = track.albumArt
+    ? `<img src="${track.albumArt}" alt="Album art" class="w-20 h-20 rounded-lg object-cover shrink-0">`
+    : `<div class="w-20 h-20 rounded-lg bg-white/10 shrink-0"></div>`
+
+  const controlsHtml = isPremium
+    ? `<div class="flex items-center gap-2 mt-2">
+        <button data-spotify-action="previous" class="p-1 rounded hover:bg-white/20 transition-colors" ${controlsDisabled ? "disabled" : ""} aria-label="Previous track">${btnIcon("previous", isPlaying)}</button>
+        <button data-spotify-action="${playPauseAction}" class="p-1 rounded hover:bg-white/20 transition-colors" ${controlsDisabled ? "disabled" : ""} aria-label="${isPlaying ? "Pause" : "Play"}">${btnIcon(playPauseAction, isPlaying)}</button>
+        <button data-spotify-action="next" class="p-1 rounded hover:bg-white/20 transition-colors" ${controlsDisabled ? "disabled" : ""} aria-label="Next track">${btnIcon("next", isPlaying)}</button>
+      </div>`
+    : ""
+
+  cardEl!.innerHTML = `
+    ${albumHtml}
+    <div class="min-w-0 flex-1">
+      <div class="text-sm font-medium truncate">${escapeHtml(track.name)}</div>
+      <div class="text-xs text-white/70 truncate">${escapeHtml(track.artists)}</div>
+      ${controlsHtml}
+    </div>
+  `
+}
+
+async function handleControlClick(e: MouseEvent): Promise<void> {
+  const btn = (e.target as HTMLElement).closest<HTMLButtonElement>("[data-spotify-action]")
+  if (!btn || controlsDisabled) return
+
+  const action = btn.dataset.spotifyAction!
+  controlsDisabled = true
+  loadingAction = action
+  renderCard()
+
+  let success = false
+  switch (action) {
+    case "play": success = await playerPlay(); break
+    case "pause": success = await playerPause(); break
+    case "next": success = await playerNext(); break
+    case "previous": success = await playerPrevious(); break
+  }
+
+  if (success) {
+    await new Promise((r) => setTimeout(r, 300))
+    await fetchPlayerState()
+  }
+
+  controlsDisabled = false
+  loadingAction = null
+  renderCard()
+}
