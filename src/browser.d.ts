@@ -27,9 +27,38 @@ declare global {
     getRedirectURL(): string;
   }
 
+  interface HistoryItem {
+    id: string;
+    url?: string;
+    title?: string;
+    lastVisitTime?: number;
+    visitCount?: number;
+    typedCount?: number;
+  }
+
+  interface VisitItem {
+    id: string;
+    visitId: string;
+    visitTime?: number;
+    referringVisitId: string;
+    transition: string;
+  }
+
+  interface BrowserHistory {
+    search(
+      query: { text: string; startTime?: number; endTime?: number; maxResults?: number },
+      callback: (results: HistoryItem[]) => void
+    ): void;
+    getVisits(
+      details: { url: string },
+      callback: (results: VisitItem[]) => void
+    ): void;
+  }
+
   interface BrowserAPI {
     storage: BrowserStorage;
     identity: BrowserIdentity;
+    history: BrowserHistory;
   }
 
   var browser: BrowserAPI | undefined;

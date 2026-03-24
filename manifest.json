@@ -9,6 +9,7 @@
   "permissions": [
     "storage",
     "geolocation",
-    "identity"
+    "identity",
+    "history"
   ]
 }
