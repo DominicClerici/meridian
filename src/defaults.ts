@@ -1,6 +1,15 @@
 import type { Tab } from "./shortcuts"
 import type { Todo } from "./todos"
 
+export type DomainHeatmap = {
+  [domain: string]: number[][]
+}
+
+export type RecommendationData = {
+  heatmap: DomainHeatmap
+  builtAt: number
+}
+
 export type SyncSettings = {
   bgColor: "red" | "green" | "blue";
   searchEngine: "google" | "bing" | "yahoo" | "duckduckgo" | "ecosia" | "qwant" | "startpage";
@@ -17,6 +26,7 @@ export type SyncSettings = {
   weatherEnabled: boolean;
   weatherUnit: "f" | "c";
   spotifyEnabled: boolean;
+  recommendationsEnabled: boolean;
 };
 
 export type LocalSettings = {
@@ -27,6 +37,7 @@ export type LocalSettings = {
   spotifyAccessToken: string | null
   spotifyRefreshToken: string | null
   spotifyTokenExpiry: number | null
+  recommendationData: RecommendationData | null
 }
 
 export const syncDefaults: SyncSettings = {
@@ -45,6 +56,7 @@ export const syncDefaults: SyncSettings = {
   weatherEnabled: true,
   weatherUnit: "f",
   spotifyEnabled: true,
+  recommendationsEnabled: false,
 }
 
 export const localDefaults: LocalSettings = {
@@ -55,4 +67,5 @@ export const localDefaults: LocalSettings = {
   spotifyAccessToken: null,
   spotifyRefreshToken: null,
   spotifyTokenExpiry: null,
+  recommendationData: null,
 }
