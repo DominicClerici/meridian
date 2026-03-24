@@ -117,6 +117,11 @@ export function initSettings(): void {
   store.sync.subscribe("clockDateFormat", (v) => { clockDateFormat.value = v })
   store.sync.subscribe("clockSize", (v) => { clockSize.value = v })
 
+  const recsEnabled = document.getElementById("settings-recommendations-enabled") as HTMLInputElement
+  recsEnabled.checked = store.sync.get("recommendationsEnabled")
+  recsEnabled.addEventListener("change", () => store.sync.set("recommendationsEnabled", recsEnabled.checked))
+  store.sync.subscribe("recommendationsEnabled", (v) => { recsEnabled.checked = v })
+
   const todoEnabled = document.getElementById("settings-todo-enabled") as HTMLInputElement
   const todoBadges = document.getElementById("settings-todo-badges") as HTMLInputElement
   const todoClear = document.getElementById("settings-todo-clear") as HTMLButtonElement
