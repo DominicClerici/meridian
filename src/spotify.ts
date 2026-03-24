@@ -106,7 +106,9 @@ async function refreshAccessToken(): Promise<boolean> {
     })
 
     if (!res.ok) {
-      clearTokens()
+      if (res.status === 400 || res.status === 401) {
+        clearTokens()
+      }
       return false
     }
 
@@ -130,7 +132,9 @@ export function clearTokens(): void {
 
 async function ensureValidToken(): Promise<boolean> {
   const token = store.local.get("spotifyAccessToken")
-  if (!token) return false
+  if (!token) {
+    return store.local.get("spotifyRefreshToken") ? refreshAccessToken() : false
+  }
 
   const expiry = store.local.get("spotifyTokenExpiry")
   if (!expiry || Date.now() > expiry - 60_000) {
