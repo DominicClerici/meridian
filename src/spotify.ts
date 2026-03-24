@@ -248,3 +248,43 @@ async function playerPrevious(): Promise<boolean> {
   const res = await spotifyFetch("https://api.spotify.com/v1/me/player/previous", { method: "POST" })
   return res !== null && (res.ok || res.status === 204)
 }
+
+const POLL_INTERVAL = 5000
+let pollIntervalId: ReturnType<typeof setInterval> | null = null
+
+function startPolling(): void {
+  stopPolling()
+  poll()
+  pollIntervalId = setInterval(poll, POLL_INTERVAL)
+}
+
+function stopPolling(): void {
+  if (pollIntervalId !== null) {
+    clearInterval(pollIntervalId)
+    pollIntervalId = null
+  }
+}
+
+async function poll(): Promise<void> {
+  await fetchPlayerState()
+  renderCard()
+}
+
+function setupVisibilityHandler(): void {
+  document.addEventListener("visibilitychange", () => {
+    if (!store.sync.get("spotifyEnabled")) return
+    if (!store.local.get("spotifyAccessToken")) return
+
+    if (document.hidden) {
+      stopPolling()
+    } else {
+      startPolling()
+    }
+  })
+}
+
+let cardEl: HTMLElement | null = null
+let controlsDisabled = false
+let loadingAction: string | null = null
+
+function renderCard(): void {}
