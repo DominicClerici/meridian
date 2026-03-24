@@ -2,7 +2,7 @@ import { store } from "./store"
 
 const CLIENT_ID = "acd29601607e4e1c8896ab4c1ab534d7"
 const SCOPES =
-  "user-read-playback-state user-modify-playback-state user-read-currently-playing"
+  "user-read-playback-state user-modify-playback-state user-read-currently-playing user-read-private"
 const SPOTIFY_AUTH_URL = "https://accounts.spotify.com/authorize"
 const SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"
 

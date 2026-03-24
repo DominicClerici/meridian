@@ -1,5 +1,75 @@
 @import "tailwindcss";
 
+@font-face {
+  font-family: "Gilroy";
+  font-style: normal;
+  font-weight: 300;
+  src: url("fonts/gilroy/Gilroy-Light.woff") format("woff");
+}
+
+@font-face {
+  font-family: "Gilroy";
+  font-style: normal;
+  font-weight: 400;
+  src: url("fonts/gilroy/Gilroy-Regular.woff") format("woff");
+}
+
+@font-face {
+  font-family: "Gilroy";
+  font-style: normal;
+  font-weight: 500;
+  src: url("fonts/gilroy/Gilroy-Medium.woff") format("woff");
+}
+
+@font-face {
+  font-family: "Gilroy";
+  font-style: normal;
+  font-weight: 700;
+  src: url("fonts/gilroy/Gilroy-Bold.woff") format("woff");
+}
+
+@font-face {
+  font-family: "Gilroy";
+  font-style: normal;
+  font-weight: 900;
+  src: url("fonts/gilroy/Gilroy-Heavy.woff") format("woff");
+}
+
+@font-face {
+  font-family: "Red Hat Mono";
+  font-style: normal;
+  font-weight: 300;
+  src: url("fonts/red-hat-mono/RedHatMono-Light.woff") format("woff");
+}
+
+@font-face {
+  font-family: "Red Hat Mono";
+  font-style: normal;
+  font-weight: 400;
+  src: url("fonts/red-hat-mono/RedHatMono-Regular.woff") format("woff");
+}
+
+@font-face {
+  font-family: "Red Hat Mono";
+  font-style: normal;
+  font-weight: 500;
+  src: url("fonts/red-hat-mono/RedHatMono-Medium.woff") format("woff");
+}
+
+@font-face {
+  font-family: "Red Hat Mono";
+  font-style: normal;
+  font-weight: 600;
+  src: url("fonts/red-hat-mono/RedHatMono-SemiBold.woff") format("woff");
+}
+
+@font-face {
+  font-family: "Red Hat Mono";
+  font-style: normal;
+  font-weight: 700;
+  src: url("fonts/red-hat-mono/RedHatMono-Bold.woff") format("woff");
+}
+
 /* Active color button ring */
 button[aria-pressed="true"] {
   outline: 3px solid white;
@@ -8,5 +78,6 @@ button[aria-pressed="true"] {
 
 /* Transition for body background color */
 body {
+  font-family: "Gilroy", sans-serif;
   transition: background-color 0.2s ease;
 }
