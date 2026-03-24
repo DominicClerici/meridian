@@ -81,3 +81,38 @@ async function fetchHistory(): Promise<HistoryEntry[]> {
 
   return Array.from(map.values())
 }
+
+function getAllShortcutUrls(): Set<string> {
+  const tabs: Tab[] = store.local.get("shortcuts")
+  const urls = new Set<string>()
+  for (const tab of tabs) {
+    for (const item of tab.items) {
+      if (item.type === "shortcut") urls.add(item.url)
+      else if (item.type === "folder") {
+        for (const child of item.children) urls.add(child.url)
+      }
+    }
+  }
+  return urls
+}
+
+function getTopEntries(entries: HistoryEntry[]): HistoryEntry[] {
+  const existing = getAllShortcutUrls()
+  return entries
+    .filter((e) => !existing.has(e.url))
+    .sort((a, b) => b.visitCount - a.visitCount)
+    .slice(0, MAX_RESULTS)
+}
+
+function extractHostname(url: string): string {
+  let hostname: string
+  try {
+    hostname = new URL(url).hostname
+  } catch {
+    return url
+  }
+  if (hostname.startsWith("www.")) hostname = hostname.slice(4)
+  if (hostname.length > MAX_HOSTNAME_LENGTH)
+    hostname = hostname.slice(0, MAX_HOSTNAME_LENGTH - 3) + "..."
+  return hostname
+}
