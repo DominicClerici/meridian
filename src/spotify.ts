@@ -131,3 +131,120 @@ async function ensureValidToken(): Promise<boolean> {
   }
   return true
 }
+
+type SpotifyTrack = {
+  name: string
+  artists: string
+  albumArt: string | null
+}
+
+type PlayerState = {
+  track: SpotifyTrack
+  isPlaying: boolean
+}
+
+let isPremium = true
+
+async function spotifyFetch(url: string, options?: RequestInit): Promise<Response | null> {
+  const valid = await ensureValidToken()
+  if (!valid) return null
+
+  const token = store.local.get("spotifyAccessToken")
+  const res = await fetch(url, {
+    ...options,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...options?.headers,
+    },
+  })
+
+  if (res.status === 401) {
+    const refreshed = await refreshAccessToken()
+    if (!refreshed) return null
+    const newToken = store.local.get("spotifyAccessToken")
+    return fetch(url, {
+      ...options,
+      headers: {
+        Authorization: `Bearer ${newToken}`,
+        ...options?.headers,
+      },
+    })
+  }
+
+  return res
+}
+
+async function checkPremium(): Promise<void> {
+  try {
+    const res = await spotifyFetch("https://api.spotify.com/v1/me")
+    if (res && res.ok) {
+      const data = await res.json()
+      isPremium = data.product === "premium"
+    }
+  } catch {
+    // default isPremium stays true
+  }
+}
+
+let currentPlayerState: PlayerState | null = null
+let retryAfterUntil = 0
+
+async function fetchPlayerState(): Promise<void> {
+  if (Date.now() < retryAfterUntil) return
+
+  try {
+    const res = await spotifyFetch("https://api.spotify.com/v1/me/player")
+    if (!res) {
+      currentPlayerState = null
+      return
+    }
+
+    if (res.status === 429) {
+      const retryAfter = Number(res.headers.get("Retry-After") || 5)
+      retryAfterUntil = Date.now() + retryAfter * 1000
+      return
+    }
+
+    if (res.status === 204 || !res.ok) {
+      currentPlayerState = null
+      return
+    }
+
+    const data = await res.json()
+    if (!data.item) {
+      currentPlayerState = null
+      return
+    }
+
+    currentPlayerState = {
+      track: {
+        name: data.item.name,
+        artists: data.item.artists.map((a: { name: string }) => a.name).join(", "),
+        albumArt: data.item.album?.images?.[0]?.url ?? null,
+      },
+      isPlaying: data.is_playing,
+    }
+  } catch {
+    currentPlayerState = null
+  }
+}
+
+async function playerPlay(): Promise<boolean> {
+  const res = await spotifyFetch("https://api.spotify.com/v1/me/player/play", { method: "PUT" })
+  return res !== null && (res.ok || res.status === 204)
+}
+
+async function playerPause(): Promise<boolean> {
+  const res = await spotifyFetch("https://api.spotify.com/v1/me/player/pause", { method: "PUT" })
+  return res !== null && (res.ok || res.status === 204)
+}
+
+async function playerNext(): Promise<boolean> {
+  const res = await spotifyFetch("https://api.spotify.com/v1/me/player/next", { method: "POST" })
+  return res !== null && (res.ok || res.status === 204)
+}
+
+async function playerPrevious(): Promise<boolean> {
+  const res = await spotifyFetch("https://api.spotify.com/v1/me/player/previous", { method: "POST" })
+  return res !== null && (res.ok || res.status === 204)
+}
