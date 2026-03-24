@@ -28,7 +28,7 @@ async function sha256(plain: string): Promise<ArrayBuffer> {
   return crypto.subtle.digest("SHA-256", encoder.encode(plain))
 }
 
-async function authenticate(): Promise<boolean> {
+export async function authenticate(): Promise<boolean> {
   const api = globalThis.browser ?? globalThis.chrome
   if (!api?.identity) return false
 
@@ -115,7 +115,7 @@ async function refreshAccessToken(): Promise<boolean> {
   }
 }
 
-function clearTokens(): void {
+export function clearTokens(): void {
   store.local.delete("spotifyAccessToken")
   store.local.delete("spotifyRefreshToken")
   store.local.delete("spotifyTokenExpiry")

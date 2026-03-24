@@ -1,5 +1,6 @@
 import { store } from "./store"
 import type { SyncSettings } from "./defaults"
+import { authenticate as spotifyAuthenticate, clearTokens as spotifyClearTokens } from "./spotify"
 
 const BG_CLASSES: Record<SyncSettings["bgColor"], string> = {
   red: "bg-red-500",
@@ -169,4 +170,36 @@ export function initSettings(): void {
   store.sync.subscribe("weatherEnabled", (v) => { weatherEnabled.checked = v })
   store.sync.subscribe("weatherUnit", (v) => { weatherUnit.value = v })
   store.local.subscribe("weatherLat", () => updateWeatherLocationUI())
+
+  const spotifyEnabled = document.getElementById("settings-spotify-enabled") as HTMLInputElement
+  const spotifyConnectRow = document.getElementById("settings-spotify-connect-row") as HTMLElement
+  const spotifyDisconnectRow = document.getElementById("settings-spotify-disconnect-row") as HTMLElement
+  const spotifyConnect = document.getElementById("settings-spotify-connect") as HTMLButtonElement
+  const spotifyDisconnect = document.getElementById("settings-spotify-disconnect") as HTMLButtonElement
+
+  spotifyEnabled.checked = store.sync.get("spotifyEnabled")
+
+  function updateSpotifyAuthUI(): void {
+    const hasToken = store.local.get("spotifyAccessToken") !== null
+    spotifyConnectRow.hidden = hasToken
+    spotifyDisconnectRow.hidden = !hasToken
+  }
+  updateSpotifyAuthUI()
+
+  spotifyEnabled.addEventListener("change", () => store.sync.set("spotifyEnabled", spotifyEnabled.checked))
+  spotifyConnect.addEventListener("click", async () => {
+    spotifyConnect.disabled = true
+    spotifyConnect.textContent = "Connecting..."
+    const success = await spotifyAuthenticate()
+    spotifyConnect.disabled = false
+    spotifyConnect.textContent = "Connect Spotify"
+    if (success) updateSpotifyAuthUI()
+  })
+  spotifyDisconnect.addEventListener("click", () => {
+    spotifyClearTokens()
+    updateSpotifyAuthUI()
+  })
+
+  store.sync.subscribe("spotifyEnabled", (v) => { spotifyEnabled.checked = v })
+  store.local.subscribe("spotifyAccessToken", () => updateSpotifyAuthUI())
 }
