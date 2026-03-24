@@ -32,10 +32,10 @@ function historyGetVisits(details: { url: string }): Promise<VisitItem[]> {
 
 History is fetched in chunks to avoid freezing the browser.
 
-1. Start with `endTime = Date.now()` and `startTime = Date.now() - 3 months`
+1. Start with `endTime = Date.now()` and `startTime = Date.now() - 90 days` (90 * 24 * 60 * 60 * 1000)
 2. Call `history.search({ text: '', startTime, endTime, maxResults: 150 })`
-3. Collect results into a `Map<string, { url: string, visitCount: number }>` keyed by exact URL
-4. If batch returned 150 results, set `endTime = lastItem.lastVisitTime` and repeat
+3. Collect results into a `Map<string, { url: string, visitCount: number }>` keyed by exact URL. Skip items where `url` is missing/empty. Default `visitCount` to `0` when undefined.
+4. If batch returned 150 results, set `endTime = lastItem.lastVisitTime`. If `lastVisitTime` is undefined, subtract 1ms from the current `endTime` to avoid an infinite loop. Repeat from step 2.
 5. If batch returned < 150, history in the range is exhausted — stop
 
 ## Visit Counting
@@ -43,7 +43,7 @@ History is fetched in chunks to avoid freezing the browser.
 Controlled by a `USE_VISIT_COUNT` constant at the top of `history-import.ts`, defaulting to `true`.
 
 - **`true` (default):** Use `visitCount` from each `HistoryItem` directly. This is the all-time visit count — fast, no extra API calls.
-- **`false`:** After collecting all URLs from `history.search()`, call `history.getVisits()` for each URL, then count only visits where `visitTime >= threeMonthsAgo`. Accurate to the 3-month window but requires N additional API calls.
+- **`false`:** After collecting all URLs from `history.search()`, call `history.getVisits()` sequentially for each URL (one at a time to avoid overwhelming the API), then count only visits where `visitTime >= threeMonthsAgo`. Accurate to the 3-month window but requires N additional API calls.
 
 ## Grouping & Ranking
 
@@ -70,11 +70,13 @@ Example: `https://www.examplewebsite.com/route/another?param=1` → `examplewebs
 
 ### Trigger
 
-A button row inside the Shortcuts fieldset in `index.html`, placed after `#sc-controls` and before `#sc-list`:
+A standalone button in its own row between `#sc-controls` and `#sc-list` in the Shortcuts fieldset:
 
 ```html
 <button id="sc-import-history" ...>Import from History</button>
 ```
+
+The button is hidden when no tab is selected (same pattern as `#sc-add-shortcut`).
 
 ### Dialog
 
@@ -87,17 +89,19 @@ A new `<dialog id="history-import-dialog">` in `index.html`, styled consistently
    - Hostname-derived title
    - Full URL in smaller muted text
    - Visit count
-   - "Add" button
+   - "Add" button (disabled if the selected tab has reached `MAX_ITEMS_PER_TAB`)
 3. **Empty** — "No new sites found in your history."
+4. **Error** — "Could not load history." Shown if the history API is unavailable or calls fail. The Promise wrappers should check `chrome.runtime.lastError` and reject on failure.
 
 ### Adding a Shortcut
 
 When "Add" is clicked on a result row:
-1. Create a shortcut: `{ type: "shortcut", id: randomUUID(), name: hostname, url: fullUrl }`
-2. Prepend to the currently selected tab's `items` array (direct prepend, not `addShortcut()` which appends)
-3. Save to store via `store.local.set("shortcuts", ...)`
-4. Remove the row from the modal list to prevent double-adding
-5. The shortcut settings list updates reactively via the existing `store.local.subscribe("shortcuts", ...)` subscription
+1. Read the currently selected tab ID from `#sc-tab-select.value` in the DOM
+2. Create a shortcut: `{ type: "shortcut", id: randomUUID(), name: hostname, url: fullUrl }`
+3. Prepend to that tab's `items` array (direct prepend, not `addShortcut()` which appends). Skip if the tab has reached `MAX_ITEMS_PER_TAB`.
+4. Save to store via `store.local.set("shortcuts", ...)`
+5. Remove the row from the modal list to prevent double-adding
+6. The shortcut settings list updates reactively via the existing `store.local.subscribe("shortcuts", ...)` subscription
 
 ### Closing
 
@@ -151,4 +155,6 @@ Add `"history"` to the `permissions` array in `manifest.json`.
 | `manifest.json` | Add `"history"` to permissions. |
 | `src/settings.ts` or `src/index.ts` | Call `initHistoryImport()`. |
 
-No changes to: `defaults.ts`, `store.ts`, `shortcuts.ts`, `shortcut-settings.ts`, `dock.ts`.
+No changes to: `defaults.ts`, `store.ts`, `shortcuts.ts`, `dock.ts`.
+
+Note: `shortcut-settings.ts` needs a minor update — `renderList()` must toggle visibility of the `#sc-import-history` button alongside the existing `#sc-add-shortcut` button (hidden when no tab is selected).
