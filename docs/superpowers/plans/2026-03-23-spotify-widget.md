@@ -14,21 +14,22 @@
 
 ## File Map
 
-| File | Action | Responsibility |
-|------|--------|----------------|
-| `src/defaults.ts` | Modify | Add `spotifyEnabled` to `SyncSettings`, add 3 token keys to `LocalSettings` |
-| `src/browser.d.ts` | Modify | Add `identity` types to `BrowserAPI` interface |
-| `manifest.json` | Modify | Add `"identity"` permission |
-| `src/spotify.ts` | Create | OAuth, API calls, polling, floating card rendering |
-| `src/index.html` | Modify | Add Spotify settings fieldset to the settings dialog |
-| `src/settings.ts` | Modify | Wire Spotify enable toggle + connect/disconnect buttons |
-| `src/index.ts` | Modify | Import and call `initSpotify()` |
+| File               | Action | Responsibility                                                              |
+| ------------------ | ------ | --------------------------------------------------------------------------- |
+| `src/defaults.ts`  | Modify | Add `spotifyEnabled` to `SyncSettings`, add 3 token keys to `LocalSettings` |
+| `src/browser.d.ts` | Modify | Add `identity` types to `BrowserAPI` interface                              |
+| `manifest.json`    | Modify | Add `"identity"` permission                                                 |
+| `src/spotify.ts`   | Create | OAuth, API calls, polling, floating card rendering                          |
+| `src/index.html`   | Modify | Add Spotify settings fieldset to the settings dialog                        |
+| `src/settings.ts`  | Modify | Wire Spotify enable toggle + connect/disconnect buttons                     |
+| `src/index.ts`     | Modify | Import and call `initSpotify()`                                             |
 
 ---
 
 ### Task 1: Add storage keys, types, and permissions
 
 **Files:**
+
 - Modify: `src/defaults.ts:4-19` (SyncSettings type), `src/defaults.ts:21-26` (LocalSettings type), `src/defaults.ts:28-43` (syncDefaults), `src/defaults.ts:45-50` (localDefaults)
 - Modify: `src/browser.d.ts:25-27` (BrowserAPI interface)
 - Modify: `manifest.json:9-12` (permissions array)
@@ -38,7 +39,7 @@
 In `src/defaults.ts`, add to the `SyncSettings` type (after line 18):
 
 ```ts
-spotifyEnabled: boolean;
+spotifyEnabled: boolean
 ```
 
 Add to `syncDefaults` (after line 42):
@@ -71,15 +72,18 @@ In `src/browser.d.ts`, add a new interface before `BrowserAPI` (before line 25):
 
 ```ts
 interface BrowserIdentity {
-  launchWebAuthFlow(details: { url: string; interactive: boolean }): Promise<string>;
-  getRedirectURL(): string;
+  launchWebAuthFlow(details: {
+    url: string
+    interactive: boolean
+  }): Promise<string>
+  getRedirectURL(): string
 }
 ```
 
 Add to the `BrowserAPI` interface (after line 26):
 
 ```ts
-identity: BrowserIdentity;
+identity: BrowserIdentity
 ```
 
 - [ ] **Step 4: Add `identity` permission to manifest**
@@ -111,6 +115,7 @@ git commit -m "feat(spotify): add storage keys, browser identity types, and perm
 ### Task 2: OAuth — PKCE authentication flow
 
 **Files:**
+
 - Create: `src/spotify.ts`
 
 This task creates the file with the OAuth constants, PKCE helpers, and the `authenticate()` function. No UI yet — just the auth logic.
@@ -120,8 +125,9 @@ This task creates the file with the OAuth constants, PKCE helpers, and the `auth
 ```ts
 import { store } from "./store"
 
-const CLIENT_ID = "YOUR_SPOTIFY_CLIENT_ID"
-const SCOPES = "user-read-playback-state user-modify-playback-state user-read-currently-playing"
+const CLIENT_ID = "acd29601607e4e1c8896ab4c1ab534d7"
+const SCOPES =
+  "user-read-playback-state user-modify-playback-state user-read-currently-playing"
 const SPOTIFY_AUTH_URL = "https://accounts.spotify.com/authorize"
 const SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"
 
@@ -169,7 +175,10 @@ async function authenticate(): Promise<boolean> {
 
   let responseUrl: string
   try {
-    responseUrl = await api.identity.launchWebAuthFlow({ url: authUrl, interactive: true })
+    responseUrl = await api.identity.launchWebAuthFlow({
+      url: authUrl,
+      interactive: true,
+    })
   } catch {
     return false
   }
@@ -195,7 +204,10 @@ async function authenticate(): Promise<boolean> {
     const tokenData = await tokenRes.json()
     store.local.set("spotifyAccessToken", tokenData.access_token)
     store.local.set("spotifyRefreshToken", tokenData.refresh_token)
-    store.local.set("spotifyTokenExpiry", Date.now() + tokenData.expires_in * 1000)
+    store.local.set(
+      "spotifyTokenExpiry",
+      Date.now() + tokenData.expires_in * 1000
+    )
     return true
   } catch {
     return false
@@ -275,6 +287,7 @@ git commit -m "feat(spotify): add PKCE OAuth flow and token management"
 ### Task 3: Spotify API layer — player state, premium check, controls
 
 **Files:**
+
 - Modify: `src/spotify.ts`
 
 - [ ] **Step 1: Add types and API helper**
@@ -295,7 +308,10 @@ type PlayerState = {
 
 let isPremium = true
 
-async function spotifyFetch(url: string, options?: RequestInit): Promise<Response | null> {
+async function spotifyFetch(
+  url: string,
+  options?: RequestInit
+): Promise<Response | null> {
   const valid = await ensureValidToken()
   if (!valid) return null
 
@@ -381,7 +397,9 @@ async function fetchPlayerState(): Promise<void> {
     currentPlayerState = {
       track: {
         name: data.item.name,
-        artists: data.item.artists.map((a: { name: string }) => a.name).join(", "),
+        artists: data.item.artists
+          .map((a: { name: string }) => a.name)
+          .join(", "),
         albumArt: data.item.album?.images?.[0]?.url ?? null,
       },
       isPlaying: data.is_playing,
@@ -398,22 +416,31 @@ Append to `src/spotify.ts`:
 
 ```ts
 async function playerPlay(): Promise<boolean> {
-  const res = await spotifyFetch("https://api.spotify.com/v1/me/player/play", { method: "PUT" })
+  const res = await spotifyFetch("https://api.spotify.com/v1/me/player/play", {
+    method: "PUT",
+  })
   return res !== null && (res.ok || res.status === 204)
 }
 
 async function playerPause(): Promise<boolean> {
-  const res = await spotifyFetch("https://api.spotify.com/v1/me/player/pause", { method: "PUT" })
+  const res = await spotifyFetch("https://api.spotify.com/v1/me/player/pause", {
+    method: "PUT",
+  })
   return res !== null && (res.ok || res.status === 204)
 }
 
 async function playerNext(): Promise<boolean> {
-  const res = await spotifyFetch("https://api.spotify.com/v1/me/player/next", { method: "POST" })
+  const res = await spotifyFetch("https://api.spotify.com/v1/me/player/next", {
+    method: "POST",
+  })
   return res !== null && (res.ok || res.status === 204)
 }
 
 async function playerPrevious(): Promise<boolean> {
-  const res = await spotifyFetch("https://api.spotify.com/v1/me/player/previous", { method: "POST" })
+  const res = await spotifyFetch(
+    "https://api.spotify.com/v1/me/player/previous",
+    { method: "POST" }
+  )
   return res !== null && (res.ok || res.status === 204)
 }
 ```
@@ -435,6 +462,7 @@ git commit -m "feat(spotify): add API layer for player state, premium check, and
 ### Task 4: Polling with visibility handling
 
 **Files:**
+
 - Modify: `src/spotify.ts`
 
 - [ ] **Step 1: Add polling logic**
@@ -512,6 +540,7 @@ git commit -m "feat(spotify): add polling with visibility-based pause"
 ### Task 5: Floating card UI
 
 **Files:**
+
 - Modify: `src/spotify.ts`
 
 - [ ] **Step 1: Replace renderCard stub and add card rendering**
@@ -534,11 +563,14 @@ function escapeHtml(str: string): string {
 function btnIcon(action: string, isPlaying: boolean): string {
   if (loadingAction === action) return SPINNER_SVG
   switch (action) {
-    case "previous": return `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>`
-    case "next": return `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>`
-    default: return isPlaying
-      ? `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M6 4h4v16H6zm8 0h4v16h-4z"/></svg>`
-      : `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>`
+    case "previous":
+      return `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>`
+    case "next":
+      return `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>`
+    default:
+      return isPlaying
+        ? `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M6 4h4v16H6zm8 0h4v16h-4z"/></svg>`
+        : `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>`
   }
 }
 
@@ -554,7 +586,8 @@ function renderCard(): void {
   const isNew = !cardEl
   if (isNew) {
     cardEl = document.createElement("div")
-    cardEl.className = "fixed bottom-4 right-4 bg-black/70 backdrop-blur-sm text-white rounded-xl p-3 flex gap-3 items-center shadow-lg"
+    cardEl.className =
+      "fixed bottom-4 right-4 bg-black/70 backdrop-blur-sm text-white rounded-xl p-3 flex gap-3 items-center shadow-lg"
     cardEl.style.width = "320px"
     cardEl.style.zIndex = "50"
     cardEl.addEventListener("click", handleControlClick)
@@ -570,9 +603,18 @@ function renderCard(): void {
 
   const controlsHtml = isPremium
     ? `<div class="flex items-center gap-2 mt-2">
-        <button data-spotify-action="previous" class="p-1 rounded hover:bg-white/20 transition-colors" ${controlsDisabled ? "disabled" : ""} aria-label="Previous track">${btnIcon("previous", isPlaying)}</button>
-        <button data-spotify-action="${playPauseAction}" class="p-1 rounded hover:bg-white/20 transition-colors" ${controlsDisabled ? "disabled" : ""} aria-label="${isPlaying ? "Pause" : "Play"}">${btnIcon(playPauseAction, isPlaying)}</button>
-        <button data-spotify-action="next" class="p-1 rounded hover:bg-white/20 transition-colors" ${controlsDisabled ? "disabled" : ""} aria-label="Next track">${btnIcon("next", isPlaying)}</button>
+        <button data-spotify-action="previous" class="p-1 rounded hover:bg-white/20 transition-colors" ${
+          controlsDisabled ? "disabled" : ""
+        } aria-label="Previous track">${btnIcon("previous", isPlaying)}</button>
+        <button data-spotify-action="${playPauseAction}" class="p-1 rounded hover:bg-white/20 transition-colors" ${
+        controlsDisabled ? "disabled" : ""
+      } aria-label="${isPlaying ? "Pause" : "Play"}">${btnIcon(
+        playPauseAction,
+        isPlaying
+      )}</button>
+        <button data-spotify-action="next" class="p-1 rounded hover:bg-white/20 transition-colors" ${
+          controlsDisabled ? "disabled" : ""
+        } aria-label="Next track">${btnIcon("next", isPlaying)}</button>
       </div>`
     : ""
 
@@ -580,7 +622,9 @@ function renderCard(): void {
     ${albumHtml}
     <div class="min-w-0 flex-1">
       <div class="text-sm font-medium truncate">${escapeHtml(track.name)}</div>
-      <div class="text-xs text-white/70 truncate">${escapeHtml(track.artists)}</div>
+      <div class="text-xs text-white/70 truncate">${escapeHtml(
+        track.artists
+      )}</div>
       ${controlsHtml}
     </div>
   `
@@ -593,7 +637,9 @@ Append to `src/spotify.ts`. Uses event delegation — the handler is registered 
 
 ```ts
 async function handleControlClick(e: MouseEvent): Promise<void> {
-  const btn = (e.target as HTMLElement).closest<HTMLButtonElement>("[data-spotify-action]")
+  const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(
+    "[data-spotify-action]"
+  )
   if (!btn || controlsDisabled) return
 
   const action = btn.dataset.spotifyAction!
@@ -603,10 +649,18 @@ async function handleControlClick(e: MouseEvent): Promise<void> {
 
   let success = false
   switch (action) {
-    case "play": success = await playerPlay(); break
-    case "pause": success = await playerPause(); break
-    case "next": success = await playerNext(); break
-    case "previous": success = await playerPrevious(); break
+    case "play":
+      success = await playerPlay()
+      break
+    case "pause":
+      success = await playerPause()
+      break
+    case "next":
+      success = await playerNext()
+      break
+    case "previous":
+      success = await playerPrevious()
+      break
   }
 
   if (success) {
@@ -637,6 +691,7 @@ git commit -m "feat(spotify): add floating card UI with playback controls"
 ### Task 6: Settings UI — HTML and wiring
 
 **Files:**
+
 - Modify: `src/index.html:144-164` (after weather fieldset, before close button)
 - Modify: `src/settings.ts:137-172` (after weather section)
 
@@ -645,21 +700,35 @@ git commit -m "feat(spotify): add floating card UI with playback controls"
 In `src/index.html`, add after the weather `</fieldset>` (after line 164) and before the close button (line 165):
 
 ```html
-      <fieldset id="settings-spotify" class="border-0 p-0 m-0 mt-4">
-        <legend class="text-sm font-medium mb-2">Spotify</legend>
-        <div class="flex flex-col gap-2">
-          <div class="flex items-center gap-2">
-            <input type="checkbox" id="settings-spotify-enabled" class="rounded">
-            <label for="settings-spotify-enabled" class="text-sm">Enable Spotify widget</label>
-          </div>
-          <div id="settings-spotify-connect-row">
-            <button id="settings-spotify-connect" type="button" class="text-xs px-2 py-1 rounded bg-green-500 text-white hover:bg-green-600">Connect Spotify</button>
-          </div>
-          <div id="settings-spotify-disconnect-row" hidden>
-            <button id="settings-spotify-disconnect" type="button" class="text-xs px-2 py-1 rounded bg-red-500 text-white hover:bg-red-600">Disconnect</button>
-          </div>
-        </div>
-      </fieldset>
+<fieldset id="settings-spotify" class="border-0 p-0 m-0 mt-4">
+  <legend class="text-sm font-medium mb-2">Spotify</legend>
+  <div class="flex flex-col gap-2">
+    <div class="flex items-center gap-2">
+      <input type="checkbox" id="settings-spotify-enabled" class="rounded" />
+      <label for="settings-spotify-enabled" class="text-sm"
+        >Enable Spotify widget</label
+      >
+    </div>
+    <div id="settings-spotify-connect-row">
+      <button
+        id="settings-spotify-connect"
+        type="button"
+        class="text-xs px-2 py-1 rounded bg-green-500 text-white hover:bg-green-600"
+      >
+        Connect Spotify
+      </button>
+    </div>
+    <div id="settings-spotify-disconnect-row" hidden>
+      <button
+        id="settings-spotify-disconnect"
+        type="button"
+        class="text-xs px-2 py-1 rounded bg-red-500 text-white hover:bg-red-600"
+      >
+        Disconnect
+      </button>
+    </div>
+  </div>
+</fieldset>
 ```
 
 - [ ] **Step 2: Export `authenticate` and `clearTokens` from `spotify.ts`**
@@ -679,43 +748,60 @@ export function clearTokens(): void {
 In `src/settings.ts`, add the import at the top (after the existing store import on line 1):
 
 ```ts
-import { authenticate as spotifyAuthenticate, clearTokens as spotifyClearTokens } from "./spotify"
+import {
+  authenticate as spotifyAuthenticate,
+  clearTokens as spotifyClearTokens,
+} from "./spotify"
 ```
 
 Then append before the closing `}` of `initSettings()` (before line 172):
 
 ```ts
-  const spotifyEnabled = document.getElementById("settings-spotify-enabled") as HTMLInputElement
-  const spotifyConnectRow = document.getElementById("settings-spotify-connect-row") as HTMLElement
-  const spotifyDisconnectRow = document.getElementById("settings-spotify-disconnect-row") as HTMLElement
-  const spotifyConnect = document.getElementById("settings-spotify-connect") as HTMLButtonElement
-  const spotifyDisconnect = document.getElementById("settings-spotify-disconnect") as HTMLButtonElement
+const spotifyEnabled = document.getElementById(
+  "settings-spotify-enabled"
+) as HTMLInputElement
+const spotifyConnectRow = document.getElementById(
+  "settings-spotify-connect-row"
+) as HTMLElement
+const spotifyDisconnectRow = document.getElementById(
+  "settings-spotify-disconnect-row"
+) as HTMLElement
+const spotifyConnect = document.getElementById(
+  "settings-spotify-connect"
+) as HTMLButtonElement
+const spotifyDisconnect = document.getElementById(
+  "settings-spotify-disconnect"
+) as HTMLButtonElement
 
-  spotifyEnabled.checked = store.sync.get("spotifyEnabled")
+spotifyEnabled.checked = store.sync.get("spotifyEnabled")
 
-  function updateSpotifyAuthUI(): void {
-    const hasToken = store.local.get("spotifyAccessToken") !== null
-    spotifyConnectRow.hidden = hasToken
-    spotifyDisconnectRow.hidden = !hasToken
-  }
+function updateSpotifyAuthUI(): void {
+  const hasToken = store.local.get("spotifyAccessToken") !== null
+  spotifyConnectRow.hidden = hasToken
+  spotifyDisconnectRow.hidden = !hasToken
+}
+updateSpotifyAuthUI()
+
+spotifyEnabled.addEventListener("change", () =>
+  store.sync.set("spotifyEnabled", spotifyEnabled.checked)
+)
+spotifyConnect.addEventListener("click", async () => {
+  spotifyConnect.disabled = true
+  spotifyConnect.textContent = "Connecting..."
+  const success = await spotifyAuthenticate()
+  spotifyConnect.disabled = false
+  spotifyConnect.textContent = "Connect Spotify"
+  if (success) updateSpotifyAuthUI()
+})
+spotifyDisconnect.addEventListener("click", () => {
+  spotifyClearTokens()
   updateSpotifyAuthUI()
+})
 
-  spotifyEnabled.addEventListener("change", () => store.sync.set("spotifyEnabled", spotifyEnabled.checked))
-  spotifyConnect.addEventListener("click", async () => {
-    spotifyConnect.disabled = true
-    spotifyConnect.textContent = "Connecting..."
-    const success = await spotifyAuthenticate()
-    spotifyConnect.disabled = false
-    spotifyConnect.textContent = "Connect Spotify"
-    if (success) updateSpotifyAuthUI()
-  })
-  spotifyDisconnect.addEventListener("click", () => {
-    spotifyClearTokens()
-    updateSpotifyAuthUI()
-  })
-
-  store.sync.subscribe("spotifyEnabled", (v) => { spotifyEnabled.checked = v })
-  store.local.subscribe("spotifyAccessToken", () => updateSpotifyAuthUI())
+store.sync.subscribe("spotifyEnabled", (v) => {
+  spotifyEnabled.checked = v
+})
+store.local.subscribe("spotifyAccessToken", () => updateSpotifyAuthUI())
 ```
 
 - [ ] **Step 4: Verify types compile**
@@ -735,6 +821,7 @@ git commit -m "feat(spotify): add settings UI with connect/disconnect flow"
 ### Task 7: Integration — wire `initSpotify` and finalize
 
 **Files:**
+
 - Modify: `src/spotify.ts` (add `initSpotify` export)
 - Modify: `src/index.ts:1-22` (add import and call)
 
@@ -773,7 +860,6 @@ export function initSpotify(): void {
 
   if (!store.sync.get("spotifyEnabled")) return
   if (!store.local.get("spotifyAccessToken")) return
-
   ;(async () => {
     const valid = await ensureValidToken()
     if (!valid) return
@@ -795,7 +881,7 @@ import { initSpotify } from "./spotify"
 Add the call after `initWeather()` (after line 21):
 
 ```ts
-  initSpotify()
+initSpotify()
 ```
 
 - [ ] **Step 3: Verify types compile**

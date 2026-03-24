@@ -1,7 +1,8 @@
 import { store } from "./store"
 
-const CLIENT_ID = "YOUR_SPOTIFY_CLIENT_ID"
-const SCOPES = "user-read-playback-state user-modify-playback-state user-read-currently-playing"
+const CLIENT_ID = "acd29601607e4e1c8896ab4c1ab534d7"
+const SCOPES =
+  "user-read-playback-state user-modify-playback-state user-read-currently-playing"
 const SPOTIFY_AUTH_URL = "https://accounts.spotify.com/authorize"
 const SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"
 
@@ -49,7 +50,10 @@ export async function authenticate(): Promise<boolean> {
 
   let responseUrl: string
   try {
-    responseUrl = await api.identity.launchWebAuthFlow({ url: authUrl, interactive: true })
+    responseUrl = await api.identity.launchWebAuthFlow({
+      url: authUrl,
+      interactive: true,
+    })
   } catch {
     return false
   }
@@ -76,7 +80,10 @@ export async function authenticate(): Promise<boolean> {
     const tokenData = await tokenRes.json()
     store.local.set("spotifyAccessToken", tokenData.access_token)
     store.local.set("spotifyRefreshToken", tokenData.refresh_token)
-    store.local.set("spotifyTokenExpiry", Date.now() + tokenData.expires_in * 1000)
+    store.local.set(
+      "spotifyTokenExpiry",
+      Date.now() + tokenData.expires_in * 1000
+    )
     return true
   } catch {
     return false
@@ -145,7 +152,10 @@ type PlayerState = {
 
 let isPremium = true
 
-async function spotifyFetch(url: string, options?: RequestInit): Promise<Response | null> {
+async function spotifyFetch(
+  url: string,
+  options?: RequestInit
+): Promise<Response | null> {
   const valid = await ensureValidToken()
   if (!valid) return null
 
@@ -219,7 +229,9 @@ async function fetchPlayerState(): Promise<void> {
     currentPlayerState = {
       track: {
         name: data.item.name,
-        artists: data.item.artists.map((a: { name: string }) => a.name).join(", "),
+        artists: data.item.artists
+          .map((a: { name: string }) => a.name)
+          .join(", "),
         albumArt: data.item.album?.images?.[0]?.url ?? null,
       },
       isPlaying: data.is_playing,
@@ -230,22 +242,31 @@ async function fetchPlayerState(): Promise<void> {
 }
 
 async function playerPlay(): Promise<boolean> {
-  const res = await spotifyFetch("https://api.spotify.com/v1/me/player/play", { method: "PUT" })
+  const res = await spotifyFetch("https://api.spotify.com/v1/me/player/play", {
+    method: "PUT",
+  })
   return res !== null && (res.ok || res.status === 204)
 }
 
 async function playerPause(): Promise<boolean> {
-  const res = await spotifyFetch("https://api.spotify.com/v1/me/player/pause", { method: "PUT" })
+  const res = await spotifyFetch("https://api.spotify.com/v1/me/player/pause", {
+    method: "PUT",
+  })
   return res !== null && (res.ok || res.status === 204)
 }
 
 async function playerNext(): Promise<boolean> {
-  const res = await spotifyFetch("https://api.spotify.com/v1/me/player/next", { method: "POST" })
+  const res = await spotifyFetch("https://api.spotify.com/v1/me/player/next", {
+    method: "POST",
+  })
   return res !== null && (res.ok || res.status === 204)
 }
 
 async function playerPrevious(): Promise<boolean> {
-  const res = await spotifyFetch("https://api.spotify.com/v1/me/player/previous", { method: "POST" })
+  const res = await spotifyFetch(
+    "https://api.spotify.com/v1/me/player/previous",
+    { method: "POST" }
+  )
   return res !== null && (res.ok || res.status === 204)
 }
 
@@ -298,11 +319,14 @@ function escapeHtml(str: string): string {
 function btnIcon(action: string, isPlaying: boolean): string {
   if (loadingAction === action) return SPINNER_SVG
   switch (action) {
-    case "previous": return `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>`
-    case "next": return `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>`
-    default: return isPlaying
-      ? `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M6 4h4v16H6zm8 0h4v16h-4z"/></svg>`
-      : `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>`
+    case "previous":
+      return `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>`
+    case "next":
+      return `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>`
+    default:
+      return isPlaying
+        ? `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M6 4h4v16H6zm8 0h4v16h-4z"/></svg>`
+        : `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>`
   }
 }
 
@@ -318,7 +342,8 @@ function renderCard(): void {
   const isNew = !cardEl
   if (isNew) {
     cardEl = document.createElement("div")
-    cardEl.className = "fixed bottom-4 right-4 bg-black/70 backdrop-blur-sm text-white rounded-xl p-3 flex gap-3 items-center shadow-lg"
+    cardEl.className =
+      "fixed bottom-4 right-4 bg-black/70 backdrop-blur-sm text-white rounded-xl p-3 flex gap-3 items-center shadow-lg"
     cardEl.style.width = "320px"
     cardEl.style.zIndex = "50"
     cardEl.addEventListener("click", handleControlClick)
@@ -334,9 +359,18 @@ function renderCard(): void {
 
   const controlsHtml = isPremium
     ? `<div class="flex items-center gap-2 mt-2">
-        <button data-spotify-action="previous" class="p-1 rounded hover:bg-white/20 transition-colors" ${controlsDisabled ? "disabled" : ""} aria-label="Previous track">${btnIcon("previous", isPlaying)}</button>
-        <button data-spotify-action="${playPauseAction}" class="p-1 rounded hover:bg-white/20 transition-colors" ${controlsDisabled ? "disabled" : ""} aria-label="${isPlaying ? "Pause" : "Play"}">${btnIcon(playPauseAction, isPlaying)}</button>
-        <button data-spotify-action="next" class="p-1 rounded hover:bg-white/20 transition-colors" ${controlsDisabled ? "disabled" : ""} aria-label="Next track">${btnIcon("next", isPlaying)}</button>
+        <button data-spotify-action="previous" class="p-1 rounded hover:bg-white/20 transition-colors" ${
+          controlsDisabled ? "disabled" : ""
+        } aria-label="Previous track">${btnIcon("previous", isPlaying)}</button>
+        <button data-spotify-action="${playPauseAction}" class="p-1 rounded hover:bg-white/20 transition-colors" ${
+        controlsDisabled ? "disabled" : ""
+      } aria-label="${isPlaying ? "Pause" : "Play"}">${btnIcon(
+        playPauseAction,
+        isPlaying
+      )}</button>
+        <button data-spotify-action="next" class="p-1 rounded hover:bg-white/20 transition-colors" ${
+          controlsDisabled ? "disabled" : ""
+        } aria-label="Next track">${btnIcon("next", isPlaying)}</button>
       </div>`
     : ""
 
@@ -344,14 +378,18 @@ function renderCard(): void {
     ${albumHtml}
     <div class="min-w-0 flex-1">
       <div class="text-sm font-medium truncate">${escapeHtml(track.name)}</div>
-      <div class="text-xs text-white/70 truncate">${escapeHtml(track.artists)}</div>
+      <div class="text-xs text-white/70 truncate">${escapeHtml(
+        track.artists
+      )}</div>
       ${controlsHtml}
     </div>
   `
 }
 
 async function handleControlClick(e: MouseEvent): Promise<void> {
-  const btn = (e.target as HTMLElement).closest<HTMLButtonElement>("[data-spotify-action]")
+  const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(
+    "[data-spotify-action]"
+  )
   if (!btn || controlsDisabled) return
 
   const action = btn.dataset.spotifyAction!
@@ -361,10 +399,18 @@ async function handleControlClick(e: MouseEvent): Promise<void> {
 
   let success = false
   switch (action) {
-    case "play": success = await playerPlay(); break
-    case "pause": success = await playerPause(); break
-    case "next": success = await playerNext(); break
-    case "previous": success = await playerPrevious(); break
+    case "play":
+      success = await playerPlay()
+      break
+    case "pause":
+      success = await playerPause()
+      break
+    case "next":
+      success = await playerNext()
+      break
+    case "previous":
+      success = await playerPrevious()
+      break
   }
 
   if (success) {
@@ -407,7 +453,6 @@ export function initSpotify(): void {
 
   if (!store.sync.get("spotifyEnabled")) return
   if (!store.local.get("spotifyAccessToken")) return
-
   ;(async () => {
     const valid = await ensureValidToken()
     if (!valid) return
