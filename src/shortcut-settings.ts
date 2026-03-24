@@ -108,6 +108,9 @@ function renderList(): void {
     "sc-delete-tab"
   ) as HTMLButtonElement
   const backBtn = document.getElementById("sc-back") as HTMLButtonElement
+  const importHistoryBtn = document.getElementById(
+    "sc-import-history"
+  ) as HTMLButtonElement
   const tabSelect = document.getElementById(
     "sc-tab-select"
   ) as HTMLSelectElement
@@ -122,6 +125,7 @@ function renderList(): void {
     addFolderBtn.hidden = true
     deleteTabBtn.hidden = true
     backBtn.hidden = true
+    importHistoryBtn.hidden = true
     return
   }
 
@@ -143,6 +147,7 @@ function renderList(): void {
   deleteTabBtn.hidden = inFolder
   addShortcutBtn.hidden = false
   addFolderBtn.hidden = inFolder
+  importHistoryBtn.hidden = inFolder
 
   const items: (TabItem | Shortcut)[] = inFolder
     ? folder!.children
