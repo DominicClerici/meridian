@@ -85,12 +85,12 @@ git commit -m "feat(recommendations): add storage keys and types"
 
 ---
 
-### Task 2: Create recommendations module — history analysis
+### Task 2: Create recommendations module
 
 **Files:**
 - Create: `src/recommendations.ts`
 
-- [ ] **Step 1: Create `src/recommendations.ts` with constants, types, and the `historySearch` wrapper**
+- [ ] **Step 1: Create the complete `src/recommendations.ts` file**
 
 ```ts
 import { store } from "./store"
@@ -136,13 +136,74 @@ function extractDomain(url: string): string | null {
   if (hostname.startsWith("www.")) hostname = hostname.slice(4)
   return hostname || null
 }
-```
 
-- [ ] **Step 2: Add the `buildHeatmap` function**
+function pruneDomains(heatmap: DomainHeatmap): DomainHeatmap {
+  const entries = Object.entries(heatmap)
+  if (entries.length <= MAX_DOMAINS) return heatmap
 
-Append to `src/recommendations.ts`:
+  const totals = entries.map(([domain, grid]) => {
+    let total = 0
+    for (const row of grid) for (const count of row) total += count
+    return { domain, total }
+  })
+  totals.sort((a, b) => b.total - a.total)
 
-```ts
+  const kept = new Set(totals.slice(0, MAX_DOMAINS).map((t) => t.domain))
+  const pruned: DomainHeatmap = {}
+  for (const [domain, grid] of entries) {
+    if (kept.has(domain)) pruned[domain] = grid
+  }
+  return pruned
+}
+
+function scoreDomain(grid: number[][], day: number, hour: number): number {
+  let score = 0
+  const days = [
+    { d: day, weight: 1.0 },
+    { d: (day - 1 + 7) % 7, weight: ADJACENT_DAY_WEIGHT },
+    { d: (day + 1) % 7, weight: ADJACENT_DAY_WEIGHT },
+  ]
+
+  for (const { d, weight } of days) {
+    for (let h = 0; h < 24; h++) {
+      const count = grid[d][h]
+      if (count === 0) continue
+      const diff = Math.abs(h - hour)
+      const dist = Math.min(diff, 24 - diff)
+      score += weight * count * Math.exp(-(dist * dist) / (2 * SIGMA * SIGMA))
+    }
+  }
+
+  return score
+}
+
+function computeRecommendations(data: RecommendationData): { name: string; url: string }[] {
+  const now = new Date()
+  const day = now.getDay()
+  const hour = now.getHours() + now.getMinutes() / 60
+
+  const scored: { domain: string; score: number }[] = []
+  for (const [domain, grid] of Object.entries(data.heatmap)) {
+    const score = scoreDomain(grid, day, hour)
+    if (score >= MIN_SCORE) scored.push({ domain, score })
+  }
+
+  scored.sort((a, b) => b.score - a.score)
+  return scored.slice(0, 2).map((s) => ({
+    name: s.domain,
+    url: `https://${s.domain}`,
+  }))
+}
+
+function updateCachedRecommendations(data?: RecommendationData | null): void {
+  if (data === undefined) data = store.local.get("recommendationData")
+  if (!data) {
+    cachedRecommendations = []
+    return
+  }
+  cachedRecommendations = computeRecommendations(data)
+}
+
 async function buildHeatmap(): Promise<void> {
   if (analyzing) return
   analyzing = true
@@ -186,108 +247,14 @@ async function buildHeatmap(): Promise<void> {
     }
 
     const pruned = pruneDomains(heatmap)
-    store.local.set("recommendationData", { heatmap: pruned, builtAt: Date.now() })
-    updateCachedRecommendations()
+    const data: RecommendationData = { heatmap: pruned, builtAt: Date.now() }
+    updateCachedRecommendations(data)
+    store.local.set("recommendationData", data)
   } catch {
     // History API unavailable or failed — silently skip
   } finally {
     analyzing = false
   }
-}
-
-function pruneDomains(heatmap: DomainHeatmap): DomainHeatmap {
-  const entries = Object.entries(heatmap)
-  if (entries.length <= MAX_DOMAINS) return heatmap
-
-  const totals = entries.map(([domain, grid]) => {
-    let total = 0
-    for (const row of grid) for (const count of row) total += count
-    return { domain, total }
-  })
-  totals.sort((a, b) => b.total - a.total)
-
-  const kept = new Set(totals.slice(0, MAX_DOMAINS).map((t) => t.domain))
-  const pruned: DomainHeatmap = {}
-  for (const [domain, grid] of entries) {
-    if (kept.has(domain)) pruned[domain] = grid
-  }
-  return pruned
-}
-```
-
-- [ ] **Step 3: Verify types compile**
-
-Run: `npx tsc --noEmit`
-Expected: Errors about missing `updateCachedRecommendations` and exported functions (expected — added in next task)
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add src/recommendations.ts
-git commit -m "feat(recommendations): add history analysis and heatmap building"
-```
-
----
-
-### Task 3: Add Gaussian scoring and exports
-
-**Files:**
-- Modify: `src/recommendations.ts`
-
-- [ ] **Step 1: Add the scoring function**
-
-Append to `src/recommendations.ts`:
-
-```ts
-function scoreDomain(grid: number[][], day: number, hour: number): number {
-  let score = 0
-  const days = [
-    { d: day, weight: 1.0 },
-    { d: (day - 1 + 7) % 7, weight: ADJACENT_DAY_WEIGHT },
-    { d: (day + 1) % 7, weight: ADJACENT_DAY_WEIGHT },
-  ]
-
-  for (const { d, weight } of days) {
-    for (let h = 0; h < 24; h++) {
-      const count = grid[d][h]
-      if (count === 0) continue
-      const diff = Math.abs(h - hour)
-      const dist = Math.min(diff, 24 - diff)
-      score += weight * count * Math.exp(-(dist * dist) / (2 * SIGMA * SIGMA))
-    }
-  }
-
-  return score
-}
-```
-
-- [ ] **Step 2: Add `updateCachedRecommendations` and `getRecommendations`**
-
-Append to `src/recommendations.ts`:
-
-```ts
-function updateCachedRecommendations(): void {
-  const data: RecommendationData | null = store.local.get("recommendationData")
-  if (!data) {
-    cachedRecommendations = []
-    return
-  }
-
-  const now = new Date()
-  const day = now.getDay()
-  const hour = now.getHours() + now.getMinutes() / 60
-
-  const scored: { domain: string; score: number }[] = []
-  for (const [domain, grid] of Object.entries(data.heatmap)) {
-    const score = scoreDomain(grid, day, hour)
-    if (score >= MIN_SCORE) scored.push({ domain, score })
-  }
-
-  scored.sort((a, b) => b.score - a.score)
-  cachedRecommendations = scored.slice(0, 2).map((s) => ({
-    name: s.domain,
-    url: `https://${s.domain}`,
-  }))
 }
 
 export function getRecommendations(
@@ -296,13 +263,7 @@ export function getRecommendations(
   if (!store.sync.get("recommendationsEnabled")) return []
   return cachedRecommendations.filter((r) => !excludeDomains.has(r.name)).slice(0, 2)
 }
-```
 
-- [ ] **Step 3: Add `initRecommendations`**
-
-Append to `src/recommendations.ts`:
-
-```ts
 export function initRecommendations(): void {
   if (!store.sync.get("recommendationsEnabled")) return
 
@@ -328,21 +289,23 @@ store.sync.subscribe("recommendationsEnabled", (enabled) => {
 })
 ```
 
-- [ ] **Step 4: Verify types compile**
+**Key design note:** `updateCachedRecommendations` accepts an optional `data` parameter. In `buildHeatmap`, the cache is updated with the freshly-built data *before* calling `store.local.set`, avoiding a race condition where `store.local.set` fires subscribers synchronously and the dock re-renders before the cache is updated.
+
+- [ ] **Step 2: Verify types compile**
 
 Run: `npx tsc --noEmit`
 Expected: No errors (or only unrelated pre-existing errors)
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
 git add src/recommendations.ts
-git commit -m "feat(recommendations): add Gaussian scoring and public API"
+git commit -m "feat(recommendations): add history analysis, scoring, and public API"
 ```
 
 ---
 
-### Task 4: Integrate recommendations into the dock
+### Task 3: Integrate recommendations into the dock
 
 **Files:**
 - Modify: `src/dock.ts:1-2` (imports), `src/dock.ts:84-124` (render function)
@@ -389,7 +352,7 @@ In `src/dock.ts`, after the loop that appends dock items (after line 123, which 
   const recs = getRecommendations(getActiveTabDomains(activeTab))
   if (recs.length > 0) {
     const divider = document.createElement("div")
-    divider.className = "border-l border-white/20 self-stretch ml-1 mr-1"
+    divider.className = "border-l border-white/20 self-stretch ml-2 mr-2"
     itemsContainer.appendChild(divider)
 
     for (const rec of recs) {
@@ -405,26 +368,16 @@ In `src/dock.ts`, after the loop that appends dock items (after line 123, which 
   }
 ```
 
-- [ ] **Step 3: Subscribe to `recommendationsEnabled` changes in `initDock`**
+- [ ] **Step 3: Subscribe to `recommendationsEnabled` and `recommendationData` changes in `initDock`**
 
 In `src/dock.ts`, in the `initDock()` function (after line 128), add:
 
 ```ts
   store.sync.subscribe("recommendationsEnabled", render)
-  store.local.subscribe("recommendationData", () => {
-    updateCachedRecommendations()
-    render()
-  })
-```
-
-Wait — `updateCachedRecommendations` is internal to `recommendations.ts`. Instead, the dock should just re-render when `recommendationData` changes, and `getRecommendations` will read fresh data. But `cachedRecommendations` is a module-level cache that only updates via `updateCachedRecommendations`. The spec says recommendations are recomputed after analysis.
-
-The solution: `recommendations.ts` already calls `updateCachedRecommendations()` inside `buildHeatmap()` after saving. The dock needs to re-render when `recommendationData` changes. Add this subscription:
-
-```ts
-  store.sync.subscribe("recommendationsEnabled", render)
   store.local.subscribe("recommendationData", render)
 ```
+
+The `recommendationData` subscription ensures the dock re-renders when background analysis completes. The cache inside `recommendations.ts` is already updated before `store.local.set` fires this subscriber, so `getRecommendations` returns fresh data.
 
 - [ ] **Step 4: Verify types compile**
 
@@ -440,7 +393,7 @@ git commit -m "feat(recommendations): render recommendations in dock with divide
 
 ---
 
-### Task 5: Add settings UI
+### Task 4: Add settings UI
 
 **Files:**
 - Modify: `src/index.html:67` (after Shortcuts fieldset closing tag)
@@ -487,7 +440,7 @@ git commit -m "feat(recommendations): add settings toggle"
 
 ---
 
-### Task 6: Wire init and final integration
+### Task 5: Wire init and final integration
 
 **Files:**
 - Modify: `src/index.ts:1-10` (imports), `src/index.ts:15-26` (DOMContentLoaded handler)
@@ -527,7 +480,7 @@ git commit -m "feat(recommendations): wire init into app entrypoint"
 
 ---
 
-### Task 7: Manual testing checklist
+### Task 6: Manual testing checklist
 
 No code changes — verify the feature works end-to-end in the browser.
 
