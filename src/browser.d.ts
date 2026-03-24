@@ -22,8 +22,14 @@ declare global {
     onChanged: BrowserStorageOnChanged;
   }
 
+  interface BrowserIdentity {
+    launchWebAuthFlow(details: { url: string; interactive: boolean }): Promise<string>;
+    getRedirectURL(): string;
+  }
+
   interface BrowserAPI {
     storage: BrowserStorage;
+    identity: BrowserIdentity;
   }
 
   var browser: BrowserAPI | undefined;

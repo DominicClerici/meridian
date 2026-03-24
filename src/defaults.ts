@@ -16,6 +16,7 @@ export type SyncSettings = {
   todoShowBadges: boolean;
   weatherEnabled: boolean;
   weatherUnit: "f" | "c";
+  spotifyEnabled: boolean;
 };
 
 export type LocalSettings = {
@@ -23,6 +24,9 @@ export type LocalSettings = {
   todos: Todo[]
   weatherLat: number | null
   weatherLon: number | null
+  spotifyAccessToken: string | null
+  spotifyRefreshToken: string | null
+  spotifyTokenExpiry: number | null
 }
 
 export const syncDefaults: SyncSettings = {
@@ -40,6 +44,7 @@ export const syncDefaults: SyncSettings = {
   todoShowBadges: true,
   weatherEnabled: true,
   weatherUnit: "f",
+  spotifyEnabled: true,
 }
 
 export const localDefaults: LocalSettings = {
@@ -47,4 +52,7 @@ export const localDefaults: LocalSettings = {
   todos: [],
   weatherLat: null,
   weatherLon: null,
+  spotifyAccessToken: null,
+  spotifyRefreshToken: null,
+  spotifyTokenExpiry: null,
 }
