@@ -376,3 +376,43 @@ async function handleControlClick(e: MouseEvent): Promise<void> {
   loadingAction = null
   renderCard()
 }
+
+export function initSpotify(): void {
+  setupVisibilityHandler()
+
+  store.sync.subscribe("spotifyEnabled", (enabled) => {
+    if (enabled && store.local.get("spotifyAccessToken")) {
+      startPolling()
+    } else {
+      stopPolling()
+      if (cardEl) {
+        cardEl.remove()
+        cardEl = null
+      }
+    }
+  })
+
+  store.local.subscribe("spotifyAccessToken", (token) => {
+    if (token) {
+      ;(async () => {
+        await checkPremium()
+        startPolling()
+      })()
+    } else {
+      stopPolling()
+      currentPlayerState = null
+      renderCard()
+    }
+  })
+
+  if (!store.sync.get("spotifyEnabled")) return
+  if (!store.local.get("spotifyAccessToken")) return
+
+  ;(async () => {
+    const valid = await ensureValidToken()
+    if (!valid) return
+
+    await checkPremium()
+    startPolling()
+  })()
+}

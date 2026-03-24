@@ -6,6 +6,7 @@ import { initSearch } from "./search"
 import { initClock } from "./clock"
 import { initTodo } from "./todo"
 import { initWeather } from "./weather"
+import { initSpotify } from "./spotify"
 
 applyBgColor(store.sync.get("bgColor"))
 store.sync.subscribe("bgColor", applyBgColor)
@@ -19,4 +20,5 @@ document.addEventListener("DOMContentLoaded", async () => {
   initClock()
   initTodo()
   initWeather()
+  initSpotify()
 })
