@@ -1,11 +1,34 @@
 import { store } from "./store"
 import type { Tab, TabItem, Folder } from "./shortcuts"
+import { getRecommendations } from "./recommendations"
 
 let activeTabId: string | null = null
 let openPopover: HTMLElement | null = null
 
 function getTabs(): Tab[] {
   return store.local.get("shortcuts")
+}
+
+function getActiveTabDomains(tab: Tab): Set<string> {
+  const domains = new Set<string>()
+  for (const item of tab.items) {
+    if (item.type === "shortcut") {
+      try {
+        let h = new URL(item.url).hostname
+        if (h.startsWith("www.")) h = h.slice(4)
+        if (h) domains.add(h)
+      } catch { /* skip invalid URLs */ }
+    } else if (item.type === "folder") {
+      for (const child of item.children) {
+        try {
+          let h = new URL(child.url).hostname
+          if (h.startsWith("www.")) h = h.slice(4)
+          if (h) domains.add(h)
+        } catch { /* skip invalid URLs */ }
+      }
+    }
+  }
+  return domains
 }
 
 function closeDockPopover(): void {
@@ -121,9 +144,29 @@ function render(): void {
   for (const item of activeTab.items) {
     itemsContainer.appendChild(renderDockItem(item))
   }
+
+  const recs = getRecommendations(getActiveTabDomains(activeTab))
+  if (recs.length > 0) {
+    const divider = document.createElement("div")
+    divider.className = "border-l border-white/20 self-stretch ml-2 mr-2"
+    itemsContainer.appendChild(divider)
+
+    for (const rec of recs) {
+      const btn = document.createElement("button")
+      btn.className =
+        "px-3 py-1 rounded bg-white/10 hover:bg-white/20 text-white text-sm whitespace-nowrap"
+      btn.textContent = "\u2726 " + rec.name
+      btn.addEventListener("click", () => {
+        window.open(rec.url, "_blank")
+      })
+      itemsContainer.appendChild(btn)
+    }
+  }
 }
 
 export function initDock(): void {
   render()
   store.local.subscribe("shortcuts", render)
+  store.sync.subscribe("recommendationsEnabled", render)
+  store.local.subscribe("recommendationData", render)
 }
