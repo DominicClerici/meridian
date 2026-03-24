@@ -116,3 +116,122 @@ function extractHostname(url: string): string {
     hostname = hostname.slice(0, MAX_HOSTNAME_LENGTH - 3) + "..."
   return hostname
 }
+
+function getSelectedTabId(): string | null {
+  const select = document.getElementById("sc-tab-select") as HTMLSelectElement | null
+  return select?.value || null
+}
+
+function prependShortcut(url: string, name: string): void {
+  const tabId = getSelectedTabId()
+  if (!tabId) return
+  const tabs: Tab[] = store.local.get("shortcuts")
+  const updated = tabs.map((t) => {
+    if (t.id !== tabId || t.items.length >= MAX_ITEMS_PER_TAB) return t
+    const sc: Shortcut = { type: "shortcut", id: crypto.randomUUID(), name, url }
+    return { ...t, items: [sc, ...t.items] }
+  })
+  store.local.set("shortcuts", updated)
+}
+
+function renderResults(
+  entries: HistoryEntry[],
+  list: HTMLElement
+): void {
+  list.innerHTML = ""
+  for (const entry of entries) {
+    const row = document.createElement("div")
+    row.className = "flex items-center gap-2 px-2 py-1.5 bg-gray-100 rounded text-sm"
+
+    const info = document.createElement("div")
+    info.className = "flex-1 min-w-0"
+
+    const title = document.createElement("div")
+    title.className = "font-medium truncate"
+    title.textContent = extractHostname(entry.url)
+    info.appendChild(title)
+
+    const urlText = document.createElement("div")
+    urlText.className = "text-xs text-gray-400 truncate"
+    urlText.textContent = entry.url
+    info.appendChild(urlText)
+
+    row.appendChild(info)
+
+    const count = document.createElement("span")
+    count.className = "text-xs text-gray-400 shrink-0"
+    count.textContent = String(entry.visitCount)
+    row.appendChild(count)
+
+    const addBtn = document.createElement("button")
+    addBtn.className = "text-xs px-2 py-1 rounded bg-blue-500 text-white hover:bg-blue-600 shrink-0"
+    addBtn.textContent = "Add"
+
+    const tabId = getSelectedTabId()
+    if (tabId) {
+      const tabs: Tab[] = store.local.get("shortcuts")
+      const tab = tabs.find((t) => t.id === tabId)
+      if (tab && tab.items.length >= MAX_ITEMS_PER_TAB) addBtn.disabled = true
+    }
+
+    addBtn.addEventListener("click", () => {
+      prependShortcut(entry.url, extractHostname(entry.url))
+      row.remove()
+      const currentTabId = getSelectedTabId()
+      if (currentTabId) {
+        const tabs: Tab[] = store.local.get("shortcuts")
+        const tab = tabs.find((t) => t.id === currentTabId)
+        if (tab && tab.items.length >= MAX_ITEMS_PER_TAB) {
+          list.querySelectorAll<HTMLButtonElement>("button").forEach((btn) => {
+            if (btn.textContent === "Add") btn.disabled = true
+          })
+        }
+      }
+    })
+    row.appendChild(addBtn)
+
+    list.appendChild(row)
+  }
+}
+
+async function openImportDialog(): Promise<void> {
+  const dialog = document.getElementById("history-import-dialog") as HTMLDialogElement
+  const loading = document.getElementById("history-import-loading") as HTMLElement
+  const list = document.getElementById("history-import-list") as HTMLElement
+  const empty = document.getElementById("history-import-empty") as HTMLElement
+  const error = document.getElementById("history-import-error") as HTMLElement
+
+  loading.hidden = false
+  list.hidden = true
+  empty.hidden = true
+  error.hidden = true
+  list.innerHTML = ""
+
+  dialog.showModal()
+
+  try {
+    const entries = await fetchHistory()
+    const top = getTopEntries(entries)
+
+    loading.hidden = true
+
+    if (top.length === 0) {
+      empty.hidden = false
+    } else {
+      list.hidden = false
+      renderResults(top, list)
+    }
+  } catch {
+    loading.hidden = true
+    error.hidden = false
+  }
+}
+
+export function initHistoryImport(): void {
+  const importBtn = document.getElementById("sc-import-history") as HTMLButtonElement
+  const dialog = document.getElementById("history-import-dialog") as HTMLDialogElement
+  const closeBtn = document.getElementById("history-import-close") as HTMLButtonElement
+
+  importBtn.addEventListener("click", () => openImportDialog())
+  closeBtn.addEventListener("click", () => dialog.close())
+}
