@@ -94,7 +94,7 @@ function computeRecommendations(data: RecommendationData): { name: string; url: 
   }
 
   scored.sort((a, b) => b.score - a.score)
-  return scored.slice(0, 2).map((s) => ({
+  return scored.slice(0, 10).map((s) => ({
     name: s.domain,
     url: `https://${s.domain}`,
   }))
@@ -143,7 +143,7 @@ async function buildHeatmap(): Promise<void> {
 
       if (results.length < BATCH_SIZE) break
       const last = results[results.length - 1]
-      endTime = last.lastVisitTime ?? endTime - 1
+      endTime = (last.lastVisitTime ?? endTime) - 1
 
       batchCount++
       if (batchCount % 5 === 0) {
