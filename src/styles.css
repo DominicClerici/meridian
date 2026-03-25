@@ -40,9 +40,47 @@
   --font-mono: var(--font-mono);
 }
 
+@keyframes popover-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+[data-theme="modern"] .glass-surface {
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  backdrop-filter: blur(16px) saturate(180%);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06),
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.08);
+}
+
+[data-theme="modern"] .popover-enter {
+  animation: popover-in 150ms ease-out;
+}
+
+[data-theme="modern"] .glass-surface::-webkit-scrollbar,
+[data-theme="modern"] .glass-surface ::-webkit-scrollbar {
+  width: 4px;
+}
+
+[data-theme="modern"] .glass-surface::-webkit-scrollbar-track,
+[data-theme="modern"] .glass-surface ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+[data-theme="modern"] .glass-surface::-webkit-scrollbar-thumb,
+[data-theme="modern"] .glass-surface ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 2px;
+}
+
 [data-theme="modern"] {
   --radius: 0.75rem;
-  --panel-blur: 12px;
+  --panel-blur: 16px;
   --panel-opacity: 0.8;
   --font-body: "Gilroy", sans-serif;
   --font-mono: "Red Hat Mono", monospace;
@@ -53,8 +91,8 @@
 
 [data-theme="modern"][data-mode="light"] {
   --panel: #ffffff;
-  --popover: #1f2937;
-  --popover-foreground: #ffffff;
+  --popover: rgba(20, 30, 52, 0.75);
+  --popover-foreground: #f1f5f9;
   --foreground: #111827;
   --muted: #6b7280;
   --accent: #3b82f6;
@@ -87,8 +125,8 @@
 
 [data-theme="modern"][data-mode="dark"] {
   --panel: #111827;
-  --popover: #1f2937;
-  --popover-foreground: #f9fafb;
+  --popover: rgba(15, 23, 42, 0.75);
+  --popover-foreground: #f1f5f9;
   --foreground: #f9fafb;
   --muted: #9ca3af;
   --accent: #60a5fa;
@@ -167,6 +205,100 @@
 }
 [data-theme="modern"][data-mode="dark"][data-bg="blue"] {
   --page-bg: #1e3a5f;
+}
+
+@keyframes settings-dialog-in {
+  from { opacity: 0; transform: scale(0.97) translateY(6px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes settings-dialog-out {
+  from { opacity: 1; transform: scale(1) translateY(0); }
+  to { opacity: 0; transform: scale(0.97) translateY(6px); }
+}
+
+@keyframes settings-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes settings-backdrop-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+[data-theme="modern"] #settings-dialog {
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+}
+
+[data-theme="modern"] #settings-dialog[open]:not(.closing) {
+  animation: settings-dialog-in 150ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+[data-theme="modern"] #settings-dialog[open]:not(.closing)::backdrop {
+  animation: settings-backdrop-in 150ms ease-out;
+}
+
+[data-theme="modern"] #settings-dialog.closing {
+  animation: settings-dialog-out 100ms ease-in forwards;
+}
+
+[data-theme="modern"] #settings-dialog.closing::backdrop {
+  animation: settings-backdrop-out 100ms ease-in forwards;
+}
+
+[data-theme="modern"] #settings-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.4);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+
+[data-theme="modern"] .settings-nav-indicator {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 3px;
+  height: 20px;
+  border-radius: 0 1.5px 1.5px 0;
+  background: var(--accent);
+  transition: transform 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+[data-theme="modern"] .settings-tooltip {
+  position: absolute;
+  left: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  background: var(--surface);
+  color: var(--foreground);
+  border: 1px solid var(--input-border);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 100ms ease;
+  z-index: 10;
+}
+
+[data-theme="modern"] .settings-tooltip.visible {
+  opacity: 1;
+}
+
+[data-theme="modern"] #settings-panels::-webkit-scrollbar {
+  width: 6px;
+}
+
+[data-theme="modern"] #settings-panels::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+[data-theme="modern"] #settings-panels::-webkit-scrollbar-thumb {
+  background: var(--input-border);
+  border-radius: 3px;
 }
 
 :root {
@@ -253,35 +385,35 @@
   font-family: "Red Hat Mono";
   font-style: normal;
   font-weight: 300;
-  src: url("fonts/red-hat-mono/RedHatMono-Light.woff") format("woff");
+  src: url("fonts/red-hat-mono/RedHatMono-Light.ttf") format("truetype");
 }
 
 @font-face {
   font-family: "Red Hat Mono";
   font-style: normal;
   font-weight: 400;
-  src: url("fonts/red-hat-mono/RedHatMono-Regular.woff") format("woff");
+  src: url("fonts/red-hat-mono/RedHatMono-Regular.ttf") format("truetype");
 }
 
 @font-face {
   font-family: "Red Hat Mono";
   font-style: normal;
   font-weight: 500;
-  src: url("fonts/red-hat-mono/RedHatMono-Medium.woff") format("woff");
+  src: url("fonts/red-hat-mono/RedHatMono-Medium.ttf") format("truetype");
 }
 
 @font-face {
   font-family: "Red Hat Mono";
   font-style: normal;
   font-weight: 600;
-  src: url("fonts/red-hat-mono/RedHatMono-SemiBold.woff") format("woff");
+  src: url("fonts/red-hat-mono/RedHatMono-SemiBold.ttf") format("truetype");
 }
 
 @font-face {
   font-family: "Red Hat Mono";
   font-style: normal;
   font-weight: 700;
-  src: url("fonts/red-hat-mono/RedHatMono-Bold.woff") format("woff");
+  src: url("fonts/red-hat-mono/RedHatMono-Bold.ttf") format("truetype");
 }
 
 button[aria-pressed="true"] {
@@ -289,11 +421,12 @@ button[aria-pressed="true"] {
   outline-offset: 2px;
 }
 
-html {
-  background-color: var(--page-bg);
-  transition: background-color var(--transition-speed, 0.15s) ease;
-}
-
-body {
-  font-family: var(--font-body, "Gilroy", sans-serif);
+@layer base {
+  body {
+    font-family: var(--font-body, "Gilroy", sans-serif);
+  }
+  html {
+    background-color: var(--page-bg);
+    /* transition: background-color var(--transition-speed, 0.15s) ease; */
+  }
 }

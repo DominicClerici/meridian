@@ -1,12 +1,22 @@
 import { store } from "./store"
 import type { Todo } from "./todos"
 import {
-  addTodo, editTodo, deleteTodo, toggleTodo,
-  reorderTodos, getOverdue, getActive, getCompleted, purgeStale,
+  addTodo,
+  editTodo,
+  deleteTodo,
+  toggleTodo,
+  reorderTodos,
+  getOverdue,
+  getActive,
+  getCompleted,
+  purgeStale,
 } from "./todos"
 import {
-  createButton, createPopover, createAccordion,
-  createCheckbox, createInput,
+  createButton,
+  createPopover,
+  createAccordion,
+  createCheckbox,
+  createInput,
 } from "./components"
 
 let openPopover: HTMLElement | null = null
@@ -26,7 +36,9 @@ function updateBadges(): void {
   const incompleteCount = overdueCount + getActive(todos).length
 
   const countBadge = document.getElementById("todo-badge-count") as HTMLElement
-  const overdueBadge = document.getElementById("todo-badge-overdue") as HTMLElement
+  const overdueBadge = document.getElementById(
+    "todo-badge-overdue"
+  ) as HTMLElement
 
   if (showBadges && incompleteCount > 0) {
     countBadge.textContent = String(incompleteCount)
@@ -47,8 +59,18 @@ function todoFormPopover(
   anchor: HTMLElement,
   parentPopover: HTMLElement,
   title: string,
-  prefill?: { title?: string; description?: string | null; url?: string | null; dueDate?: string | null }
-): Promise<{ title: string; description: string | null; url: string | null; dueDate: string | null } | null> {
+  prefill?: {
+    title?: string
+    description?: string | null
+    url?: string | null
+    dueDate?: string | null
+  }
+): Promise<{
+  title: string
+  description: string | null
+  url: string | null
+  dueDate: string | null
+} | null> {
   return new Promise((resolve) => {
     let resolved = false
 
@@ -56,20 +78,42 @@ function todoFormPopover(
     form.className = "flex flex-col gap-2 min-w-[260px]"
 
     const heading = document.createElement("h3")
-    heading.className = "text-sm font-semibold text-popover-foreground"
+    heading.className = "text-[13px] font-semibold text-popover-foreground/80"
     heading.textContent = title
     form.appendChild(heading)
 
-    const titleInput = createInput({ placeholder: "Title", value: prefill?.title ?? "" })
+    const inputCls =
+      "w-full text-sm rounded-theme px-2.5 py-2 border border-white/[0.08] bg-white/[0.06] text-popover-foreground placeholder:text-popover-foreground/30 outline-none focus:border-accent/60 transition-colors"
+
+    const titleInput = createInput({
+      placeholder: "Title",
+      value: prefill?.title ?? "",
+    })
+    titleInput.className = inputCls
     form.appendChild(titleInput)
 
-    const descInput = createInput({ placeholder: "Description (optional)", value: prefill?.description ?? "", multiline: true, rows: 2 })
+    const descInput = createInput({
+      placeholder: "Description (optional)",
+      value: prefill?.description ?? "",
+      multiline: true,
+      rows: 2,
+    })
+    descInput.className = `${inputCls} resize-y`
     form.appendChild(descInput)
 
-    const urlInput = createInput({ type: "url", placeholder: "URL (optional)", value: prefill?.url ?? "" })
+    const urlInput = createInput({
+      type: "url",
+      placeholder: "URL (optional)",
+      value: prefill?.url ?? "",
+    })
+    urlInput.className = inputCls
     form.appendChild(urlInput)
 
-    const dueInput = createInput({ type: "date", value: prefill?.dueDate ?? "" })
+    const dueInput = createInput({
+      type: "date",
+      value: prefill?.dueDate ?? "",
+    })
+    dueInput.className = inputCls
     form.appendChild(dueInput)
 
     const btnRow = document.createElement("div")
@@ -82,6 +126,8 @@ function todoFormPopover(
         resolve(null)
       },
     })
+    cancelBtn.className =
+      "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-theme text-sm font-medium text-popover-foreground/50 hover:text-popover-foreground hover:bg-white/[0.06] transition-colors"
     const saveBtn = createButton("Save", "primary", {
       onClick: () => {
         const t = (titleInput as HTMLInputElement).value.trim()
@@ -103,7 +149,9 @@ function todoFormPopover(
 
     const popover = createPopover(anchor, form, {
       parentPopover,
-      onClose: () => { if (!resolved) resolve(null) },
+      onClose: () => {
+        if (!resolved) resolve(null)
+      },
     })
 
     ;(titleInput as HTMLInputElement).focus()
@@ -124,7 +172,8 @@ function renderTodoItem(
   onUpdate: () => void
 ): HTMLElement {
   const row = document.createElement("div")
-  row.className = "flex items-center gap-2 px-2 py-1 rounded text-sm bg-popover-foreground/10 group"
+  row.className =
+    "flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-sm group transition-colors hover:bg-white/[0.06]"
   row.dataset.id = todo.id
 
   if (section !== "completed") {
@@ -134,6 +183,10 @@ function renderTodoItem(
   const titleSpan = document.createElement("span")
   titleSpan.className = "flex-1 truncate"
   titleSpan.textContent = todo.title
+  if (todo.description) titleSpan.title = todo.description
+  if (section === "completed" || todo.completed) {
+    titleSpan.classList.add("line-through", "opacity-40")
+  }
 
   const checkboxLabel = createCheckbox("", todo.completed, (checked) => {
     const todos = toggleTodo(getTodos(), todo.id)
@@ -146,26 +199,20 @@ function renderTodoItem(
   })
   checkboxLabel.className = "shrink-0"
   row.appendChild(checkboxLabel)
-
-  if (section === "completed") {
-    titleSpan.classList.add("opacity-40")
-  }
-  if (todo.completed && section !== "completed") {
-    titleSpan.classList.add("line-through", "opacity-40")
-  }
-
-  if (todo.description) {
-    titleSpan.title = todo.description
-  }
   row.appendChild(titleSpan)
+
+  const actions = document.createElement("div")
+  actions.className =
+    "flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
 
   if (todo.url) {
     const urlBtn = createButton("", "ghost", {
       icon: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>`,
       onClick: () => window.open(todo.url!, "_blank"),
     })
-    urlBtn.className = "text-muted hover:text-popover-foreground shrink-0 p-0.5"
-    row.appendChild(urlBtn)
+    urlBtn.className =
+      "p-1 rounded text-popover-foreground/40 hover:text-popover-foreground transition-colors"
+    actions.appendChild(urlBtn)
   }
 
   const editBtn = createButton("", "ghost", {
@@ -182,8 +229,9 @@ function renderTodoItem(
       onUpdate()
     },
   })
-  editBtn.className = "text-muted hover:text-popover-foreground shrink-0 p-0.5"
-  row.appendChild(editBtn)
+  editBtn.className =
+    "p-1 rounded text-popover-foreground/40 hover:text-popover-foreground transition-colors"
+  actions.appendChild(editBtn)
 
   const delBtn = createButton("", "ghost", {
     icon: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>`,
@@ -192,20 +240,42 @@ function renderTodoItem(
       onUpdate()
     },
   })
-  delBtn.className = "text-danger/70 hover:text-danger shrink-0 p-0.5"
-  row.appendChild(delBtn)
+  delBtn.className =
+    "p-1 rounded text-danger/50 hover:text-danger transition-colors"
+  actions.appendChild(delBtn)
+
+  row.appendChild(actions)
+
+  if (todo.dueDate && section !== "completed") {
+    const badge = document.createElement("span")
+    const date = new Date(todo.dueDate + "T00:00:00")
+    badge.textContent = date.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+    })
+    badge.className =
+      section === "overdue"
+        ? "text-[11px] px-1.5 py-0.5 rounded-full bg-danger/20 text-danger shrink-0 font-medium"
+        : "text-[11px] px-1.5 py-0.5 rounded-full bg-white/[0.08] text-popover-foreground/50 shrink-0"
+    row.appendChild(badge)
+  }
 
   if (section !== "completed") {
     const handle = document.createElement("span")
-    handle.className = "cursor-grab text-popover-foreground/30 shrink-0"
-    handle.textContent = "\u2630"
+    handle.className =
+      "opacity-0 group-hover:opacity-30 transition-opacity cursor-grab shrink-0"
+    handle.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="5" r="2"/><circle cx="15" cy="5" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="9" cy="19" r="2"/><circle cx="15" cy="19" r="2"/></svg>`
     row.appendChild(handle)
   }
 
   return row
 }
 
-function initSectionDrag(container: HTMLElement, sectionIds: string[], onUpdate: () => void): void {
+function initSectionDrag(
+  container: HTMLElement,
+  sectionIds: string[],
+  onUpdate: () => void
+): void {
   let dragId: string | null = null
 
   container.addEventListener("dragstart", (e: DragEvent) => {
@@ -220,17 +290,17 @@ function initSectionDrag(container: HTMLElement, sectionIds: string[], onUpdate:
     const row = (e.target as HTMLElement).closest("[data-id]") as HTMLElement
     if (row) row.classList.remove("opacity-50")
     dragId = null
-    container.querySelectorAll("[data-id]").forEach((el) =>
-      el.classList.remove("border-t-2", "border-accent")
-    )
+    container
+      .querySelectorAll("[data-id]")
+      .forEach((el) => el.classList.remove("border-t-2", "border-accent"))
   })
 
   container.addEventListener("dragover", (e: DragEvent) => {
     e.preventDefault()
     e.dataTransfer!.dropEffect = "move"
-    container.querySelectorAll("[data-id]").forEach((el) =>
-      el.classList.remove("border-t-2", "border-accent")
-    )
+    container
+      .querySelectorAll("[data-id]")
+      .forEach((el) => el.classList.remove("border-t-2", "border-accent"))
     const row = (e.target as HTMLElement).closest("[data-id]") as HTMLElement
     if (row && row.dataset.id !== dragId) {
       row.classList.add("border-t-2", "border-accent")
@@ -256,51 +326,102 @@ function showPopover(anchor: HTMLElement): void {
   save(todos)
 
   const content = document.createElement("div")
-  content.className = "flex flex-col gap-2 min-w-[300px] max-w-[400px] max-h-[500px] overflow-y-auto"
+  content.className = "flex flex-col w-[340px]"
 
-  const addBtn = createButton("Add todo", "primary", {
+  const header = document.createElement("div")
+  header.className =
+    "flex items-center justify-between pb-2 mb-1 border-b border-white/[0.06]"
+
+  const heading = document.createElement("h2")
+  heading.className =
+    "text-base font-semibold text-popover-foreground/70 tracking-wider uppercase"
+  heading.textContent = "Todos"
+  header.appendChild(heading)
+
+  const addBtn = createButton("", "ghost", {
+    icon: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>`,
     onClick: async () => {
-      const result = await todoFormPopover(addBtn, openPopover!, "Add Todo")
+      const result = await todoFormPopover(addBtn, openPopover!, "New Todo")
       if (!result) return
       save(addTodo(getTodos(), result))
-      rebuildContent()
+      rebuildSections()
     },
   })
-  content.appendChild(addBtn)
+  addBtn.className =
+    "w-7 h-7 flex items-center justify-center rounded-full bg-accent text-accent-foreground hover:bg-accent-hover transition-colors"
+  header.appendChild(addBtn)
+  content.appendChild(header)
 
-  function rebuildContent() {
-    while (content.children.length > 1) {
-      content.removeChild(content.lastChild!)
-    }
+  const scrollArea = document.createElement("div")
+  scrollArea.className =
+    "flex flex-col gap-1 max-h-[420px] overflow-y-auto pt-1"
+  content.appendChild(scrollArea)
+
+  function rebuildSections() {
+    scrollArea.innerHTML = ""
     const todos = getTodos()
     const overdue = getOverdue(todos)
     const active = getActive(todos)
     const completed = getCompleted(todos)
 
+    if (todos.length === 0) {
+      const empty = document.createElement("div")
+      empty.className = "flex flex-col items-center justify-center py-8 gap-2"
+      const emptyIcon = document.createElement("div")
+      emptyIcon.className = "text-popover-foreground/15"
+      emptyIcon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="m9 12 2 2 4-4"/></svg>`
+      const emptyText = document.createElement("p")
+      emptyText.className = "text-xs text-popover-foreground/30"
+      emptyText.textContent = "No todos yet"
+      empty.appendChild(emptyIcon)
+      empty.appendChild(emptyText)
+      scrollArea.appendChild(empty)
+      return
+    }
+
     if (overdue.length > 0) {
-      const acc = createAccordion(`Overdue (${overdue.length})`, { labelClass: "text-danger" })
+      const acc = createAccordion(`Overdue (${overdue.length})`, {
+        labelClass: "text-danger/80",
+      })
       for (const t of overdue) {
-        acc.content.appendChild(renderTodoItem(t, "overdue", rebuildContent))
+        acc.content.appendChild(renderTodoItem(t, "overdue", rebuildSections))
       }
-      initSectionDrag(acc.content, overdue.map((t) => t.id), rebuildContent)
-      content.appendChild(acc.container)
+      initSectionDrag(
+        acc.content,
+        overdue.map((t) => t.id),
+        rebuildSections
+      )
+      scrollArea.appendChild(acc.container)
     }
 
-    const todoAcc = createAccordion(`Todo (${active.length})`)
+    const todoAcc = createAccordion(`Todo (${active.length})`, {
+      labelClass: "text-popover-foreground/60",
+    })
     for (const t of active) {
-      todoAcc.content.appendChild(renderTodoItem(t, "active", rebuildContent))
+      todoAcc.content.appendChild(renderTodoItem(t, "active", rebuildSections))
     }
-    initSectionDrag(todoAcc.content, active.map((t) => t.id), rebuildContent)
-    content.appendChild(todoAcc.container)
+    initSectionDrag(
+      todoAcc.content,
+      active.map((t) => t.id),
+      rebuildSections
+    )
+    scrollArea.appendChild(todoAcc.container)
 
-    const compAcc = createAccordion(`Completed (${completed.length})`)
-    for (const t of completed) {
-      compAcc.content.appendChild(renderTodoItem(t, "completed", rebuildContent))
+    if (completed.length > 0) {
+      const compAcc = createAccordion(`Completed (${completed.length})`, {
+        labelClass: "text-popover-foreground/40",
+        defaultOpen: false,
+      })
+      for (const t of completed) {
+        compAcc.content.appendChild(
+          renderTodoItem(t, "completed", rebuildSections)
+        )
+      }
+      scrollArea.appendChild(compAcc.container)
     }
-    content.appendChild(compAcc.container)
   }
 
-  rebuildContent()
+  rebuildSections()
 
   const { el: popoverEl } = createPopover(anchor, content, {
     onClose: () => {

@@ -91,15 +91,22 @@ export function createCheckbox(
 
 export function createAccordion(
   label: string,
-  opts?: { defaultOpen?: boolean; labelClass?: string }
+  opts?: { defaultOpen?: boolean; labelClass?: string; variant?: "compact" | "settings" }
 ): { container: HTMLElement; content: HTMLElement; toggle: () => void } {
+  const isSettings = opts?.variant === "settings"
   const container = document.createElement("div")
+  if (isSettings) container.className = "border-b border-input-border/15 last:border-b-0"
+
   const trigger = document.createElement("button")
-  trigger.className = `w-full text-left text-sm font-semibold px-2 py-1 flex items-center gap-1 text-foreground ${opts?.labelClass ?? ""}`
+  trigger.className = isSettings
+    ? `w-full text-left text-sm font-medium px-6 py-3 flex items-center gap-2 transition-colors hover:bg-surface/50 ${opts?.labelClass ?? ""}`
+    : `w-full text-left text-xs font-medium px-1 py-1.5 flex items-center gap-1.5 transition-colors ${opts?.labelClass ?? ""}`
 
   const chevron = document.createElement("span")
   chevron.textContent = "\u25BC"
-  chevron.className = "text-xs transition-transform"
+  chevron.className = isSettings
+    ? "text-[11px] transition-transform opacity-40"
+    : "text-[10px] transition-transform opacity-50"
   trigger.appendChild(chevron)
 
   const labelSpan = document.createElement("span")
@@ -107,7 +114,9 @@ export function createAccordion(
   trigger.appendChild(labelSpan)
 
   const content = document.createElement("div")
-  content.className = "flex flex-col gap-1 px-1"
+  content.className = isSettings
+    ? "flex flex-col gap-3 px-6 pb-4"
+    : "flex flex-col gap-0.5"
 
   let expanded = opts?.defaultOpen !== false
 
@@ -137,7 +146,7 @@ export function createPopover(
   opts?: { onClose?: () => void; parentPopover?: HTMLElement }
 ): { el: HTMLDivElement; close: () => void } {
   const popover = document.createElement("div")
-  popover.className = "fixed bg-popover text-popover-foreground rounded-theme shadow-lg p-3 flex flex-col gap-2 backdrop-blur-sm border border-input-border/20"
+  popover.className = "fixed bg-popover text-popover-foreground rounded-theme p-3 flex flex-col gap-2 border border-white/[0.08] glass-surface popover-enter"
   popover.style.zIndex = String(popoverZIndex++)
   popover.appendChild(content)
 

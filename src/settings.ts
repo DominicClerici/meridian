@@ -2,6 +2,35 @@ import { store } from "./store"
 import type { SyncSettings } from "./defaults"
 import { authenticate as spotifyAuthenticate, clearTokens as spotifyClearTokens } from "./spotify"
 import { authenticate as calendarAuthenticate, disconnect as calendarDisconnect } from "./calendar"
+import { createAccordion } from "./components"
+
+const TABS = [
+  {
+    id: "general",
+    label: "General",
+    icon: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21v-7m0-4V3m8 18v-9m0-4V3m8 18v-5m0-4V3"/><circle cx="4" cy="14" r="2"/><circle cx="12" cy="8" r="2"/><circle cx="20" cy="16" r="2"/></svg>`,
+  },
+  {
+    id: "shortcuts",
+    label: "Shortcuts",
+    icon: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>`,
+  },
+  {
+    id: "appearance",
+    label: "Appearance",
+    icon: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="17.5" cy="10.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="8.5" cy="7.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="6.5" cy="12.5" r="1.5" fill="currentColor" stroke="none"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>`,
+  },
+  {
+    id: "widgets",
+    label: "Widgets",
+    icon: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>`,
+  },
+  {
+    id: "advanced",
+    label: "Advanced",
+    icon: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>`,
+  },
+]
 
 function wireButtonGroup(
   dialog: HTMLElement,
@@ -26,15 +55,182 @@ function wireButtonGroup(
   store.sync.subscribe(storeKey, (val) => updateActive(val as string))
 }
 
+function buildNav(dialog: HTMLDialogElement): { refreshIndicator: () => void } {
+  const nav = document.getElementById("settings-nav")!
+  const title = document.getElementById("settings-title")!
+  const panels = document.getElementById("settings-panels")!
+
+  const indicator = document.createElement("div")
+  indicator.className = "settings-nav-indicator"
+  nav.appendChild(indicator)
+
+  let activeIndex = 0
+  let activePanel = panels.querySelector('[data-settings-tab="general"]') as HTMLElement
+  let switching = false
+
+  const navButtons: HTMLButtonElement[] = []
+
+  function indicatorTop(index: number): number {
+    return 12 + index * 52 + 14
+  }
+
+  indicator.style.transform = `translateY(${indicatorTop(0)}px)`
+
+  TABS.forEach((tab, index) => {
+    const btn = document.createElement("button")
+    btn.className = `relative w-12 h-12 flex items-center justify-center rounded-theme transition-colors ${
+      index === 0 ? "text-accent" : "text-muted hover:text-foreground hover:bg-surface"
+    }`
+    btn.innerHTML = tab.icon
+    btn.setAttribute("aria-label", tab.label)
+    if (index === 0) btn.setAttribute("aria-selected", "true")
+
+    const tooltip = document.createElement("span")
+    tooltip.className = "settings-tooltip"
+    tooltip.textContent = tab.label
+    btn.appendChild(tooltip)
+
+    let hoverTimer: number | null = null
+    btn.addEventListener("mouseenter", () => {
+      hoverTimer = window.setTimeout(() => {
+        tooltip.classList.add("visible")
+      }, 400)
+    })
+    btn.addEventListener("mouseleave", () => {
+      if (hoverTimer !== null) {
+        clearTimeout(hoverTimer)
+        hoverTimer = null
+      }
+      tooltip.classList.remove("visible")
+    })
+
+    btn.addEventListener("click", () => {
+      if (index === activeIndex || switching) return
+      switchTab(tab.id, index)
+    })
+
+    nav.appendChild(btn)
+    navButtons.push(btn)
+  })
+
+  function switchTab(tabId: string, index: number): void {
+    switching = true
+
+    const newPanel = panels.querySelector(`[data-settings-tab="${tabId}"]`) as HTMLElement
+    const oldPanel = activePanel
+
+    navButtons[activeIndex].className =
+      "relative w-12 h-12 flex items-center justify-center rounded-theme transition-colors text-muted hover:text-foreground hover:bg-surface"
+    navButtons[activeIndex].removeAttribute("aria-selected")
+    navButtons[index].className =
+      "relative w-12 h-12 flex items-center justify-center rounded-theme transition-colors text-accent"
+    navButtons[index].setAttribute("aria-selected", "true")
+
+    title.textContent = TABS[index].label
+    activeIndex = index
+    indicator.style.transform = `translateY(${indicatorTop(index)}px)`
+
+    oldPanel.style.position = "absolute"
+    oldPanel.style.inset = "0"
+    oldPanel.style.overflow = "hidden"
+
+    newPanel.removeAttribute("hidden")
+    newPanel.style.opacity = "0"
+
+    panels.scrollTop = 0
+
+    const fadeOut = oldPanel.animate(
+      [{ opacity: 1 }, { opacity: 0 }],
+      { duration: 50, easing: "ease-in", fill: "forwards" }
+    )
+
+    setTimeout(() => {
+      const fadeIn = newPanel.animate(
+        [{ opacity: 0 }, { opacity: 1 }],
+        { duration: 50, easing: "ease-out", fill: "forwards" }
+      )
+
+      fadeIn.onfinish = () => {
+        oldPanel.setAttribute("hidden", "")
+        oldPanel.style.cssText = ""
+        fadeOut.cancel()
+        fadeIn.cancel()
+        newPanel.style.opacity = ""
+        activePanel = newPanel
+        switching = false
+      }
+    }, 25)
+  }
+
+  return {
+    refreshIndicator: () => {
+      indicator.style.transform = `translateY(${indicatorTop(activeIndex)}px)`
+    },
+  }
+}
+
+function buildWidgetAccordions(): void {
+  const widgetsPanel = document.querySelector('[data-settings-tab="widgets"]')!
+  const sections = widgetsPanel.querySelectorAll<HTMLElement>("[data-widget-section]")
+
+  sections.forEach((section) => {
+    const label = section.getAttribute("data-widget-section")!
+    const acc = createAccordion(label, { variant: "settings", defaultOpen: false })
+
+    while (section.firstChild) {
+      acc.content.appendChild(section.firstChild)
+    }
+
+    section.replaceWith(acc.container)
+  })
+}
+
+function setupDialogBehavior(
+  dialog: HTMLDialogElement,
+  nav: { refreshIndicator: () => void }
+): void {
+  const openBtn = document.getElementById("settings-open") as HTMLButtonElement
+  const closeBtn = document.getElementById("settings-close") as HTMLButtonElement
+
+  function closeWithAnimation(): void {
+    if (dialog.classList.contains("closing")) return
+    dialog.classList.add("closing")
+
+    let closed = false
+    const done = () => {
+      if (closed) return
+      closed = true
+      dialog.classList.remove("closing")
+      dialog.close()
+    }
+
+    dialog.addEventListener("animationend", done, { once: true })
+    setTimeout(done, 150)
+  }
+
+  openBtn.addEventListener("click", () => {
+    dialog.showModal()
+    requestAnimationFrame(() => nav.refreshIndicator())
+  })
+
+  closeBtn.addEventListener("click", closeWithAnimation)
+
+  dialog.addEventListener("click", (e) => {
+    if (e.target === dialog) closeWithAnimation()
+  })
+
+  dialog.addEventListener("cancel", (e) => {
+    e.preventDefault()
+    closeWithAnimation()
+  })
+}
+
 export function initSettings(): void {
   const dialog = document.getElementById("settings-dialog") as HTMLDialogElement
-  const openBtn = document.getElementById("settings-open") as HTMLButtonElement
-  const closeBtn = document.getElementById(
-    "settings-close"
-  ) as HTMLButtonElement
 
-  openBtn.addEventListener("click", () => dialog.showModal())
-  closeBtn.addEventListener("click", () => dialog.close())
+  const nav = buildNav(dialog)
+  buildWidgetAccordions()
+  setupDialogBehavior(dialog, nav)
 
   wireButtonGroup(dialog, "bg", "bgColor")
   wireButtonGroup(dialog, "accent", "accentColor")

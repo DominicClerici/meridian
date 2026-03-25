@@ -65,6 +65,7 @@ fi
 copy_static() {
   cp manifest.json dist/manifest.json
   cp src/index.html dist/index.html
+  cp -r src/fonts dist/fonts
   # cp src/service-worker.js dist/service-worker.js
 }
 
