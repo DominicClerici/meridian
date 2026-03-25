@@ -1,5 +1,6 @@
 import { store } from "./store"
-import { applyBgColor, initSettings } from "./settings"
+import { applyTheme, subscribeTheme } from "./theme"
+import { initSettings } from "./settings"
 import { initDock } from "./dock"
 import { initShortcutSettings } from "./shortcut-settings"
 import { initSearch } from "./search"
@@ -11,8 +12,8 @@ import { initHistoryImport } from "./history-import"
 import { initRecommendations } from "./recommendations"
 import { initCalendar } from "./calendar"
 
-applyBgColor(store.sync.get("bgColor"))
-store.sync.subscribe("bgColor", applyBgColor)
+applyTheme()
+subscribeTheme()
 
 document.addEventListener("DOMContentLoaded", async () => {
   await store.init()
