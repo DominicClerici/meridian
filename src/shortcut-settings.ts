@@ -157,14 +157,14 @@ function renderList(): void {
     const item = items[i]
     const row = document.createElement("div")
     row.className =
-      "flex items-center gap-2 px-2 py-1 bg-gray-100 rounded text-sm group"
+      "flex items-center gap-2 px-2 py-1 bg-surface rounded text-sm group"
     row.draggable = true
     row.dataset.index = String(i)
     row.dataset.id = item.id
     row.dataset.type = item.type
 
     const handle = document.createElement("span")
-    handle.className = "cursor-grab text-gray-400"
+    handle.className = "cursor-grab text-muted"
     handle.textContent = "\u2630"
     row.appendChild(handle)
 
@@ -176,7 +176,7 @@ function renderList(): void {
       label.textContent = item.name
       if (item.url) {
         const urlSpan = document.createElement("span")
-        urlSpan.className = "text-gray-400 ml-1 text-xs"
+        urlSpan.className = "text-muted ml-1 text-xs"
         urlSpan.textContent = item.url
         label.appendChild(urlSpan)
       }
@@ -185,7 +185,7 @@ function renderList(): void {
 
     if (item.type === "folder" && !inFolder) {
       const openBtn = document.createElement("button")
-      openBtn.className = "text-xs text-blue-500 hover:underline"
+      openBtn.className = "text-xs text-accent hover:underline"
       openBtn.textContent = "Open"
       openBtn.addEventListener("click", () => {
         viewingFolderId = item.id
@@ -195,7 +195,7 @@ function renderList(): void {
     }
 
     const editBtn = document.createElement("button")
-    editBtn.className = "text-xs text-blue-500 hover:underline"
+    editBtn.className = "text-xs text-accent hover:underline"
     editBtn.textContent = "Edit"
     editBtn.addEventListener("click", async () => {
       const isShortcut = item.type === "shortcut"
@@ -231,7 +231,7 @@ function renderList(): void {
     row.appendChild(editBtn)
 
     const delBtn = document.createElement("button")
-    delBtn.className = "text-xs text-red-500 hover:underline"
+    delBtn.className = "text-xs text-danger hover:underline"
     delBtn.textContent = "Delete"
     delBtn.addEventListener("click", () => {
       let tabs = getTabs()
@@ -285,10 +285,10 @@ function initDragAndDrop(
       .forEach((el) =>
         el.classList.remove(
           "border-t-2",
-          "border-blue-500",
-          "bg-blue-100",
-          "bg-amber-100",
-          "bg-red-300"
+          "border-accent",
+          "bg-accent/20",
+          "bg-warning/20",
+          "bg-danger/30"
         )
       )
   })
@@ -304,10 +304,10 @@ function initDragAndDrop(
       .forEach((el) =>
         el.classList.remove(
           "border-t-2",
-          "border-blue-500",
-          "bg-blue-100",
-          "bg-amber-100",
-          "bg-red-300"
+          "border-accent",
+          "bg-accent/20",
+          "bg-warning/20",
+          "bg-danger/30"
         )
       )
 
@@ -315,7 +315,7 @@ function initDragAndDrop(
     const targetType = row.dataset.type
 
     if (dragType === "folder" || inFolder) {
-      row.classList.add("border-t-2", "border-blue-500")
+      row.classList.add("border-t-2", "border-accent")
       return
     }
 
@@ -332,15 +332,15 @@ function initDragAndDrop(
           targetFolder &&
           targetFolder.children.length >= MAX_CHILDREN_PER_FOLDER
         ) {
-          row.classList.add("bg-red-300")
+          row.classList.add("bg-danger/30")
         } else {
-          row.classList.add("bg-blue-100")
+          row.classList.add("bg-accent/20")
         }
       } else if (targetType === "shortcut") {
-        row.classList.add("bg-amber-100")
+        row.classList.add("bg-warning/20")
       }
     } else {
-      row.classList.add("border-t-2", "border-blue-500")
+      row.classList.add("border-t-2", "border-accent")
     }
   })
 

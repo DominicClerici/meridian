@@ -199,7 +199,7 @@ function renderTrigger(): void {
 function showWeatherPopover(anchor: HTMLElement): void {
   closeWeatherPopover()
   const popover = document.createElement("div")
-  popover.className = "fixed bg-gray-800 rounded-lg shadow-lg p-3 min-w-[200px]"
+  popover.className = "fixed bg-popover text-popover-foreground rounded-lg shadow-lg p-3 min-w-[200px]"
 
   document.body.appendChild(popover)
   const rect = anchor.getBoundingClientRect()

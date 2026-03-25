@@ -43,8 +43,8 @@ function render(resultsEl: HTMLElement): void {
     const r = currentResults[i]
     const div = document.createElement("div")
     div.className =
-      "px-3 py-2 cursor-pointer text-white text-sm flex items-center gap-2" +
-      (i === activeIndex ? " bg-white/20" : " hover:bg-white/10")
+      "px-3 py-2 cursor-pointer text-page-foreground text-sm flex items-center gap-2" +
+      (i === activeIndex ? " bg-page-foreground/20" : " hover:bg-page-foreground/10")
     div.dataset.index = String(i)
 
     const labelSpan = document.createElement("span")
@@ -54,7 +54,7 @@ function render(resultsEl: HTMLElement): void {
 
     if (r.description) {
       const descSpan = document.createElement("span")
-      descSpan.className = "text-white/50 text-xs truncate ml-auto"
+      descSpan.className = "text-page-foreground/50 text-xs truncate ml-auto"
       descSpan.textContent = r.description
       div.appendChild(descSpan)
     }

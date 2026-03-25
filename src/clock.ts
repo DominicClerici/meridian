@@ -74,20 +74,20 @@ function renderClock(): void {
     hours = hours % 12 || 12
   }
 
-  const colonOpacity = colonVisible ? "1" : "0.5"
-  const colon = `<span style="opacity:${colonOpacity}">:</span>`
+  const colonClass = colonVisible ? "opacity-100" : "opacity-50"
+  const colon = `<span class="${colonClass}">:</span>`
 
   let timeHtml = `${is24h ? pad(hours) : hours}${colon}${pad(now.getMinutes())}`
   if (showSeconds) {
     timeHtml += `${colon}${pad(now.getSeconds())}`
   }
   if (showAmPm) {
-    timeHtml += ` <span style="font-size:0.4em;vertical-align:super">${ampm}</span>`
+    timeHtml += ` <span class="text-[0.4em] align-super">${ampm}</span>`
   }
 
-  let html = `<div style="font-size:${SIZE_MAP[size]};line-height:1">${timeHtml}</div>`
+  let html = `<div class="leading-none" style="font-size:${SIZE_MAP[size]}">${timeHtml}</div>`
   if (showDate) {
-    html += `<div class="text-white/70 mt-1" style="font-size:${size === "small" ? "0.875rem" : size === "medium" ? "1.125rem" : "1.5rem"}">${formatDate(now, dateFormat)}</div>`
+    html += `<div class="text-page-foreground/70 mt-1" style="font-size:${size === "small" ? "0.875rem" : size === "medium" ? "1.125rem" : "1.5rem"}">${formatDate(now, dateFormat)}</div>`
   }
 
   el.innerHTML = html

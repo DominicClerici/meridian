@@ -347,9 +347,7 @@ function renderCard(): void {
   if (isNew) {
     cardEl = document.createElement("div")
     cardEl.className =
-      "fixed bottom-4 right-4 bg-black/70 backdrop-blur-sm text-white rounded-xl p-3 flex gap-3 items-center shadow-lg"
-    cardEl.style.width = "320px"
-    cardEl.style.zIndex = "50"
+      "fixed bottom-4 right-4 w-[320px] z-50 bg-page-overlay/70 backdrop-blur-sm text-page-foreground rounded-xl p-3 flex gap-3 items-center shadow-lg"
     cardEl.addEventListener("click", handleControlClick)
     document.body.appendChild(cardEl)
   }
@@ -359,20 +357,20 @@ function renderCard(): void {
 
   const albumHtml = track.albumArt
     ? `<img src="${track.albumArt}" alt="Album art" class="w-20 h-20 rounded-lg object-cover shrink-0">`
-    : `<div class="w-20 h-20 rounded-lg bg-white/10 shrink-0"></div>`
+    : `<div class="w-20 h-20 rounded-lg bg-page-foreground/10 shrink-0"></div>`
 
   const controlsHtml = isPremium
     ? `<div class="flex items-center gap-2 mt-2">
-        <button data-spotify-action="previous" class="p-1 rounded hover:bg-white/20 transition-colors" ${
+        <button data-spotify-action="previous" class="p-1 rounded hover:bg-page-foreground/20 transition-colors" ${
           controlsDisabled ? "disabled" : ""
         } aria-label="Previous track">${btnIcon("previous", isPlaying)}</button>
-        <button data-spotify-action="${playPauseAction}" class="p-1 rounded hover:bg-white/20 transition-colors" ${
+        <button data-spotify-action="${playPauseAction}" class="p-1 rounded hover:bg-page-foreground/20 transition-colors" ${
         controlsDisabled ? "disabled" : ""
       } aria-label="${isPlaying ? "Pause" : "Play"}">${btnIcon(
         playPauseAction,
         isPlaying
       )}</button>
-        <button data-spotify-action="next" class="p-1 rounded hover:bg-white/20 transition-colors" ${
+        <button data-spotify-action="next" class="p-1 rounded hover:bg-page-foreground/20 transition-colors" ${
           controlsDisabled ? "disabled" : ""
         } aria-label="Next track">${btnIcon("next", isPlaying)}</button>
       </div>`
@@ -382,7 +380,7 @@ function renderCard(): void {
     ${albumHtml}
     <div class="min-w-0 flex-1">
       <div class="text-sm font-medium truncate">${escapeHtml(track.name)}</div>
-      <div class="text-xs text-white/70 truncate">${escapeHtml(
+      <div class="text-xs text-page-foreground/70 truncate">${escapeHtml(
         track.artists
       )}</div>
       ${controlsHtml}

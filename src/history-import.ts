@@ -146,7 +146,7 @@ function renderResults(
   list.innerHTML = ""
   for (const entry of entries) {
     const row = document.createElement("div")
-    row.className = "flex items-center gap-2 px-2 py-1.5 bg-gray-100 rounded text-sm"
+    row.className = "flex items-center gap-2 px-2 py-1.5 bg-surface rounded text-sm"
 
     const info = document.createElement("div")
     info.className = "flex-1 min-w-0"
@@ -157,19 +157,19 @@ function renderResults(
     info.appendChild(title)
 
     const urlText = document.createElement("div")
-    urlText.className = "text-xs text-gray-400 truncate"
+    urlText.className = "text-xs text-muted truncate"
     urlText.textContent = entry.url
     info.appendChild(urlText)
 
     row.appendChild(info)
 
     const count = document.createElement("span")
-    count.className = "text-xs text-gray-400 shrink-0"
+    count.className = "text-xs text-muted shrink-0"
     count.textContent = String(entry.visitCount)
     row.appendChild(count)
 
     const addBtn = document.createElement("button")
-    addBtn.className = "text-xs px-2 py-1 rounded bg-blue-500 text-white hover:bg-blue-600 shrink-0"
+    addBtn.className = "text-xs px-2 py-1 rounded bg-accent text-accent-foreground hover:bg-accent-hover shrink-0"
     addBtn.textContent = "Add"
 
     const tabId = getSelectedTabId()

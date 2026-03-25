@@ -41,7 +41,7 @@ function closeDockPopover(): void {
 function renderDockItem(item: TabItem): HTMLElement {
   const el = document.createElement("button")
   el.className =
-    "px-3 py-1 rounded bg-white/20 hover:bg-white/30 text-white text-sm whitespace-nowrap"
+    "px-3 py-1 rounded bg-page-foreground/20 hover:bg-page-foreground/30 text-page-foreground text-sm whitespace-nowrap"
 
   if (item.type === "folder") {
     el.textContent = "\uD83D\uDCC1 " + item.name
@@ -68,13 +68,13 @@ function showFolderPopover(folder: Folder, anchor: HTMLElement): void {
   closeDockPopover()
   const popover = document.createElement("div")
   popover.className =
-    "fixed bg-gray-800 rounded-lg shadow-lg p-2 flex flex-col gap-1 min-w-[150px]"
+    "fixed bg-popover text-popover-foreground rounded-lg shadow-lg p-2 flex flex-col gap-1 min-w-[150px]"
   popover.dataset.folderId = folder.id
 
   for (const child of folder.children) {
     const btn = document.createElement("button")
     btn.className =
-      "text-left px-3 py-1 rounded hover:bg-white/20 text-white text-sm"
+      "text-left px-3 py-1 rounded hover:bg-popover-foreground/20 text-popover-foreground text-sm"
     btn.textContent = child.name
     btn.addEventListener("click", () => {
       window.open(child.url, "_blank")
@@ -84,7 +84,7 @@ function showFolderPopover(folder: Folder, anchor: HTMLElement): void {
 
   if (folder.children.length === 0) {
     const empty = document.createElement("span")
-    empty.className = "text-white/50 text-xs px-3 py-1"
+    empty.className = "text-popover-foreground/50 text-xs px-3 py-1"
     empty.textContent = "Empty folder"
     popover.appendChild(empty)
   }
@@ -127,10 +127,10 @@ function render(): void {
   for (const tab of tabs) {
     const btn = document.createElement("button")
     btn.className =
-      "px-2 py-1 rounded text-xs text-white " +
+      "px-2 py-1 rounded text-xs text-page-foreground " +
       (tab.id === activeTabId
-        ? "bg-white/30 font-semibold"
-        : "hover:bg-white/20")
+        ? "bg-page-foreground/30 font-semibold"
+        : "hover:bg-page-foreground/20")
     btn.textContent = tab.name
     btn.addEventListener("click", () => {
       activeTabId = tab.id
@@ -148,13 +148,13 @@ function render(): void {
   const recs = getRecommendations(getActiveTabDomains(activeTab))
   if (recs.length > 0) {
     const divider = document.createElement("div")
-    divider.className = "border-l border-white/20 self-stretch ml-2 mr-2"
+    divider.className = "border-l border-page-foreground/20 self-stretch ml-2 mr-2"
     itemsContainer.appendChild(divider)
 
     for (const rec of recs) {
       const btn = document.createElement("button")
       btn.className =
-        "px-3 py-1 rounded bg-white/10 hover:bg-white/20 text-white text-sm whitespace-nowrap"
+        "px-3 py-1 rounded bg-page-foreground/10 hover:bg-page-foreground/20 text-page-foreground text-sm whitespace-nowrap"
       btn.textContent = "\u2726 " + rec.name
       btn.addEventListener("click", () => {
         window.open(rec.url, "_blank")

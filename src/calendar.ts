@@ -257,12 +257,12 @@ function showCalendarPopover(anchor: HTMLElement): void {
   closePopover()
   const popover = document.createElement("div")
   popover.className =
-    "fixed bg-gray-800 rounded-lg shadow-lg p-3 min-w-[280px] max-w-[340px] max-h-[400px] overflow-y-auto text-white"
+    "fixed bg-popover text-popover-foreground rounded-lg shadow-lg p-3 min-w-[280px] max-w-[340px] max-h-[400px] overflow-y-auto"
 
   let html = `<div class="text-sm font-medium mb-2">Today's Events</div>`
 
   if (currentEvents.length === 0) {
-    html += `<div class="text-sm text-white/60">No events scheduled</div>`
+    html += `<div class="text-sm text-popover-foreground/60">No events scheduled</div>`
   } else {
     html += `<div class="flex flex-col gap-1">`
     for (const event of currentEvents) {
@@ -274,10 +274,10 @@ function showCalendarPopover(anchor: HTMLElement): void {
       const linkOpen = event.htmlLink
         ? `<a href="${escapeHtml(
             event.htmlLink
-          )}" target="_blank" rel="noopener" class="block p-2 rounded bg-white/10 hover:bg-white/20 transition-colors">`
-        : `<div class="p-2 rounded bg-white/10">`
+          )}" target="_blank" rel="noopener" class="block p-2 rounded bg-popover-foreground/10 hover:bg-popover-foreground/20 transition-colors">`
+        : `<div class="p-2 rounded bg-popover-foreground/10">`
       const linkClose = event.htmlLink ? "</a>" : "</div>"
-      html += `${linkOpen}<div class="text-xs text-white/60">${escapeHtml(
+      html += `${linkOpen}<div class="text-xs text-popover-foreground/60">${escapeHtml(
         timeStr
       )}</div><div class="text-sm truncate">${escapeHtml(
         event.title
