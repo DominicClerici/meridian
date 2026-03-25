@@ -11,7 +11,10 @@ export type RecommendationData = {
 }
 
 export type SyncSettings = {
+  theme: "modern";
+  accentColor: "red" | "green" | "blue";
   bgColor: "red" | "green" | "blue";
+  mode: "light" | "dark" | "auto";
   searchEngine: "google" | "bing" | "yahoo" | "duckduckgo" | "ecosia" | "qwant" | "startpage";
   debounceSearch: boolean;
   clockEnabled: boolean;
@@ -43,7 +46,10 @@ export type LocalSettings = {
 }
 
 export const syncDefaults: SyncSettings = {
+  theme: "modern",
+  accentColor: "blue",
   bgColor: "blue",
+  mode: "auto",
   searchEngine: "google",
   debounceSearch: false,
   clockEnabled: true,
