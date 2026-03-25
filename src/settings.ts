@@ -3,33 +3,49 @@ import type { SyncSettings } from "./defaults"
 import { authenticate as spotifyAuthenticate, clearTokens as spotifyClearTokens } from "./spotify"
 import { authenticate as calendarAuthenticate, disconnect as calendarDisconnect } from "./calendar"
 
+function wireButtonGroup(
+  dialog: HTMLElement,
+  settingAttr: string,
+  storeKey: keyof SyncSettings
+): void {
+  const btns = dialog.querySelectorAll<HTMLButtonElement>(`[data-setting="${settingAttr}"]`)
+
+  btns.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      store.sync.set(storeKey, btn.dataset.value as any)
+    })
+  })
+
+  function updateActive(val: string): void {
+    btns.forEach((btn) => {
+      btn.setAttribute("aria-pressed", String(btn.dataset.value === val))
+    })
+  }
+
+  updateActive(store.sync.get(storeKey) as string)
+  store.sync.subscribe(storeKey, (val) => updateActive(val as string))
+}
+
 export function initSettings(): void {
   const dialog = document.getElementById("settings-dialog") as HTMLDialogElement
   const openBtn = document.getElementById("settings-open") as HTMLButtonElement
   const closeBtn = document.getElementById(
     "settings-close"
   ) as HTMLButtonElement
-  const colorBtns = dialog.querySelectorAll<HTMLButtonElement>("[data-color]")
 
   openBtn.addEventListener("click", () => dialog.showModal())
   closeBtn.addEventListener("click", () => dialog.close())
 
-  colorBtns.forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const color = btn.dataset.color as SyncSettings["bgColor"]
-      store.sync.set("bgColor", color)
-    })
+  wireButtonGroup(dialog, "bg", "bgColor")
+  wireButtonGroup(dialog, "accent", "accentColor")
+  wireButtonGroup(dialog, "mode", "mode")
+
+  const themeSelect = document.getElementById("settings-theme") as HTMLSelectElement
+  themeSelect.value = store.sync.get("theme")
+  themeSelect.addEventListener("change", () => {
+    store.sync.set("theme", themeSelect.value as SyncSettings["theme"])
   })
-
-  function updateActiveButton(color: SyncSettings["bgColor"]): void {
-    colorBtns.forEach((btn) => {
-      const isActive = btn.dataset.color === color
-      btn.setAttribute("aria-pressed", String(isActive))
-    })
-  }
-
-  updateActiveButton(store.sync.get("bgColor"))
-  store.sync.subscribe("bgColor", updateActiveButton)
+  store.sync.subscribe("theme", (val) => { themeSelect.value = val })
 
   const engineSelect = document.getElementById(
     "settings-search-engine"

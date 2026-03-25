@@ -16,7 +16,7 @@
     <div id="app">
       <button
         id="settings-open"
-        class="fixed top-4 left-4 p-2 rounded-lg bg-white/20 hover:bg-white/30 transition-colors"
+        class="fixed top-4 left-4 p-2 rounded-lg bg-page-foreground/20 hover:bg-page-foreground/30 transition-colors"
         aria-label="Open settings"
       >
         <svg
@@ -39,17 +39,17 @@
       <div id="widgets" class="fixed top-4 right-4 flex items-center gap-2">
         <button
           id="calendar-trigger"
-          class="flex items-center gap-1 p-2 rounded-lg bg-white/20 hover:bg-white/30 transition-colors text-white text-sm"
+          class="flex items-center gap-1 p-2 rounded-lg bg-page-foreground/20 hover:bg-page-foreground/30 transition-colors text-page-foreground text-sm"
           hidden
         ></button>
         <button
           id="weather-trigger"
-          class="flex items-center gap-1 p-2 rounded-lg bg-white/20 hover:bg-white/30 transition-colors text-white text-sm"
+          class="flex items-center gap-1 p-2 rounded-lg bg-page-foreground/20 hover:bg-page-foreground/30 transition-colors text-page-foreground text-sm"
           hidden
         ></button>
         <button
           id="todo-trigger"
-          class="relative flex items-center gap-1 p-2 rounded-lg bg-white/20 hover:bg-white/30 transition-colors text-white"
+          class="relative flex items-center gap-1 p-2 rounded-lg bg-page-foreground/20 hover:bg-page-foreground/30 transition-colors text-page-foreground"
           aria-label="Todos"
           hidden
         >
@@ -71,12 +71,12 @@
           </svg>
           <span
             id="todo-badge-count"
-            class="absolute -top-1 -right-1 text-[10px] bg-white/90 text-black rounded-full min-w-[18px] h-[18px] flex items-center justify-center font-semibold"
+            class="absolute -top-1 -right-1 text-[10px] bg-page-foreground/90 text-page-overlay rounded-full min-w-[18px] h-[18px] flex items-center justify-center font-semibold"
             hidden
           ></span>
           <span
             id="todo-badge-overdue"
-            class="absolute -top-1 -left-1 text-[10px] bg-red-500 text-white rounded-full min-w-[18px] h-[18px] flex items-center justify-center font-semibold"
+            class="absolute -top-1 -left-1 text-[10px] bg-danger text-danger-foreground rounded-full min-w-[18px] h-[18px] flex items-center justify-center font-semibold"
             hidden
           ></span>
         </button>
@@ -88,29 +88,29 @@
         <div class="w-full max-w-lg pointer-events-auto">
           <div
             id="clock"
-            class="text-center text-white mb-4 tabular-nums"
+            class="text-center text-page-foreground mb-4 tabular-nums"
           ></div>
           <input
             id="search-input"
             type="text"
             placeholder="Search..."
-            class="w-full px-4 py-3 rounded-xl bg-black/30 text-white placeholder-white/50 outline-none text-lg"
+            class="w-full px-4 py-3 rounded-xl bg-page-overlay/30 text-page-foreground placeholder-page-foreground/50 outline-none text-lg"
           />
           <div
             id="search-results"
-            class="mt-1 rounded-xl bg-black/30 overflow-hidden"
+            class="mt-1 rounded-xl bg-page-overlay/30 overflow-hidden"
             hidden
           ></div>
         </div>
       </div>
       <div
         id="dock"
-        class="fixed bottom-0 left-0 right-0 flex items-center gap-2 p-2 bg-black/30"
+        class="fixed bottom-0 left-0 right-0 flex items-center gap-2 p-2 bg-page-overlay/30"
         hidden
       >
         <div
           id="dock-tabs"
-          class="flex gap-1 border-r border-white/20 pr-2 mr-2"
+          class="flex gap-1 border-r border-page-foreground/20 pr-2 mr-2"
         ></div>
         <div id="dock-items" class="flex gap-2 overflow-x-auto"></div>
       </div>
@@ -119,29 +119,99 @@
     <dialog
       id="settings-dialog"
       aria-labelledby="settings-title"
-      class="rounded-xl p-0 backdrop:bg-black/50"
+      class="rounded-xl p-0 backdrop:bg-page-overlay/50 bg-panel text-foreground"
     >
       <div class="p-6 min-w-[300px]">
         <h2 id="settings-title" class="text-lg font-semibold mb-4">Settings</h2>
         <fieldset class="border-0 p-0 m-0">
-          <legend class="text-sm font-medium mb-2">Background Color</legend>
+          <legend class="text-sm font-medium mb-2">Theme</legend>
+          <select
+            id="settings-theme"
+            class="text-sm rounded px-2 py-1 border border-input-border bg-input"
+          >
+            <option value="modern">Modern</option>
+          </select>
+        </fieldset>
+        <fieldset class="border-0 p-0 m-0 mt-4">
+          <legend class="text-sm font-medium mb-2">Accent Color</legend>
           <div class="flex gap-2">
             <button
-              data-color="red"
+              data-setting="accent"
+              data-value="red"
               aria-pressed="false"
               class="px-4 py-2 rounded-lg bg-red-500 text-white hover:opacity-80 transition-opacity"
             >
               Red
             </button>
             <button
-              data-color="green"
+              data-setting="accent"
+              data-value="green"
               aria-pressed="false"
               class="px-4 py-2 rounded-lg bg-green-500 text-white hover:opacity-80 transition-opacity"
             >
               Green
             </button>
             <button
-              data-color="blue"
+              data-setting="accent"
+              data-value="blue"
+              aria-pressed="false"
+              class="px-4 py-2 rounded-lg bg-blue-500 text-white hover:opacity-80 transition-opacity"
+            >
+              Blue
+            </button>
+          </div>
+        </fieldset>
+        <fieldset class="border-0 p-0 m-0 mt-4">
+          <legend class="text-sm font-medium mb-2">Mode</legend>
+          <div class="flex gap-2">
+            <button
+              data-setting="mode"
+              data-value="light"
+              aria-pressed="false"
+              class="px-4 py-2 rounded-lg bg-secondary text-secondary-foreground hover:bg-secondary-hover transition-colors text-sm"
+            >
+              Light
+            </button>
+            <button
+              data-setting="mode"
+              data-value="dark"
+              aria-pressed="false"
+              class="px-4 py-2 rounded-lg bg-secondary text-secondary-foreground hover:bg-secondary-hover transition-colors text-sm"
+            >
+              Dark
+            </button>
+            <button
+              data-setting="mode"
+              data-value="auto"
+              aria-pressed="false"
+              class="px-4 py-2 rounded-lg bg-secondary text-secondary-foreground hover:bg-secondary-hover transition-colors text-sm"
+            >
+              Auto
+            </button>
+          </div>
+        </fieldset>
+        <fieldset class="border-0 p-0 m-0 mt-4">
+          <legend class="text-sm font-medium mb-2">Background Color</legend>
+          <div class="flex gap-2">
+            <button
+              data-setting="bg"
+              data-value="red"
+              aria-pressed="false"
+              class="px-4 py-2 rounded-lg bg-red-500 text-white hover:opacity-80 transition-opacity"
+            >
+              Red
+            </button>
+            <button
+              data-setting="bg"
+              data-value="green"
+              aria-pressed="false"
+              class="px-4 py-2 rounded-lg bg-green-500 text-white hover:opacity-80 transition-opacity"
+            >
+              Green
+            </button>
+            <button
+              data-setting="bg"
+              data-value="blue"
               aria-pressed="false"
               class="px-4 py-2 rounded-lg bg-blue-500 text-white hover:opacity-80 transition-opacity"
             >
@@ -154,38 +224,38 @@
           <div id="sc-controls" class="flex gap-2 mb-2 flex-wrap items-center">
             <select
               id="sc-tab-select"
-              class="text-sm rounded px-2 py-1 border border-gray-300"
+              class="text-sm rounded px-2 py-1 border border-input-border bg-input"
             ></select>
             <button
               id="sc-add-tab"
-              class="text-xs px-2 py-1 rounded bg-blue-500 text-white hover:bg-blue-600"
+              class="text-xs px-2 py-1 rounded bg-accent text-accent-foreground hover:bg-accent-hover"
             >
               Add Tab
             </button>
             <button
               id="sc-delete-tab"
-              class="text-xs px-2 py-1 rounded bg-red-500 text-white hover:bg-red-600"
+              class="text-xs px-2 py-1 rounded bg-danger text-danger-foreground hover:bg-danger-hover"
               hidden
             >
               Delete Tab
             </button>
             <button
               id="sc-add-shortcut"
-              class="text-xs px-2 py-1 rounded bg-green-500 text-white hover:bg-green-600"
+              class="text-xs px-2 py-1 rounded bg-success text-success-foreground hover:bg-success-hover"
               hidden
             >
               Add Shortcut
             </button>
             <button
               id="sc-add-folder"
-              class="text-xs px-2 py-1 rounded bg-yellow-500 text-white hover:bg-yellow-600"
+              class="text-xs px-2 py-1 rounded bg-warning text-warning-foreground hover:bg-warning-hover"
               hidden
             >
               Add Folder
             </button>
             <button
               id="sc-back"
-              class="text-xs px-2 py-1 rounded bg-gray-500 text-white hover:bg-gray-600"
+              class="text-xs px-2 py-1 rounded bg-neutral text-neutral-foreground hover:bg-neutral-hover"
               hidden
             >
               Back
@@ -194,7 +264,7 @@
           <button
             id="sc-import-history"
             type="button"
-            class="text-xs px-2 py-1 rounded bg-purple-500 text-white hover:bg-purple-600 self-start mb-1"
+            class="text-xs px-2 py-1 rounded bg-special text-special-foreground hover:bg-special-hover self-start mb-1"
             hidden
           >
             Import from History
@@ -228,7 +298,7 @@
               >
               <select
                 id="settings-search-engine"
-                class="text-sm rounded px-2 py-1 border border-gray-300"
+                class="text-sm rounded px-2 py-1 border border-input-border bg-input"
               >
                 <option value="google">Google</option>
                 <option value="bing">Bing</option>
@@ -299,7 +369,7 @@
               >
               <select
                 id="settings-clock-date-format"
-                class="text-sm rounded px-2 py-1 border border-gray-300"
+                class="text-sm rounded px-2 py-1 border border-input-border bg-input"
               >
                 <option value="long">January 24th</option>
                 <option value="short">Jan. 24th</option>
@@ -312,7 +382,7 @@
               <label for="settings-clock-size" class="text-sm">Size</label>
               <select
                 id="settings-clock-size"
-                class="text-sm rounded px-2 py-1 border border-gray-300"
+                class="text-sm rounded px-2 py-1 border border-input-border bg-input"
               >
                 <option value="small">Small</option>
                 <option value="medium">Medium</option>
@@ -347,7 +417,7 @@
             <button
               id="settings-todo-clear"
               type="button"
-              class="text-xs px-2 py-1 rounded bg-red-500 text-white hover:bg-red-600 self-start"
+              class="text-xs px-2 py-1 rounded bg-danger text-danger-foreground hover:bg-danger-hover self-start"
             >
               Clear all todos
             </button>
@@ -372,7 +442,7 @@
               >
               <select
                 id="settings-weather-unit"
-                class="text-sm rounded px-2 py-1 border border-gray-300"
+                class="text-sm rounded px-2 py-1 border border-input-border bg-input"
               >
                 <option value="f">Fahrenheit</option>
                 <option value="c">Celsius</option>
@@ -382,13 +452,13 @@
               <button
                 id="settings-weather-grant"
                 type="button"
-                class="text-xs px-2 py-1 rounded bg-blue-500 text-white hover:bg-blue-600"
+                class="text-xs px-2 py-1 rounded bg-accent text-accent-foreground hover:bg-accent-hover"
               >
                 Grant location access
               </button>
               <p
                 id="settings-weather-location-help"
-                class="text-xs text-gray-500 mt-1"
+                class="text-xs text-muted mt-1"
                 hidden
               >
                 Location access was denied. Please enable it in your browser
@@ -414,7 +484,7 @@
               <button
                 id="settings-spotify-connect"
                 type="button"
-                class="text-xs px-2 py-1 rounded bg-green-500 text-white hover:bg-green-600"
+                class="text-xs px-2 py-1 rounded bg-success text-success-foreground hover:bg-success-hover"
               >
                 Connect Spotify
               </button>
@@ -423,7 +493,7 @@
               <button
                 id="settings-spotify-disconnect"
                 type="button"
-                class="text-xs px-2 py-1 rounded bg-red-500 text-white hover:bg-red-600"
+                class="text-xs px-2 py-1 rounded bg-danger text-danger-foreground hover:bg-danger-hover"
               >
                 Disconnect
               </button>
@@ -447,7 +517,7 @@
               <button
                 id="settings-calendar-connect"
                 type="button"
-                class="text-xs px-2 py-1 rounded bg-blue-500 text-white hover:bg-blue-600"
+                class="text-xs px-2 py-1 rounded bg-accent text-accent-foreground hover:bg-accent-hover"
               >
                 Sign in with Google
               </button>
@@ -456,7 +526,7 @@
               <button
                 id="settings-calendar-disconnect"
                 type="button"
-                class="text-xs px-2 py-1 rounded bg-red-500 text-white hover:bg-red-600"
+                class="text-xs px-2 py-1 rounded bg-danger text-danger-foreground hover:bg-danger-hover"
               >
                 Disconnect
               </button>
@@ -465,89 +535,41 @@
         </fieldset>
         <button
           id="settings-close"
-          class="mt-6 px-4 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 transition-colors text-sm"
+          class="mt-6 px-4 py-2 rounded-lg bg-secondary hover:bg-secondary-hover text-secondary-foreground transition-colors text-sm"
         >
           Close
         </button>
       </div>
     </dialog>
 
-    <dialog id="sc-prompt-dialog" class="rounded-xl p-0 backdrop:bg-black/50">
+    <dialog id="sc-prompt-dialog" class="rounded-xl p-0 backdrop:bg-page-overlay/50 bg-panel text-foreground">
       <form method="dialog" class="p-4 min-w-[260px] flex flex-col gap-3">
         <h3 id="sc-prompt-title" class="text-sm font-semibold"></h3>
         <input
           id="sc-prompt-name"
           type="text"
           placeholder="Name"
-          class="text-sm rounded px-2 py-1 border border-gray-300"
+          class="text-sm rounded px-2 py-1 border border-input-border bg-input"
           required
         />
         <input
           id="sc-prompt-url"
           type="text"
           placeholder="URL"
-          class="text-sm rounded px-2 py-1 border border-gray-300"
+          class="text-sm rounded px-2 py-1 border border-input-border bg-input"
         />
         <div class="flex gap-2 justify-end">
           <button
             type="button"
             id="sc-prompt-cancel"
-            class="text-xs px-3 py-1 rounded bg-gray-200 hover:bg-gray-300"
+            class="text-xs px-3 py-1 rounded bg-secondary hover:bg-secondary-hover text-secondary-foreground"
           >
             Cancel
           </button>
           <button
             type="submit"
             id="sc-prompt-save"
-            class="text-xs px-3 py-1 rounded bg-blue-500 text-white hover:bg-blue-600"
-          >
-            Save
-          </button>
-        </div>
-      </form>
-    </dialog>
-
-    <dialog id="todo-prompt-dialog" class="rounded-xl p-0 backdrop:bg-black/50">
-      <form method="dialog" class="p-4 min-w-[300px] flex flex-col gap-3">
-        <h3 id="todo-prompt-title" class="text-sm font-semibold"></h3>
-        <input
-          id="todo-prompt-title-input"
-          type="text"
-          placeholder="Title"
-          class="text-sm rounded px-2 py-1 border border-gray-300"
-          required
-          maxlength="256"
-        />
-        <textarea
-          id="todo-prompt-desc"
-          placeholder="Description (optional)"
-          class="text-sm rounded px-2 py-1 border border-gray-300 resize-y"
-          rows="3"
-          maxlength="1024"
-        ></textarea>
-        <input
-          id="todo-prompt-url"
-          type="url"
-          placeholder="URL (optional)"
-          class="text-sm rounded px-2 py-1 border border-gray-300"
-        />
-        <input
-          id="todo-prompt-due"
-          type="date"
-          class="text-sm rounded px-2 py-1 border border-gray-300"
-        />
-        <div class="flex gap-2 justify-end">
-          <button
-            type="button"
-            id="todo-prompt-cancel"
-            class="text-xs px-3 py-1 rounded bg-gray-200 hover:bg-gray-300"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            id="todo-prompt-save"
-            class="text-xs px-3 py-1 rounded bg-blue-500 text-white hover:bg-blue-600"
+            class="text-xs px-3 py-1 rounded bg-accent text-accent-foreground hover:bg-accent-hover"
           >
             Save
           </button>
@@ -557,11 +579,11 @@
 
     <dialog
       id="history-import-dialog"
-      class="rounded-xl p-0 backdrop:bg-black/50"
+      class="rounded-xl p-0 backdrop:bg-page-overlay/50 bg-panel text-foreground"
     >
       <div class="p-6 min-w-[340px] max-w-[480px]">
         <h3 class="text-sm font-semibold mb-3">Import from History</h3>
-        <div id="history-import-loading" class="text-sm text-gray-500">
+        <div id="history-import-loading" class="text-sm text-muted">
           Loading history...
         </div>
         <div
@@ -569,16 +591,16 @@
           class="flex flex-col gap-1 max-h-[400px] overflow-y-auto"
           hidden
         ></div>
-        <div id="history-import-empty" class="text-sm text-gray-500" hidden>
+        <div id="history-import-empty" class="text-sm text-muted" hidden>
           No new sites found in your history.
         </div>
-        <div id="history-import-error" class="text-sm text-red-500" hidden>
+        <div id="history-import-error" class="text-sm text-danger" hidden>
           Could not load history.
         </div>
         <button
           id="history-import-close"
           type="button"
-          class="mt-4 px-4 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 transition-colors text-sm"
+          class="mt-4 px-4 py-2 rounded-lg bg-secondary hover:bg-secondary-hover text-secondary-foreground transition-colors text-sm"
         >
           Close
         </button>
