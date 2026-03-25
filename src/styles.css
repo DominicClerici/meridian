@@ -1,5 +1,219 @@
 @import "tailwindcss";
 
+@theme inline {
+  --color-panel: var(--panel);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-danger: var(--danger);
+  --color-danger-hover: var(--danger-hover);
+  --color-danger-foreground: var(--danger-foreground);
+  --color-success: var(--success);
+  --color-success-hover: var(--success-hover);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-hover: var(--warning-hover);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-neutral: var(--neutral);
+  --color-neutral-hover: var(--neutral-hover);
+  --color-neutral-foreground: var(--neutral-foreground);
+  --color-special: var(--special);
+  --color-special-hover: var(--special-hover);
+  --color-special-foreground: var(--special-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-hover: var(--secondary-hover);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-input: var(--input);
+  --color-input-border: var(--input-border);
+  --color-surface: var(--surface);
+  --color-page-foreground: var(--page-foreground);
+  --color-page-overlay: var(--page-overlay);
+  --color-page-bg: var(--page-bg);
+  --radius-theme: var(--radius);
+  --blur-panel: var(--panel-blur);
+  --spacing-panel: var(--spacing-panel);
+  --font-body: var(--font-body);
+  --font-mono: var(--font-mono);
+}
+
+[data-theme="modern"] {
+  --radius: 0.75rem;
+  --panel-blur: 12px;
+  --panel-opacity: 0.8;
+  --font-body: "Gilroy", sans-serif;
+  --font-mono: "Red Hat Mono", monospace;
+  --spacing-panel: 1rem;
+  --border-width: 1px;
+  --transition-speed: 150ms;
+}
+
+[data-theme="modern"][data-mode="light"] {
+  --panel: #ffffff;
+  --popover: #1f2937;
+  --popover-foreground: #ffffff;
+  --foreground: #111827;
+  --muted: #6b7280;
+  --accent: #3b82f6;
+  --accent-hover: #2563eb;
+  --accent-foreground: #ffffff;
+  --danger: #ef4444;
+  --danger-hover: #dc2626;
+  --danger-foreground: #ffffff;
+  --success: #22c55e;
+  --success-hover: #16a34a;
+  --success-foreground: #ffffff;
+  --warning: #eab308;
+  --warning-hover: #ca8a04;
+  --warning-foreground: #ffffff;
+  --neutral: #6b7280;
+  --neutral-hover: #4b5563;
+  --neutral-foreground: #ffffff;
+  --special: #a855f7;
+  --special-hover: #9333ea;
+  --special-foreground: #ffffff;
+  --secondary: #e5e7eb;
+  --secondary-hover: #d1d5db;
+  --secondary-foreground: #374151;
+  --input: #ffffff;
+  --input-border: #d1d5db;
+  --surface: #f3f4f6;
+  --page-foreground: #ffffff;
+  --page-overlay: #000000;
+}
+
+[data-theme="modern"][data-mode="dark"] {
+  --panel: #111827;
+  --popover: #1f2937;
+  --popover-foreground: #f9fafb;
+  --foreground: #f9fafb;
+  --muted: #9ca3af;
+  --accent: #60a5fa;
+  --accent-hover: #3b82f6;
+  --accent-foreground: #ffffff;
+  --danger: #f87171;
+  --danger-hover: #ef4444;
+  --danger-foreground: #ffffff;
+  --success: #4ade80;
+  --success-hover: #22c55e;
+  --success-foreground: #ffffff;
+  --warning: #facc15;
+  --warning-hover: #eab308;
+  --warning-foreground: #000000;
+  --neutral: #9ca3af;
+  --neutral-hover: #6b7280;
+  --neutral-foreground: #ffffff;
+  --special: #c084fc;
+  --special-hover: #a855f7;
+  --special-foreground: #ffffff;
+  --secondary: #374151;
+  --secondary-hover: #4b5563;
+  --secondary-foreground: #f9fafb;
+  --input: #1f2937;
+  --input-border: #4b5563;
+  --surface: #1f2937;
+  --page-foreground: #ffffff;
+  --page-overlay: #000000;
+}
+
+[data-theme="modern"][data-mode="light"][data-accent="red"] {
+  --accent: #ef4444;
+  --accent-hover: #dc2626;
+  --accent-foreground: #ffffff;
+}
+[data-theme="modern"][data-mode="light"][data-accent="green"] {
+  --accent: #22c55e;
+  --accent-hover: #16a34a;
+  --accent-foreground: #ffffff;
+}
+[data-theme="modern"][data-mode="light"][data-accent="blue"] {
+  --accent: #3b82f6;
+  --accent-hover: #2563eb;
+  --accent-foreground: #ffffff;
+}
+[data-theme="modern"][data-mode="dark"][data-accent="red"] {
+  --accent: #f87171;
+  --accent-hover: #ef4444;
+  --accent-foreground: #ffffff;
+}
+[data-theme="modern"][data-mode="dark"][data-accent="green"] {
+  --accent: #4ade80;
+  --accent-hover: #22c55e;
+  --accent-foreground: #ffffff;
+}
+[data-theme="modern"][data-mode="dark"][data-accent="blue"] {
+  --accent: #60a5fa;
+  --accent-hover: #3b82f6;
+  --accent-foreground: #ffffff;
+}
+
+[data-theme="modern"][data-mode="light"][data-bg="red"] {
+  --page-bg: #ef4444;
+}
+[data-theme="modern"][data-mode="light"][data-bg="green"] {
+  --page-bg: #22c55e;
+}
+[data-theme="modern"][data-mode="light"][data-bg="blue"] {
+  --page-bg: #3b82f6;
+}
+[data-theme="modern"][data-mode="dark"][data-bg="red"] {
+  --page-bg: #991b1b;
+}
+[data-theme="modern"][data-mode="dark"][data-bg="green"] {
+  --page-bg: #166534;
+}
+[data-theme="modern"][data-mode="dark"][data-bg="blue"] {
+  --page-bg: #1e3a5f;
+}
+
+:root {
+  --panel: #ffffff;
+  --popover: #1f2937;
+  --popover-foreground: #ffffff;
+  --foreground: #111827;
+  --muted: #6b7280;
+
+  --accent: #3b82f6;
+  --accent-hover: #2563eb;
+  --accent-foreground: #ffffff;
+
+  --danger: #ef4444;
+  --danger-hover: #dc2626;
+  --danger-foreground: #ffffff;
+
+  --success: #22c55e;
+  --success-hover: #16a34a;
+  --success-foreground: #ffffff;
+
+  --warning: #eab308;
+  --warning-hover: #ca8a04;
+  --warning-foreground: #ffffff;
+
+  --neutral: #6b7280;
+  --neutral-hover: #4b5563;
+  --neutral-foreground: #ffffff;
+
+  --special: #a855f7;
+  --special-hover: #9333ea;
+  --special-foreground: #ffffff;
+
+  --secondary: #e5e7eb;
+  --secondary-hover: #d1d5db;
+  --secondary-foreground: #374151;
+
+  --input: #ffffff;
+  --input-border: #d1d5db;
+
+  --surface: #f3f4f6;
+
+  --page-foreground: #ffffff;
+  --page-overlay: #000000;
+  --page-bg: #3b82f6;
+}
+
 @font-face {
   font-family: "Gilroy";
   font-style: normal;
@@ -70,14 +284,16 @@
   src: url("fonts/red-hat-mono/RedHatMono-Bold.woff") format("woff");
 }
 
-/* Active color button ring */
 button[aria-pressed="true"] {
   outline: 3px solid white;
   outline-offset: 2px;
 }
 
-/* Transition for body background color */
+html {
+  background-color: var(--page-bg);
+  transition: background-color var(--transition-speed, 0.15s) ease;
+}
+
 body {
-  font-family: "Gilroy", sans-serif;
-  transition: background-color 0.2s ease;
+  font-family: var(--font-body, "Gilroy", sans-serif);
 }
