@@ -33,6 +33,9 @@
   --color-page-foreground: var(--page-foreground);
   --color-page-overlay: var(--page-overlay);
   --color-page-bg: var(--page-bg);
+  --color-swatch-red: var(--swatch-red);
+  --color-swatch-green: var(--swatch-green);
+  --color-swatch-blue: var(--swatch-blue);
   --radius-theme: var(--radius);
   --blur-panel: var(--panel-blur);
   --spacing-panel: var(--spacing-panel);
@@ -121,6 +124,13 @@
   --surface: #f3f4f6;
   --page-foreground: #ffffff;
   --page-overlay: #000000;
+  --swatch-red: #ef4444;
+  --swatch-green: #22c55e;
+  --swatch-blue: #3b82f6;
+  --mode-light-bg: #fef3c7;
+  --mode-light-fg: #92400e;
+  --mode-dark-bg: #1e1b4b;
+  --mode-dark-fg: #c7d2fe;
 }
 
 [data-theme="modern"][data-mode="dark"] {
@@ -155,6 +165,13 @@
   --surface: #1f2937;
   --page-foreground: #ffffff;
   --page-overlay: #000000;
+  --swatch-red: #f87171;
+  --swatch-green: #4ade80;
+  --swatch-blue: #60a5fa;
+  --mode-light-bg: #451a03;
+  --mode-light-fg: #fbbf24;
+  --mode-dark-bg: #0f0a2e;
+  --mode-dark-fg: #a5b4fc;
 }
 
 [data-theme="modern"][data-mode="light"][data-accent="red"] {
@@ -344,6 +361,13 @@
   --page-foreground: #ffffff;
   --page-overlay: #000000;
   --page-bg: #3b82f6;
+  --swatch-red: #ef4444;
+  --swatch-green: #22c55e;
+  --swatch-blue: #3b82f6;
+  --mode-light-bg: #fef3c7;
+  --mode-light-fg: #92400e;
+  --mode-dark-bg: #1e1b4b;
+  --mode-dark-fg: #c7d2fe;
 }
 
 @font-face {
