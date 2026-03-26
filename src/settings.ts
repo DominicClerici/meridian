@@ -126,7 +126,23 @@ function buildNav(dialog: HTMLDialogElement): { refreshIndicator: () => void } {
       "relative w-12 h-12 flex items-center justify-center rounded-theme transition-colors text-accent"
     navButtons[index].setAttribute("aria-selected", "true")
 
-    title.textContent = TABS[index].label
+    const titleFadeOut = title.animate(
+      [{ opacity: 1 }, { opacity: 0 }],
+      { duration: 50, easing: "ease-in", fill: "forwards" }
+    )
+
+    setTimeout(() => {
+      titleFadeOut.cancel()
+      title.textContent = TABS[index].label
+      const titleFadeIn = title.animate(
+        [{ opacity: 0 }, { opacity: 1 }],
+        { duration: 50, easing: "ease-out", fill: "forwards" }
+      )
+      titleFadeIn.onfinish = () => {
+        titleFadeIn.cancel()
+        title.style.opacity = ""
+      }
+    }, 25)
     activeIndex = index
     indicator.style.transform = `translateY(${indicatorTop(index)}px)`
 
