@@ -1,3 +1,4 @@
+import "./icons/modern"
 import { store } from "./store"
 import { applyTheme, subscribeTheme } from "./theme"
 import { initSettings } from "./settings"
