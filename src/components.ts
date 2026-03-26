@@ -66,6 +66,31 @@ export function createInput(opts: {
   return el
 }
 
+export function createSelect(opts: {
+  options: { value: string; label: string }[]
+  value?: string
+  name?: string
+  onChange?: (value: string) => void
+}): HTMLSelectElement {
+  const el = document.createElement("select")
+  el.className = "text-sm rounded-theme px-2 py-1.5 border border-input-border bg-input text-foreground outline-none focus:border-accent transition-colors"
+
+  for (const opt of opts.options) {
+    const option = document.createElement("option")
+    option.value = opt.value
+    option.textContent = opt.label
+    el.appendChild(option)
+  }
+
+  if (opts.value) el.value = opts.value
+  if (opts.name) el.name = opts.name
+  if (opts.onChange) {
+    el.addEventListener("change", () => opts.onChange!(el.value))
+  }
+
+  return el
+}
+
 export function createCheckbox(
   label: string,
   checked: boolean,
