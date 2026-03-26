@@ -436,6 +436,11 @@ export function createCheckbox(
     wrapper.appendChild(span)
   }
 
+  ;(wrapper as any).setChecked = (v: boolean) => {
+    input.checked = v
+    applyState(v)
+  }
+
   return wrapper
 }
 

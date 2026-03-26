@@ -106,16 +106,16 @@ function buildGeneralTab(): void {
 
   panel.appendChild(wrapper)
 
-  const cb = (el: HTMLLabelElement) => el.querySelector("input") as HTMLInputElement
-  store.sync.subscribe("clockEnabled", (v) => { cb(clockEnabled).checked = v })
-  store.sync.subscribe("clockShowSeconds", (v) => { cb(clockSeconds).checked = v })
+  const sc = (el: HTMLLabelElement, v: boolean) => (el as any).setChecked(v)
+  store.sync.subscribe("clockEnabled", (v) => { sc(clockEnabled, v) })
+  store.sync.subscribe("clockShowSeconds", (v) => { sc(clockSeconds, v) })
   store.sync.subscribe("clock24Hour", (v) => {
-    cb(clock24h).checked = v
+    sc(clock24h, v)
     ampmRow.hidden = v
   })
-  store.sync.subscribe("clockShowAmPm", (v) => { cb(clockAmPm).checked = v })
+  store.sync.subscribe("clockShowAmPm", (v) => { sc(clockAmPm, v) })
   store.sync.subscribe("clockShowDate", (v) => {
-    cb(clockDate).checked = v
+    sc(clockDate, v)
     dateFormatRow.hidden = !v
   })
   store.sync.subscribe("clockDateFormat", (v) => { clockDateFormat.value = v })
@@ -347,7 +347,7 @@ function buildWidgetsTab(): void {
 
   const debounce = createCheckbox("", store.sync.get("debounceSearch"), (v) => store.sync.set("debounceSearch", v))
   searchAcc.content.appendChild(settingsRow("Debounce shortcut search", debounce))
-  store.sync.subscribe("debounceSearch", (v) => { (debounce.querySelector("input") as HTMLInputElement).checked = v })
+  store.sync.subscribe("debounceSearch", (v) => { (debounce as any).setChecked(v) })
 
   panel.appendChild(searchAcc.container)
 
@@ -356,11 +356,11 @@ function buildWidgetsTab(): void {
 
   const todoEnabled = createCheckbox("", store.sync.get("todoEnabled"), (v) => store.sync.set("todoEnabled", v))
   todoAcc.content.appendChild(settingsRow("Enable todo widget", todoEnabled))
-  store.sync.subscribe("todoEnabled", (v) => { (todoEnabled.querySelector("input") as HTMLInputElement).checked = v })
+  store.sync.subscribe("todoEnabled", (v) => { (todoEnabled as any).setChecked(v) })
 
   const todoBadges = createCheckbox("", store.sync.get("todoShowBadges"), (v) => store.sync.set("todoShowBadges", v))
   todoAcc.content.appendChild(settingsRow("Show badges", todoBadges))
-  store.sync.subscribe("todoShowBadges", (v) => { (todoBadges.querySelector("input") as HTMLInputElement).checked = v })
+  store.sync.subscribe("todoShowBadges", (v) => { (todoBadges as any).setChecked(v) })
 
   const clearRow = document.createElement("div")
   clearRow.className = "flex justify-end"
@@ -377,7 +377,7 @@ function buildWidgetsTab(): void {
 
   const weatherEnabled = createCheckbox("", store.sync.get("weatherEnabled"), (v) => store.sync.set("weatherEnabled", v))
   weatherAcc.content.appendChild(settingsRow("Enable weather", weatherEnabled))
-  store.sync.subscribe("weatherEnabled", (v) => { (weatherEnabled.querySelector("input") as HTMLInputElement).checked = v })
+  store.sync.subscribe("weatherEnabled", (v) => { (weatherEnabled as any).setChecked(v) })
 
   const weatherUnit = createSelect({
     options: [
@@ -423,7 +423,7 @@ function buildWidgetsTab(): void {
 
   const spotifyEnabled = createCheckbox("", store.sync.get("spotifyEnabled"), (v) => store.sync.set("spotifyEnabled", v))
   spotifyAcc.content.appendChild(settingsRow("Enable Spotify widget", spotifyEnabled))
-  store.sync.subscribe("spotifyEnabled", (v) => { (spotifyEnabled.querySelector("input") as HTMLInputElement).checked = v })
+  store.sync.subscribe("spotifyEnabled", (v) => { (spotifyEnabled as any).setChecked(v) })
 
   const spotifyConnectRow = document.createElement("div")
   const spotifyBtn = createSpotifyButton(async () => {
@@ -460,7 +460,7 @@ function buildWidgetsTab(): void {
 
   const calendarEnabled = createCheckbox("", store.sync.get("calendarEnabled"), (v) => store.sync.set("calendarEnabled", v))
   calendarAcc.content.appendChild(settingsRow("Enable Google Calendar", calendarEnabled))
-  store.sync.subscribe("calendarEnabled", (v) => { (calendarEnabled.querySelector("input") as HTMLInputElement).checked = v })
+  store.sync.subscribe("calendarEnabled", (v) => { (calendarEnabled as any).setChecked(v) })
 
   const calConnectRow = document.createElement("div")
   const calBtn = createGoogleButton(async () => {
