@@ -125,6 +125,11 @@ function buildGeneralTab(): void {
 const SWATCH_CHECK = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>`
 
 const SWATCH_COLORS = ["red", "green", "blue"] as const
+const SWATCH_BG: Record<string, string> = {
+  red: "bg-swatch-red",
+  green: "bg-swatch-green",
+  blue: "bg-swatch-blue",
+}
 
 function buildSwatchGroup(
   storeKey: "accentColor" | "bgColor"
@@ -136,7 +141,7 @@ function buildSwatchGroup(
 
   for (const color of SWATCH_COLORS) {
     const btn = document.createElement("button")
-    btn.className = `w-6 h-6 rounded-full bg-swatch-${color} flex items-center justify-center cursor-pointer transition-all duration-150`
+    btn.className = `w-6 h-6 rounded-full ${SWATCH_BG[color]} flex items-center justify-center cursor-pointer transition-all duration-150`
     btn.dataset.color = color
 
     btn.addEventListener("click", () => {

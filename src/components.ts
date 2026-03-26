@@ -143,7 +143,7 @@ export function createAccordion(
 
   const content = document.createElement("div")
   content.className = isSettings
-    ? "flex flex-col gap-3 px-6 py-4"
+    ? "flex flex-col gap-3 px-6 pb-4"
     : "flex flex-col gap-0.5"
 
   let expanded = opts?.defaultOpen !== false
