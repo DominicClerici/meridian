@@ -2,7 +2,7 @@ import { store } from "./store"
 import type { SyncSettings } from "./defaults"
 import { authenticate as spotifyAuthenticate, clearTokens as spotifyClearTokens } from "./spotify"
 import { authenticate as calendarAuthenticate, disconnect as calendarDisconnect } from "./calendar"
-import { createAccordion } from "./components"
+import { createAccordion, createCheckbox, createSelect } from "./components"
 
 const TABS = [
   {
@@ -32,27 +32,94 @@ const TABS = [
   },
 ]
 
-function wireButtonGroup(
-  dialog: HTMLElement,
-  settingAttr: string,
-  storeKey: keyof SyncSettings
-): void {
-  const btns = dialog.querySelectorAll<HTMLButtonElement>(`[data-setting="${settingAttr}"]`)
+function settingsRow(
+  label: string,
+  control: HTMLElement,
+  opts?: { hidden?: boolean }
+): HTMLElement {
+  const row = document.createElement("div")
+  row.className = "flex items-center justify-between py-3 border-b border-input-border/10 last:border-b-0"
+  if (opts?.hidden) row.hidden = true
 
-  btns.forEach((btn) => {
-    btn.addEventListener("click", () => {
-      store.sync.set(storeKey, btn.dataset.value as any)
-    })
+  const labelEl = document.createElement("span")
+  labelEl.className = "text-sm text-foreground"
+  labelEl.textContent = label
+
+  row.appendChild(labelEl)
+  row.appendChild(control)
+  return row
+}
+
+function buildGeneralTab(): void {
+  const panel = document.querySelector('[data-settings-tab="general"]')!
+  panel.className = "settings-panel p-6"
+
+  const wrapper = document.createElement("div")
+  wrapper.className = "flex flex-col"
+
+  const clockEnabled = createCheckbox("", store.sync.get("clockEnabled"), (v) => store.sync.set("clockEnabled", v))
+  wrapper.appendChild(settingsRow("Show clock", clockEnabled))
+
+  const clockSeconds = createCheckbox("", store.sync.get("clockShowSeconds"), (v) => store.sync.set("clockShowSeconds", v))
+  wrapper.appendChild(settingsRow("Show seconds", clockSeconds))
+
+  const clock24h = createCheckbox("", store.sync.get("clock24Hour"), (v) => {
+    store.sync.set("clock24Hour", v)
+    ampmRow.hidden = v
   })
+  wrapper.appendChild(settingsRow("24-hour format", clock24h))
 
-  function updateActive(val: string): void {
-    btns.forEach((btn) => {
-      btn.setAttribute("aria-pressed", String(btn.dataset.value === val))
-    })
-  }
+  const clockAmPm = createCheckbox("", store.sync.get("clockShowAmPm"), (v) => store.sync.set("clockShowAmPm", v))
+  const ampmRow = settingsRow("Show AM/PM", clockAmPm, { hidden: store.sync.get("clock24Hour") })
+  wrapper.appendChild(ampmRow)
 
-  updateActive(store.sync.get(storeKey) as string)
-  store.sync.subscribe(storeKey, (val) => updateActive(val as string))
+  const clockDate = createCheckbox("", store.sync.get("clockShowDate"), (v) => {
+    store.sync.set("clockShowDate", v)
+    dateFormatRow.hidden = !v
+  })
+  wrapper.appendChild(settingsRow("Show date", clockDate))
+
+  const clockDateFormat = createSelect({
+    options: [
+      { value: "long", label: "January 24th" },
+      { value: "short", label: "Jan. 24th" },
+      { value: "abbr", label: "Jan 24" },
+      { value: "numeric", label: "01/24/2024" },
+      { value: "numericShort", label: "01/24" },
+    ],
+    value: store.sync.get("clockDateFormat"),
+    onChange: (v) => store.sync.set("clockDateFormat", v as SyncSettings["clockDateFormat"]),
+  })
+  const dateFormatRow = settingsRow("Date format", clockDateFormat, { hidden: !store.sync.get("clockShowDate") })
+  wrapper.appendChild(dateFormatRow)
+
+  const clockSize = createSelect({
+    options: [
+      { value: "small", label: "Small" },
+      { value: "medium", label: "Medium" },
+      { value: "large", label: "Large" },
+    ],
+    value: store.sync.get("clockSize"),
+    onChange: (v) => store.sync.set("clockSize", v as SyncSettings["clockSize"]),
+  })
+  wrapper.appendChild(settingsRow("Size", clockSize))
+
+  panel.appendChild(wrapper)
+
+  const cb = (el: HTMLLabelElement) => el.querySelector("input") as HTMLInputElement
+  store.sync.subscribe("clockEnabled", (v) => { cb(clockEnabled).checked = v })
+  store.sync.subscribe("clockShowSeconds", (v) => { cb(clockSeconds).checked = v })
+  store.sync.subscribe("clock24Hour", (v) => {
+    cb(clock24h).checked = v
+    ampmRow.hidden = v
+  })
+  store.sync.subscribe("clockShowAmPm", (v) => { cb(clockAmPm).checked = v })
+  store.sync.subscribe("clockShowDate", (v) => {
+    cb(clockDate).checked = v
+    dateFormatRow.hidden = !v
+  })
+  store.sync.subscribe("clockDateFormat", (v) => { clockDateFormat.value = v })
+  store.sync.subscribe("clockSize", (v) => { clockSize.value = v })
 }
 
 function buildNav(dialog: HTMLDialogElement): { refreshIndicator: () => void } {
@@ -185,22 +252,6 @@ function buildNav(dialog: HTMLDialogElement): { refreshIndicator: () => void } {
   }
 }
 
-function buildWidgetAccordions(): void {
-  const widgetsPanel = document.querySelector('[data-settings-tab="widgets"]')!
-  const sections = widgetsPanel.querySelectorAll<HTMLElement>("[data-widget-section]")
-
-  sections.forEach((section) => {
-    const label = section.getAttribute("data-widget-section")!
-    const acc = createAccordion(label, { variant: "settings", defaultOpen: false })
-
-    while (section.firstChild) {
-      acc.content.appendChild(section.firstChild)
-    }
-
-    section.replaceWith(acc.container)
-  })
-}
-
 function setupDialogBehavior(
   dialog: HTMLDialogElement,
   nav: { refreshIndicator: () => void }
@@ -245,214 +296,13 @@ export function initSettings(): void {
   const dialog = document.getElementById("settings-dialog") as HTMLDialogElement
 
   const nav = buildNav(dialog)
-  buildWidgetAccordions()
   setupDialogBehavior(dialog, nav)
 
-  wireButtonGroup(dialog, "bg", "bgColor")
-  wireButtonGroup(dialog, "accent", "accentColor")
-  wireButtonGroup(dialog, "mode", "mode")
+  buildGeneralTab()
 
-  const themeSelect = document.getElementById("settings-theme") as HTMLSelectElement
-  themeSelect.value = store.sync.get("theme")
-  themeSelect.addEventListener("change", () => {
-    store.sync.set("theme", themeSelect.value as SyncSettings["theme"])
-  })
-  store.sync.subscribe("theme", (val) => { themeSelect.value = val })
-
-  const engineSelect = document.getElementById(
-    "settings-search-engine"
-  ) as HTMLSelectElement
-  const debounceCheckbox = document.getElementById(
-    "settings-debounce-search"
-  ) as HTMLInputElement
-
-  engineSelect.value = store.sync.get("searchEngine")
-  engineSelect.addEventListener("change", () => {
-    store.sync.set(
-      "searchEngine",
-      engineSelect.value as SyncSettings["searchEngine"]
-    )
-  })
-  store.sync.subscribe("searchEngine", (val) => {
-    engineSelect.value = val
-  })
-
-  debounceCheckbox.checked = store.sync.get("debounceSearch")
-  debounceCheckbox.addEventListener("change", () => {
-    store.sync.set("debounceSearch", debounceCheckbox.checked)
-  })
-  store.sync.subscribe("debounceSearch", (val) => {
-    debounceCheckbox.checked = val
-  })
-
-  const clockEnabled = document.getElementById("settings-clock-enabled") as HTMLInputElement
-  const clockSeconds = document.getElementById("settings-clock-seconds") as HTMLInputElement
-  const clock24h = document.getElementById("settings-clock-24h") as HTMLInputElement
-  const clockAmPm = document.getElementById("settings-clock-ampm") as HTMLInputElement
-  const clockAmPmRow = document.getElementById("settings-clock-ampm-row") as HTMLElement
-  const clockDate = document.getElementById("settings-clock-date") as HTMLInputElement
-  const clockDateFormat = document.getElementById("settings-clock-date-format") as HTMLSelectElement
-  const clockDateFormatRow = document.getElementById("settings-clock-date-format-row") as HTMLElement
-  const clockSize = document.getElementById("settings-clock-size") as HTMLSelectElement
-
-  clockEnabled.checked = store.sync.get("clockEnabled")
-  clockSeconds.checked = store.sync.get("clockShowSeconds")
-  clock24h.checked = store.sync.get("clock24Hour")
-  clockAmPm.checked = store.sync.get("clockShowAmPm")
-  clockDate.checked = store.sync.get("clockShowDate")
-  clockDateFormat.value = store.sync.get("clockDateFormat")
-  clockSize.value = store.sync.get("clockSize")
-  clockAmPmRow.hidden = store.sync.get("clock24Hour")
-  clockDateFormatRow.hidden = !store.sync.get("clockShowDate")
-
-  clockEnabled.addEventListener("change", () => store.sync.set("clockEnabled", clockEnabled.checked))
-  clockSeconds.addEventListener("change", () => store.sync.set("clockShowSeconds", clockSeconds.checked))
-  clock24h.addEventListener("change", () => {
-    store.sync.set("clock24Hour", clock24h.checked)
-    clockAmPmRow.hidden = clock24h.checked
-  })
-  clockAmPm.addEventListener("change", () => store.sync.set("clockShowAmPm", clockAmPm.checked))
-  clockDate.addEventListener("change", () => {
-    store.sync.set("clockShowDate", clockDate.checked)
-    clockDateFormatRow.hidden = !clockDate.checked
-  })
-  clockDateFormat.addEventListener("change", () => store.sync.set("clockDateFormat", clockDateFormat.value as SyncSettings["clockDateFormat"]))
-  clockSize.addEventListener("change", () => store.sync.set("clockSize", clockSize.value as SyncSettings["clockSize"]))
-
-  store.sync.subscribe("clockEnabled", (v) => { clockEnabled.checked = v })
-  store.sync.subscribe("clockShowSeconds", (v) => { clockSeconds.checked = v })
-  store.sync.subscribe("clock24Hour", (v) => {
-    clock24h.checked = v
-    clockAmPmRow.hidden = v
-  })
-  store.sync.subscribe("clockShowAmPm", (v) => { clockAmPm.checked = v })
-  store.sync.subscribe("clockShowDate", (v) => {
-    clockDate.checked = v
-    clockDateFormatRow.hidden = !v
-  })
-  store.sync.subscribe("clockDateFormat", (v) => { clockDateFormat.value = v })
-  store.sync.subscribe("clockSize", (v) => { clockSize.value = v })
-
+  // Recommendations (in shortcuts tab — still static HTML)
   const recsEnabled = document.getElementById("settings-recommendations-enabled") as HTMLInputElement
   recsEnabled.checked = store.sync.get("recommendationsEnabled")
   recsEnabled.addEventListener("change", () => store.sync.set("recommendationsEnabled", recsEnabled.checked))
   store.sync.subscribe("recommendationsEnabled", (v) => { recsEnabled.checked = v })
-
-  const todoEnabled = document.getElementById("settings-todo-enabled") as HTMLInputElement
-  const todoBadges = document.getElementById("settings-todo-badges") as HTMLInputElement
-  const todoClear = document.getElementById("settings-todo-clear") as HTMLButtonElement
-
-  todoEnabled.checked = store.sync.get("todoEnabled")
-  todoBadges.checked = store.sync.get("todoShowBadges")
-
-  todoEnabled.addEventListener("change", () => store.sync.set("todoEnabled", todoEnabled.checked))
-  todoBadges.addEventListener("change", () => store.sync.set("todoShowBadges", todoBadges.checked))
-  todoClear.addEventListener("click", () => {
-    if (confirm("Are you sure you want to clear all todos?")) {
-      store.local.set("todos", [])
-    }
-  })
-
-  store.sync.subscribe("todoEnabled", (v) => { todoEnabled.checked = v })
-  store.sync.subscribe("todoShowBadges", (v) => { todoBadges.checked = v })
-
-  const weatherEnabled = document.getElementById("settings-weather-enabled") as HTMLInputElement
-  const weatherUnit = document.getElementById("settings-weather-unit") as HTMLSelectElement
-  const weatherGrant = document.getElementById("settings-weather-grant") as HTMLButtonElement
-  const weatherLocationRow = document.getElementById("settings-weather-location-row") as HTMLElement
-  const weatherLocationHelp = document.getElementById("settings-weather-location-help") as HTMLElement
-
-  weatherEnabled.checked = store.sync.get("weatherEnabled")
-  weatherUnit.value = store.sync.get("weatherUnit")
-
-  function updateWeatherLocationUI(): void {
-    const hasCoords = store.local.get("weatherLat") !== null
-    weatherLocationRow.hidden = hasCoords
-  }
-  updateWeatherLocationUI()
-
-  weatherEnabled.addEventListener("change", () => store.sync.set("weatherEnabled", weatherEnabled.checked))
-  weatherUnit.addEventListener("change", () => store.sync.set("weatherUnit", weatherUnit.value as SyncSettings["weatherUnit"]))
-  weatherGrant.addEventListener("click", () => {
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        store.local.set("weatherLat", pos.coords.latitude)
-        store.local.set("weatherLon", pos.coords.longitude)
-        updateWeatherLocationUI()
-        weatherLocationHelp.hidden = true
-      },
-      () => {
-        weatherLocationHelp.hidden = false
-      },
-      { timeout: 10000 }
-    )
-  })
-
-  store.sync.subscribe("weatherEnabled", (v) => { weatherEnabled.checked = v })
-  store.sync.subscribe("weatherUnit", (v) => { weatherUnit.value = v })
-  store.local.subscribe("weatherLat", () => updateWeatherLocationUI())
-
-  const spotifyEnabled = document.getElementById("settings-spotify-enabled") as HTMLInputElement
-  const spotifyConnectRow = document.getElementById("settings-spotify-connect-row") as HTMLElement
-  const spotifyDisconnectRow = document.getElementById("settings-spotify-disconnect-row") as HTMLElement
-  const spotifyConnect = document.getElementById("settings-spotify-connect") as HTMLButtonElement
-  const spotifyDisconnect = document.getElementById("settings-spotify-disconnect") as HTMLButtonElement
-
-  spotifyEnabled.checked = store.sync.get("spotifyEnabled")
-
-  function updateSpotifyAuthUI(): void {
-    const hasToken = store.local.get("spotifyAccessToken") !== null
-    spotifyConnectRow.hidden = hasToken
-    spotifyDisconnectRow.hidden = !hasToken
-  }
-  updateSpotifyAuthUI()
-
-  spotifyEnabled.addEventListener("change", () => store.sync.set("spotifyEnabled", spotifyEnabled.checked))
-  spotifyConnect.addEventListener("click", async () => {
-    spotifyConnect.disabled = true
-    spotifyConnect.textContent = "Connecting..."
-    const success = await spotifyAuthenticate()
-    spotifyConnect.disabled = false
-    spotifyConnect.textContent = "Connect Spotify"
-    if (success) updateSpotifyAuthUI()
-  })
-  spotifyDisconnect.addEventListener("click", () => {
-    spotifyClearTokens()
-    updateSpotifyAuthUI()
-  })
-
-  store.sync.subscribe("spotifyEnabled", (v) => { spotifyEnabled.checked = v })
-  store.local.subscribe("spotifyAccessToken", () => updateSpotifyAuthUI())
-
-  const calendarEnabled = document.getElementById("settings-calendar-enabled") as HTMLInputElement
-  const calendarConnectRow = document.getElementById("settings-calendar-connect-row") as HTMLElement
-  const calendarDisconnectRow = document.getElementById("settings-calendar-disconnect-row") as HTMLElement
-  const calendarConnectBtn = document.getElementById("settings-calendar-connect") as HTMLButtonElement
-  const calendarDisconnectBtn = document.getElementById("settings-calendar-disconnect") as HTMLButtonElement
-
-  calendarEnabled.checked = store.sync.get("calendarEnabled")
-
-  function updateCalendarAuthUI(): void {
-    const connected = store.local.get("calendarConnected")
-    calendarConnectRow.hidden = connected
-    calendarDisconnectRow.hidden = !connected
-  }
-  updateCalendarAuthUI()
-
-  calendarEnabled.addEventListener("change", () => store.sync.set("calendarEnabled", calendarEnabled.checked))
-  calendarConnectBtn.addEventListener("click", async () => {
-    calendarConnectBtn.disabled = true
-    calendarConnectBtn.textContent = "Signing in..."
-    const success = await calendarAuthenticate()
-    calendarConnectBtn.disabled = false
-    calendarConnectBtn.textContent = "Sign in with Google"
-    if (success) updateCalendarAuthUI()
-  })
-  calendarDisconnectBtn.addEventListener("click", async () => {
-    await calendarDisconnect()
-    updateCalendarAuthUI()
-  })
-
-  store.sync.subscribe("calendarEnabled", (v) => { calendarEnabled.checked = v })
-  store.local.subscribe("calendarConnected", () => updateCalendarAuthUI())
 }
