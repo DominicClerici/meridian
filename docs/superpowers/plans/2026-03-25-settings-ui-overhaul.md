@@ -499,7 +499,7 @@ Add a new function (after the helper, before `buildNav`):
 ```ts
 function buildGeneralTab(): void {
   const panel = document.querySelector('[data-settings-tab="general"]')!
-  panel.className = "settings-panel p-6"
+  panel.className = "settings-panel px-6 pb-6"
 
   const wrapper = document.createElement("div")
   wrapper.className = "flex flex-col"

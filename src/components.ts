@@ -76,13 +76,12 @@ export function createSelect(opts: {
   options: { value: string; label: string }[]
   value?: string
   name?: string
+  width?: string
   onChange?: (value: string) => void
 }): SelectElement {
   let currentValue = opts.value ?? opts.options[0]?.value ?? ""
   let expanded = false
   let highlightIndex = -1
-  let openAnim: Animation | null = null
-  let closeAnim: Animation | null = null
   let dragging = false
 
   const container = document.createElement("div") as SelectElement
@@ -95,13 +94,13 @@ export function createSelect(opts: {
 
   const trigger = document.createElement("button")
   trigger.type = "button"
-  trigger.className = "select__trigger flex items-center justify-between gap-2 w-full text-sm rounded-theme px-2 py-1.5 border border-input-border bg-input text-foreground outline-none transition-colors hover:border-accent focus-visible:border-accent cursor-pointer"
+  trigger.className = "select__trigger flex items-center justify-between gap-2 w-full text-sm rounded-theme px-3 py-1.5 border border-input-border bg-input text-foreground outline-none transition-colors hover:border-accent focus-visible:border-accent cursor-pointer"
 
   const valueSpan = document.createElement("span")
   valueSpan.className = "select__value truncate"
 
   const arrow = document.createElement("span")
-  arrow.className = "select__arrow shrink-0 text-muted transition-transform duration-100 [&>svg]:block"
+  arrow.className = "select__arrow shrink-0 text-muted [&>svg]:block"
   arrow.innerHTML = CHEVRON_SVG
 
   trigger.appendChild(valueSpan)
@@ -132,18 +131,19 @@ export function createSelect(opts: {
       li.setAttribute("aria-selected", String(opt.value === currentValue))
       li.dataset.value = opt.value
 
-      li.className = "flex items-center gap-2 px-2 py-1.5 text-sm cursor-pointer transition-colors"
-
-      const check = document.createElement("span")
-      check.className = "shrink-0 w-3.5 text-accent [&>svg]:block"
-      check.innerHTML = opt.value === currentValue ? CHECK_SVG : ""
+      const isSelected = opt.value === currentValue
+      li.className = `flex items-center justify-between gap-2 px-2 py-1.5 text-sm cursor-pointer transition-colors${isSelected ? " font-medium" : ""}`
 
       const label = document.createElement("span")
       label.className = "truncate"
       label.textContent = opt.label
 
-      li.appendChild(check)
+      const check = document.createElement("span")
+      check.className = "shrink-0 w-3.5 text-accent [&>svg]:block"
+      check.innerHTML = isSelected ? CHECK_SVG : ""
+
       li.appendChild(label)
+      li.appendChild(check)
 
       li.addEventListener("mouseenter", () => {
         setHighlight(i)
@@ -165,6 +165,27 @@ export function createSelect(opts: {
   container.appendChild(trigger)
   container.appendChild(list)
 
+  if (opts.width) {
+    container.style.width = opts.width
+  } else {
+    const sizer = document.createElement("div")
+    sizer.style.height = "0"
+    sizer.style.overflow = "hidden"
+    for (const opt of opts.options) {
+      const row = document.createElement("div")
+      row.className = "flex items-center gap-2 px-3 text-sm font-medium whitespace-nowrap"
+      const text = document.createElement("span")
+      text.textContent = opt.label
+      row.appendChild(text)
+      const spacer = document.createElement("span")
+      spacer.className = "shrink-0"
+      spacer.style.width = "12px"
+      row.appendChild(spacer)
+      sizer.appendChild(row)
+    }
+    container.appendChild(sizer)
+  }
+
   function setHighlight(index: number): void {
     if (highlightIndex >= 0 && highlightIndex < items.length) {
       items[highlightIndex].classList.remove("bg-surface")
@@ -185,8 +206,13 @@ export function createSelect(opts: {
     for (let i = 0; i < items.length; i++) {
       const isSelected = opts.options[i].value === val
       items[i].setAttribute("aria-selected", String(isSelected))
-      const check = items[i].firstElementChild as HTMLElement
+      const check = items[i].lastElementChild as HTMLElement
       check.innerHTML = isSelected ? CHECK_SVG : ""
+      if (isSelected) {
+        items[i].classList.add("font-medium")
+      } else {
+        items[i].classList.remove("font-medium")
+      }
     }
 
     opts.onChange?.(val)
@@ -197,37 +223,15 @@ export function createSelect(opts: {
     expanded = true
     container.setAttribute("aria-expanded", "true")
 
-    if (closeAnim) {
-      closeAnim.cancel()
-      closeAnim = null
-    }
-
     trigger.classList.remove("rounded-theme")
     trigger.classList.add("rounded-t-theme")
     list.classList.add("rounded-b-theme")
 
     list.style.display = ""
-    list.style.opacity = "0"
-    list.style.transform = "translateY(-4px)"
-
     arrow.style.transform = "rotate(180deg)"
 
     const idx = opts.options.findIndex((o) => o.value === currentValue)
     setHighlight(idx)
-
-    openAnim = list.animate(
-      [
-        { opacity: 0, transform: "translateY(-4px)" },
-        { opacity: 1, transform: "translateY(0)" },
-      ],
-      { duration: 100, easing: "ease-out", fill: "forwards" }
-    )
-    openAnim.onfinish = () => {
-      if (!openAnim) return
-      openAnim = null
-      list.style.opacity = "1"
-      list.style.transform = "translateY(0)"
-    }
 
     setTimeout(() => document.addEventListener("mousedown", onClickOutside), 0)
   }
@@ -238,33 +242,14 @@ export function createSelect(opts: {
     dragging = false
     container.setAttribute("aria-expanded", "false")
 
-    if (openAnim) {
-      openAnim.cancel()
-      openAnim = null
-    }
-
     arrow.style.transform = ""
+    list.style.display = "none"
 
-    closeAnim = list.animate(
-      [
-        { opacity: 1, transform: "translateY(0)" },
-        { opacity: 0, transform: "translateY(-4px)" },
-      ],
-      { duration: 75, easing: "ease-in", fill: "forwards" }
-    )
-    closeAnim.onfinish = () => {
-      if (!closeAnim) return
-      closeAnim = null
-      list.style.display = "none"
-      list.style.opacity = ""
-      list.style.transform = ""
+    trigger.classList.remove("rounded-t-theme")
+    trigger.classList.add("rounded-theme")
+    list.classList.remove("rounded-b-theme")
 
-      trigger.classList.remove("rounded-t-theme")
-      trigger.classList.add("rounded-theme")
-      list.classList.remove("rounded-b-theme")
-
-      setHighlight(-1)
-    }
+    setHighlight(-1)
 
     document.removeEventListener("mousedown", onClickOutside)
   }
@@ -360,8 +345,13 @@ export function createSelect(opts: {
       for (let i = 0; i < items.length; i++) {
         const isSelected = opts.options[i].value === val
         items[i].setAttribute("aria-selected", String(isSelected))
-        const check = items[i].firstElementChild as HTMLElement
+        const check = items[i].lastElementChild as HTMLElement
         check.innerHTML = isSelected ? CHECK_SVG : ""
+        if (isSelected) {
+          items[i].classList.add("font-medium")
+        } else {
+          items[i].classList.remove("font-medium")
+        }
       }
     },
     enumerable: true,
@@ -547,6 +537,58 @@ export function createAccordion(
   container.appendChild(trigger)
   container.appendChild(content)
   return { container, content, toggle }
+}
+
+export function createDialog(opts?: {
+  className?: string
+}): {
+  dialog: HTMLDialogElement
+  body: HTMLDivElement
+  open: () => void
+  close: () => void
+} {
+  const dialog = document.createElement("dialog")
+  dialog.className = `m-auto rounded-theme-lg p-0 border-none text-foreground overflow-hidden dialog-surface ${opts?.className ?? ""}`.trim()
+
+  const body = document.createElement("div")
+  dialog.appendChild(body)
+
+  document.body.appendChild(dialog)
+
+  let closing = false
+
+  function open() {
+    dialog.showModal()
+  }
+
+  function close() {
+    if (closing) return
+    closing = true
+    dialog.classList.add("closing")
+
+    let done = false
+    const finish = () => {
+      if (done) return
+      done = true
+      closing = false
+      dialog.classList.remove("closing")
+      dialog.close()
+    }
+
+    dialog.addEventListener("animationend", finish, { once: true })
+    setTimeout(finish, 150)
+  }
+
+  dialog.addEventListener("click", (e) => {
+    if (e.target === dialog) close()
+  })
+
+  dialog.addEventListener("cancel", (e) => {
+    e.preventDefault()
+    close()
+  })
+
+  return { dialog, body, open, close }
 }
 
 let popoverZIndex = 100

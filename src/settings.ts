@@ -2,7 +2,7 @@ import { store } from "./store"
 import type { SyncSettings } from "./defaults"
 import { authenticate as spotifyAuthenticate, clearTokens as spotifyClearTokens } from "./spotify"
 import { authenticate as calendarAuthenticate, disconnect as calendarDisconnect } from "./calendar"
-import { createAccordion, createButton, createCheckbox, createSelect } from "./components"
+import { createAccordion, createButton, createCheckbox, createDialog, createSelect } from "./components"
 
 const TABS = [
   {
@@ -52,7 +52,7 @@ function settingsRow(
 
 function buildGeneralTab(): void {
   const panel = document.querySelector('[data-settings-tab="general"]')!
-  panel.className = "settings-panel p-6"
+  panel.className = "settings-panel px-6 pb-6"
 
   const wrapper = document.createElement("div")
   wrapper.className = "flex flex-col"
@@ -249,7 +249,7 @@ function buildModeSelector(): HTMLElement {
 
 function buildAppearanceTab(): void {
   const panel = document.querySelector('[data-settings-tab="appearance"]')!
-  panel.className = "settings-panel p-6 flex flex-col gap-6"
+  panel.className = "settings-panel px-6 pb-6 flex flex-col gap-6"
 
   function section(labelText: string, child: HTMLElement): HTMLElement {
     const el = document.createElement("div")
@@ -493,7 +493,7 @@ function buildWidgetsTab(): void {
   panel.appendChild(calendarAcc.container)
 }
 
-function buildNav(dialog: HTMLDialogElement): { refreshIndicator: () => void } {
+function buildNav(): { refreshIndicator: () => void } {
   const nav = document.getElementById("settings-nav")!
   const title = document.getElementById("settings-title")!
   const panels = document.getElementById("settings-panels")!
@@ -623,57 +623,158 @@ function buildNav(dialog: HTMLDialogElement): { refreshIndicator: () => void } {
   }
 }
 
-function setupDialogBehavior(
-  dialog: HTMLDialogElement,
-  nav: { refreshIndicator: () => void }
-): void {
-  const openBtn = document.getElementById("settings-open") as HTMLButtonElement
-  const closeBtn = document.getElementById("settings-close") as HTMLButtonElement
+function buildShortcutsPanel(): HTMLDivElement {
+  const panel = document.createElement("div")
+  panel.dataset.settingsTab = "shortcuts"
+  panel.className = "settings-panel px-6 pb-6"
+  panel.hidden = true
 
-  function closeWithAnimation(): void {
-    if (dialog.classList.contains("closing")) return
-    dialog.classList.add("closing")
+  const controls = document.createElement("div")
+  controls.id = "sc-controls"
+  controls.className = "flex gap-2 mb-3 flex-wrap items-center"
 
-    let closed = false
-    const done = () => {
-      if (closed) return
-      closed = true
-      dialog.classList.remove("closing")
-      dialog.close()
-    }
+  const tabSelect = document.createElement("select")
+  tabSelect.id = "sc-tab-select"
+  tabSelect.className = "text-sm rounded px-2 py-1 border border-input-border bg-input"
+  controls.appendChild(tabSelect)
 
-    dialog.addEventListener("animationend", done, { once: true })
-    setTimeout(done, 150)
+  const scBtn = (id: string, text: string, cls: string, hidden = false) => {
+    const b = document.createElement("button")
+    b.id = id
+    b.className = `text-xs px-2 py-1 rounded ${cls}`
+    b.textContent = text
+    if (hidden) b.hidden = true
+    controls.appendChild(b)
   }
 
-  openBtn.addEventListener("click", () => {
-    dialog.showModal()
-    requestAnimationFrame(() => nav.refreshIndicator())
-  })
+  scBtn("sc-add-tab", "Add Tab", "bg-accent text-accent-foreground hover:bg-accent-hover")
+  scBtn("sc-delete-tab", "Delete Tab", "bg-danger text-danger-foreground hover:bg-danger-hover", true)
+  scBtn("sc-add-shortcut", "Add Shortcut", "bg-success text-success-foreground hover:bg-success-hover", true)
+  scBtn("sc-add-folder", "Add Folder", "bg-warning text-warning-foreground hover:bg-warning-hover", true)
+  scBtn("sc-back", "Back", "bg-neutral text-neutral-foreground hover:bg-neutral-hover", true)
 
-  closeBtn.addEventListener("click", closeWithAnimation)
+  panel.appendChild(controls)
 
-  dialog.addEventListener("click", (e) => {
-    if (e.target === dialog) closeWithAnimation()
-  })
+  const importBtn = document.createElement("button")
+  importBtn.id = "sc-import-history"
+  importBtn.type = "button"
+  importBtn.className = "text-xs px-2 py-1 rounded bg-special text-special-foreground hover:bg-special-hover mb-3"
+  importBtn.textContent = "Import from History"
+  importBtn.hidden = true
+  panel.appendChild(importBtn)
 
-  dialog.addEventListener("cancel", (e) => {
-    e.preventDefault()
-    closeWithAnimation()
-  })
+  const list = document.createElement("div")
+  list.id = "sc-list"
+  list.className = "flex flex-col gap-1 max-h-[320px] overflow-y-auto"
+  panel.appendChild(list)
+
+  const recsRow = document.createElement("div")
+  recsRow.className = "flex items-center gap-2 mt-4 pt-3 border-t border-input-border/15"
+
+  const recsInput = document.createElement("input")
+  recsInput.type = "checkbox"
+  recsInput.id = "settings-recommendations-enabled"
+  recsInput.className = "rounded accent-accent shrink-0"
+  recsRow.appendChild(recsInput)
+
+  const recsLabel = document.createElement("label")
+  recsLabel.htmlFor = "settings-recommendations-enabled"
+  recsLabel.className = "text-sm"
+  recsLabel.textContent = "Show smart suggestions in dock"
+  recsRow.appendChild(recsLabel)
+
+  panel.appendChild(recsRow)
+  return panel
+}
+
+function buildAdvancedPanel(): HTMLDivElement {
+  const panel = document.createElement("div")
+  panel.dataset.settingsTab = "advanced"
+  panel.className = "settings-panel pb-6 px-6"
+  panel.hidden = true
+
+  const center = document.createElement("div")
+  center.className = "flex flex-col items-center justify-center min-h-[320px] gap-3"
+  center.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="text-muted/30"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg><p class="text-sm text-muted/40">No advanced settings yet</p>`
+  panel.appendChild(center)
+  return panel
 }
 
 export function initSettings(): void {
-  const dialog = document.getElementById("settings-dialog") as HTMLDialogElement
+  const { dialog, body, open, close } = createDialog()
+  dialog.id = "settings-dialog"
+  dialog.setAttribute("aria-labelledby", "settings-title")
 
-  const nav = buildNav(dialog)
-  setupDialogBehavior(dialog, nav)
+  body.className = "flex w-[725px] h-[480px] max-h-[80vh]"
+
+  const nav = document.createElement("nav")
+  nav.id = "settings-nav"
+  nav.className = "relative flex flex-col items-center w-16 shrink-0 py-3 gap-1 border-r"
+  nav.setAttribute("aria-label", "Settings sections")
+  nav.style.background = "color-mix(in srgb, var(--panel) 10%, transparent)"
+  body.appendChild(nav)
+
+  const main = document.createElement("div")
+  main.className = "flex-1 flex flex-col min-w-0"
+
+  const header = document.createElement("div")
+  header.className = "flex items-center justify-between px-6 h-14 shrink-0 border-b border-input-border/10"
+
+  const title = document.createElement("h2")
+  title.id = "settings-title"
+  title.className = "text-base font-semibold tracking-tight"
+  title.textContent = "General"
+  header.appendChild(title)
+
+  const closeBtn = document.createElement("button")
+  closeBtn.id = "settings-close"
+  closeBtn.className = "w-8 h-8 flex items-center justify-center rounded-theme text-muted hover:text-foreground hover:bg-surface transition-colors"
+  closeBtn.setAttribute("aria-label", "Close settings")
+  closeBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>`
+  closeBtn.addEventListener("click", close)
+  header.appendChild(closeBtn)
+  main.appendChild(header)
+
+  const panels = document.createElement("div")
+  panels.id = "settings-panels"
+  panels.className = "relative flex-1 overflow-y-auto"
+
+  const generalPanel = document.createElement("div")
+  generalPanel.dataset.settingsTab = "general"
+  generalPanel.className = "settings-panel"
+  panels.appendChild(generalPanel)
+
+  panels.appendChild(buildShortcutsPanel())
+
+  const appearancePanel = document.createElement("div")
+  appearancePanel.dataset.settingsTab = "appearance"
+  appearancePanel.className = "settings-panel"
+  appearancePanel.hidden = true
+  panels.appendChild(appearancePanel)
+
+  const widgetsPanel = document.createElement("div")
+  widgetsPanel.dataset.settingsTab = "widgets"
+  widgetsPanel.className = "settings-panel"
+  widgetsPanel.hidden = true
+  panels.appendChild(widgetsPanel)
+
+  panels.appendChild(buildAdvancedPanel())
+
+  main.appendChild(panels)
+  body.appendChild(main)
+
+  const navResult = buildNav()
+
+  const openBtn = document.getElementById("settings-open") as HTMLButtonElement
+  openBtn.addEventListener("click", () => {
+    open()
+    requestAnimationFrame(() => navResult.refreshIndicator())
+  })
 
   buildGeneralTab()
   buildAppearanceTab()
   buildWidgetsTab()
 
-  // Recommendations (in shortcuts tab — still static HTML)
   const recsEnabled = document.getElementById("settings-recommendations-enabled") as HTMLInputElement
   recsEnabled.checked = store.sync.get("recommendationsEnabled")
   recsEnabled.addEventListener("change", () => store.sync.set("recommendationsEnabled", recsEnabled.checked))
