@@ -1,5 +1,6 @@
 import "./icons/modern"
 import { store } from "./store"
+import { icon } from "./icons/registry"
 import { applyTheme, subscribeTheme } from "./theme"
 import { initSettings } from "./settings"
 import { initDock } from "./dock"
@@ -15,6 +16,9 @@ import { initCalendar } from "./calendar"
 
 applyTheme()
 subscribeTheme()
+
+document.getElementById("settings-open")!.prepend(icon("settings"))
+document.getElementById("todo-trigger")!.prepend(icon("todoList"))
 
 document.addEventListener("DOMContentLoaded", async () => {
   await store.init()
