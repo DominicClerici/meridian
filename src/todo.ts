@@ -1,4 +1,5 @@
 import { store } from "./store"
+import { icon } from "./icons/registry"
 import type { Todo } from "./todos"
 import {
   addTodo,
@@ -207,7 +208,7 @@ function renderTodoItem(
 
   if (todo.url) {
     const urlBtn = createButton("", "ghost", {
-      icon: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>`,
+      icon: icon("externalLink"),
       onClick: () => window.open(todo.url!, "_blank"),
     })
     urlBtn.className =
@@ -216,7 +217,7 @@ function renderTodoItem(
   }
 
   const editBtn = createButton("", "ghost", {
-    icon: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>`,
+    icon: icon("edit"),
     onClick: async () => {
       const result = await todoFormPopover(editBtn, openPopover!, "Edit Todo", {
         title: todo.title,
@@ -234,7 +235,7 @@ function renderTodoItem(
   actions.appendChild(editBtn)
 
   const delBtn = createButton("", "ghost", {
-    icon: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>`,
+    icon: icon("trash"),
     onClick: () => {
       save(deleteTodo(getTodos(), todo.id))
       onUpdate()
@@ -264,7 +265,8 @@ function renderTodoItem(
     const handle = document.createElement("span")
     handle.className =
       "opacity-0 group-hover:opacity-30 transition-opacity cursor-grab shrink-0"
-    handle.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="5" r="2"/><circle cx="15" cy="5" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="9" cy="19" r="2"/><circle cx="15" cy="19" r="2"/></svg>`
+    handle.innerHTML = ""
+    handle.appendChild(icon("dragHandle"))
     row.appendChild(handle)
   }
 
@@ -339,7 +341,7 @@ function showPopover(anchor: HTMLElement): void {
   header.appendChild(heading)
 
   const addBtn = createButton("", "ghost", {
-    icon: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>`,
+    icon: icon("plus"),
     onClick: async () => {
       const result = await todoFormPopover(addBtn, openPopover!, "New Todo")
       if (!result) return
@@ -369,7 +371,8 @@ function showPopover(anchor: HTMLElement): void {
       empty.className = "flex flex-col items-center justify-center py-8 gap-2"
       const emptyIcon = document.createElement("div")
       emptyIcon.className = "text-popover-foreground/15"
-      emptyIcon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="m9 12 2 2 4-4"/></svg>`
+      emptyIcon.innerHTML = ""
+      emptyIcon.appendChild(icon("todoEmpty"))
       const emptyText = document.createElement("p")
       emptyText.className = "text-xs text-popover-foreground/30"
       emptyText.textContent = "No todos yet"
