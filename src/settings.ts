@@ -278,6 +278,216 @@ function buildAppearanceTab(): void {
   panel.appendChild(section("Mode", buildModeSelector()))
 }
 
+function createSpotifyButton(onClick: () => void): HTMLButtonElement {
+  const btn = document.createElement("button")
+  btn.className = "inline-flex items-center gap-2 px-3 py-1.5 rounded-theme text-sm font-medium transition-colors text-white"
+  btn.style.background = "#1DB954"
+
+  btn.addEventListener("mouseenter", () => { btn.style.background = "#1aa34a" })
+  btn.addEventListener("mouseleave", () => { btn.style.background = "#1DB954" })
+
+  const icon = document.createElement("div")
+  icon.style.cssText = "width: 16px; height: 16px; background: #1ed760; border-radius: 2px; flex-shrink: 0;"
+  btn.appendChild(icon)
+
+  const label = document.createElement("span")
+  label.textContent = "Connect Spotify"
+  btn.appendChild(label)
+
+  btn.addEventListener("click", onClick)
+  return btn
+}
+
+function createGoogleButton(onClick: () => void): HTMLButtonElement {
+  const btn = document.createElement("button")
+  btn.className = "inline-flex items-center gap-2 px-3 py-1.5 rounded-theme text-sm font-medium transition-colors"
+  btn.style.cssText = "background: #ffffff; color: #3c4043; border: 1px solid #dadce0;"
+
+  btn.addEventListener("mouseenter", () => { btn.style.background = "#f8f9fa" })
+  btn.addEventListener("mouseleave", () => { btn.style.background = "#ffffff" })
+
+  const icon = document.createElement("div")
+  icon.style.cssText = "width: 16px; height: 16px; background: #4285F4; border-radius: 2px; flex-shrink: 0;"
+  btn.appendChild(icon)
+
+  const label = document.createElement("span")
+  label.textContent = "Sign in with Google"
+  btn.appendChild(label)
+
+  btn.addEventListener("click", onClick)
+  return btn
+}
+
+function buildWidgetsTab(): void {
+  const panel = document.querySelector('[data-settings-tab="widgets"]')!
+
+  // --- Search ---
+  const searchAcc = createAccordion("Search", { variant: "settings", defaultOpen: false })
+
+  const searchEngine = createSelect({
+    options: [
+      { value: "google", label: "Google" },
+      { value: "bing", label: "Bing" },
+      { value: "yahoo", label: "Yahoo" },
+      { value: "duckduckgo", label: "DuckDuckGo" },
+      { value: "ecosia", label: "Ecosia" },
+      { value: "qwant", label: "Qwant" },
+      { value: "startpage", label: "Startpage" },
+    ],
+    value: store.sync.get("searchEngine"),
+    onChange: (v) => store.sync.set("searchEngine", v as SyncSettings["searchEngine"]),
+  })
+  searchAcc.content.appendChild(settingsRow("Search Engine", searchEngine))
+  store.sync.subscribe("searchEngine", (v) => { searchEngine.value = v })
+
+  const debounce = createCheckbox("", store.sync.get("debounceSearch"), (v) => store.sync.set("debounceSearch", v))
+  searchAcc.content.appendChild(settingsRow("Debounce shortcut search", debounce))
+  store.sync.subscribe("debounceSearch", (v) => { (debounce.querySelector("input") as HTMLInputElement).checked = v })
+
+  panel.appendChild(searchAcc.container)
+
+  // --- Todo ---
+  const todoAcc = createAccordion("Todo", { variant: "settings", defaultOpen: false })
+
+  const todoEnabled = createCheckbox("", store.sync.get("todoEnabled"), (v) => store.sync.set("todoEnabled", v))
+  todoAcc.content.appendChild(settingsRow("Enable todo widget", todoEnabled))
+  store.sync.subscribe("todoEnabled", (v) => { (todoEnabled.querySelector("input") as HTMLInputElement).checked = v })
+
+  const todoBadges = createCheckbox("", store.sync.get("todoShowBadges"), (v) => store.sync.set("todoShowBadges", v))
+  todoAcc.content.appendChild(settingsRow("Show badges", todoBadges))
+  store.sync.subscribe("todoShowBadges", (v) => { (todoBadges.querySelector("input") as HTMLInputElement).checked = v })
+
+  const clearRow = document.createElement("div")
+  clearRow.className = "flex justify-end"
+  const clearBtn = createButton("Clear all todos", "destructive", {
+    onClick: () => { if (confirm("Are you sure you want to clear all todos?")) store.local.set("todos", []) },
+  })
+  clearRow.appendChild(clearBtn)
+  todoAcc.content.appendChild(clearRow)
+
+  panel.appendChild(todoAcc.container)
+
+  // --- Weather ---
+  const weatherAcc = createAccordion("Weather", { variant: "settings", defaultOpen: false })
+
+  const weatherEnabled = createCheckbox("", store.sync.get("weatherEnabled"), (v) => store.sync.set("weatherEnabled", v))
+  weatherAcc.content.appendChild(settingsRow("Enable weather", weatherEnabled))
+  store.sync.subscribe("weatherEnabled", (v) => { (weatherEnabled.querySelector("input") as HTMLInputElement).checked = v })
+
+  const weatherUnit = createSelect({
+    options: [
+      { value: "f", label: "Fahrenheit" },
+      { value: "c", label: "Celsius" },
+    ],
+    value: store.sync.get("weatherUnit"),
+    onChange: (v) => store.sync.set("weatherUnit", v as SyncSettings["weatherUnit"]),
+  })
+  weatherAcc.content.appendChild(settingsRow("Temperature unit", weatherUnit))
+  store.sync.subscribe("weatherUnit", (v) => { weatherUnit.value = v })
+
+  const locationRow = document.createElement("div")
+  const grantBtn = createButton("Grant location access", "primary", {
+    onClick: () => {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          store.local.set("weatherLat", pos.coords.latitude)
+          store.local.set("weatherLon", pos.coords.longitude)
+          locationRow.hidden = true
+        },
+        () => { locationHelp.hidden = false },
+        { timeout: 10000 }
+      )
+    },
+  })
+  locationRow.appendChild(grantBtn)
+
+  const locationHelp = document.createElement("p")
+  locationHelp.className = "text-xs text-muted mt-1"
+  locationHelp.textContent = "Location access was denied. Please enable it in your browser settings for this extension."
+  locationHelp.hidden = true
+  locationRow.appendChild(locationHelp)
+
+  locationRow.hidden = store.local.get("weatherLat") !== null
+  store.local.subscribe("weatherLat", () => { locationRow.hidden = store.local.get("weatherLat") !== null })
+
+  weatherAcc.content.appendChild(locationRow)
+  panel.appendChild(weatherAcc.container)
+
+  // --- Spotify ---
+  const spotifyAcc = createAccordion("Spotify", { variant: "settings", defaultOpen: false })
+
+  const spotifyEnabled = createCheckbox("", store.sync.get("spotifyEnabled"), (v) => store.sync.set("spotifyEnabled", v))
+  spotifyAcc.content.appendChild(settingsRow("Enable Spotify widget", spotifyEnabled))
+  store.sync.subscribe("spotifyEnabled", (v) => { (spotifyEnabled.querySelector("input") as HTMLInputElement).checked = v })
+
+  const spotifyConnectRow = document.createElement("div")
+  const spotifyBtn = createSpotifyButton(async () => {
+    spotifyBtn.disabled = true
+    spotifyBtn.querySelector("span")!.textContent = "Connecting..."
+    const success = await spotifyAuthenticate()
+    spotifyBtn.disabled = false
+    spotifyBtn.querySelector("span")!.textContent = "Connect Spotify"
+    if (success) updateSpotifyUI()
+  })
+  spotifyConnectRow.appendChild(spotifyBtn)
+
+  const spotifyDisconnectRow = document.createElement("div")
+  spotifyDisconnectRow.hidden = true
+  const spotifyDisconnectBtn = createButton("Disconnect", "destructive-outline", {
+    onClick: () => { spotifyClearTokens(); updateSpotifyUI() },
+  })
+  spotifyDisconnectRow.appendChild(spotifyDisconnectBtn)
+
+  function updateSpotifyUI(): void {
+    const hasToken = store.local.get("spotifyAccessToken") !== null
+    spotifyConnectRow.hidden = hasToken
+    spotifyDisconnectRow.hidden = !hasToken
+  }
+  updateSpotifyUI()
+  store.local.subscribe("spotifyAccessToken", () => updateSpotifyUI())
+
+  spotifyAcc.content.appendChild(spotifyConnectRow)
+  spotifyAcc.content.appendChild(spotifyDisconnectRow)
+  panel.appendChild(spotifyAcc.container)
+
+  // --- Google Calendar ---
+  const calendarAcc = createAccordion("Google Calendar", { variant: "settings", defaultOpen: false })
+
+  const calendarEnabled = createCheckbox("", store.sync.get("calendarEnabled"), (v) => store.sync.set("calendarEnabled", v))
+  calendarAcc.content.appendChild(settingsRow("Enable Google Calendar", calendarEnabled))
+  store.sync.subscribe("calendarEnabled", (v) => { (calendarEnabled.querySelector("input") as HTMLInputElement).checked = v })
+
+  const calConnectRow = document.createElement("div")
+  const calBtn = createGoogleButton(async () => {
+    calBtn.disabled = true
+    calBtn.querySelector("span")!.textContent = "Signing in..."
+    const success = await calendarAuthenticate()
+    calBtn.disabled = false
+    calBtn.querySelector("span")!.textContent = "Sign in with Google"
+    if (success) updateCalendarUI()
+  })
+  calConnectRow.appendChild(calBtn)
+
+  const calDisconnectRow = document.createElement("div")
+  calDisconnectRow.hidden = true
+  const calDisconnectBtn = createButton("Disconnect", "destructive-outline", {
+    onClick: async () => { await calendarDisconnect(); updateCalendarUI() },
+  })
+  calDisconnectRow.appendChild(calDisconnectBtn)
+
+  function updateCalendarUI(): void {
+    const connected = store.local.get("calendarConnected")
+    calConnectRow.hidden = connected
+    calDisconnectRow.hidden = !connected
+  }
+  updateCalendarUI()
+  store.local.subscribe("calendarConnected", () => updateCalendarUI())
+
+  calendarAcc.content.appendChild(calConnectRow)
+  calendarAcc.content.appendChild(calDisconnectRow)
+  panel.appendChild(calendarAcc.container)
+}
+
 function buildNav(dialog: HTMLDialogElement): { refreshIndicator: () => void } {
   const nav = document.getElementById("settings-nav")!
   const title = document.getElementById("settings-title")!
@@ -456,6 +666,7 @@ export function initSettings(): void {
 
   buildGeneralTab()
   buildAppearanceTab()
+  buildWidgetsTab()
 
   // Recommendations (in shortcuts tab — still static HTML)
   const recsEnabled = document.getElementById("settings-recommendations-enabled") as HTMLInputElement
