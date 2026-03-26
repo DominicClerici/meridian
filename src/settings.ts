@@ -2,7 +2,7 @@ import { store } from "./store"
 import type { SyncSettings } from "./defaults"
 import { authenticate as spotifyAuthenticate, clearTokens as spotifyClearTokens } from "./spotify"
 import { authenticate as calendarAuthenticate, disconnect as calendarDisconnect } from "./calendar"
-import { createAccordion, createCheckbox, createSelect } from "./components"
+import { createAccordion, createButton, createCheckbox, createSelect } from "./components"
 
 const TABS = [
   {
@@ -120,6 +120,162 @@ function buildGeneralTab(): void {
   })
   store.sync.subscribe("clockDateFormat", (v) => { clockDateFormat.value = v })
   store.sync.subscribe("clockSize", (v) => { clockSize.value = v })
+}
+
+const SWATCH_CHECK = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>`
+
+const SWATCH_COLORS = ["red", "green", "blue"] as const
+
+function buildSwatchGroup(
+  storeKey: "accentColor" | "bgColor"
+): HTMLElement {
+  const container = document.createElement("div")
+  container.className = "flex gap-3 items-center"
+
+  const buttons: HTMLButtonElement[] = []
+
+  for (const color of SWATCH_COLORS) {
+    const btn = document.createElement("button")
+    btn.className = `w-6 h-6 rounded-full bg-swatch-${color} flex items-center justify-center cursor-pointer transition-all duration-150`
+    btn.dataset.color = color
+
+    btn.addEventListener("click", () => {
+      store.sync.set(storeKey, color)
+    })
+
+    btn.addEventListener("mouseenter", () => {
+      if (store.sync.get(storeKey) !== color) btn.style.transform = "scale(1.1)"
+    })
+    btn.addEventListener("mouseleave", () => {
+      btn.style.transform = ""
+    })
+
+    buttons.push(btn)
+    container.appendChild(btn)
+  }
+
+  function updateSelected(val: string): void {
+    for (const btn of buttons) {
+      const isSelected = btn.dataset.color === val
+      if (isSelected) {
+        btn.innerHTML = SWATCH_CHECK
+        btn.style.outline = "2px solid"
+        btn.style.outlineOffset = "2px"
+        btn.style.outlineColor = `var(--swatch-${val})`
+        btn.style.transform = ""
+      } else {
+        btn.innerHTML = ""
+        btn.style.outline = ""
+        btn.style.outlineOffset = ""
+        btn.style.outlineColor = ""
+      }
+    }
+  }
+
+  updateSelected(store.sync.get(storeKey))
+  store.sync.subscribe(storeKey, updateSelected)
+
+  return container
+}
+
+const MODE_ICONS = {
+  light: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>`,
+  dark: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>`,
+  auto: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></svg>`,
+} as const
+
+function buildModeSelector(): HTMLElement {
+  const container = document.createElement("div")
+  container.className = "flex gap-2"
+
+  const modes: SyncSettings["mode"][] = ["light", "dark", "auto"]
+  const buttons: HTMLButtonElement[] = []
+
+  for (const mode of modes) {
+    const btn = createButton(mode.charAt(0).toUpperCase() + mode.slice(1), "override", {
+      icon: MODE_ICONS[mode],
+    })
+    btn.className += " flex-1 justify-center py-2 border rounded-theme transition-colors"
+
+    btn.addEventListener("click", () => {
+      store.sync.set("mode", mode)
+    })
+
+    buttons.push(btn)
+    container.appendChild(btn)
+  }
+
+  function updateSelected(val: string): void {
+    for (let i = 0; i < modes.length; i++) {
+      const btn = buttons[i]
+      const isSelected = modes[i] === val
+
+      btn.style.background = ""
+      btn.style.color = ""
+      btn.style.borderColor = ""
+
+      if (isSelected) {
+        if (modes[i] === "light") {
+          btn.style.background = "var(--mode-light-bg)"
+          btn.style.color = "var(--mode-light-fg)"
+          btn.style.borderColor = "var(--mode-light-fg)"
+        } else if (modes[i] === "dark") {
+          btn.style.background = "var(--mode-dark-bg)"
+          btn.style.color = "var(--mode-dark-fg)"
+          btn.style.borderColor = "var(--mode-dark-fg)"
+        } else {
+          btn.style.background = "var(--accent)"
+          btn.style.color = "var(--accent-foreground)"
+          btn.style.borderColor = "var(--accent)"
+        }
+      } else {
+        btn.style.borderColor = "var(--accent)"
+        btn.style.color = "var(--accent)"
+        btn.style.background = "transparent"
+      }
+    }
+  }
+
+  updateSelected(store.sync.get("mode"))
+  store.sync.subscribe("mode", updateSelected)
+
+  return container
+}
+
+function buildAppearanceTab(): void {
+  const panel = document.querySelector('[data-settings-tab="appearance"]')!
+  panel.className = "settings-panel p-6 flex flex-col gap-6"
+
+  function section(labelText: string, child: HTMLElement): HTMLElement {
+    const el = document.createElement("div")
+    el.className = "flex flex-col gap-3"
+    const lbl = document.createElement("span")
+    lbl.className = "text-muted text-xs font-medium"
+    lbl.textContent = labelText
+    el.appendChild(lbl)
+    el.appendChild(child)
+    return el
+  }
+
+  const themeSelect = createSelect({
+    options: [{ value: "modern", label: "Modern" }],
+    value: store.sync.get("theme"),
+    onChange: (v) => store.sync.set("theme", v as SyncSettings["theme"]),
+  })
+  store.sync.subscribe("theme", (v) => { themeSelect.value = v })
+
+  const themeRow = document.createElement("div")
+  themeRow.className = "flex items-center justify-between"
+  const themeLbl = document.createElement("span")
+  themeLbl.className = "text-sm text-foreground"
+  themeLbl.textContent = "Theme"
+  themeRow.appendChild(themeLbl)
+  themeRow.appendChild(themeSelect)
+  panel.appendChild(themeRow)
+
+  panel.appendChild(section("Accent Color", buildSwatchGroup("accentColor")))
+  panel.appendChild(section("Background Color", buildSwatchGroup("bgColor")))
+  panel.appendChild(section("Mode", buildModeSelector()))
 }
 
 function buildNav(dialog: HTMLDialogElement): { refreshIndicator: () => void } {
@@ -299,6 +455,7 @@ export function initSettings(): void {
   setupDialogBehavior(dialog, nav)
 
   buildGeneralTab()
+  buildAppearanceTab()
 
   // Recommendations (in shortcuts tab — still static HTML)
   const recsEnabled = document.getElementById("settings-recommendations-enabled") as HTMLInputElement
