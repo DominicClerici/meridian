@@ -3,33 +3,14 @@ import type { SyncSettings } from "./defaults"
 import { authenticate as spotifyAuthenticate, clearTokens as spotifyClearTokens } from "./spotify"
 import { authenticate as calendarAuthenticate, disconnect as calendarDisconnect } from "./calendar"
 import { createAccordion, createButton, createCheckbox, createDialog, createSelect } from "./components"
+import { icon, getIconSvg } from "./icons/registry"
 
 const TABS = [
-  {
-    id: "general",
-    label: "General",
-    icon: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21v-7m0-4V3m8 18v-9m0-4V3m8 18v-5m0-4V3"/><circle cx="4" cy="14" r="2"/><circle cx="12" cy="8" r="2"/><circle cx="20" cy="16" r="2"/></svg>`,
-  },
-  {
-    id: "shortcuts",
-    label: "Shortcuts",
-    icon: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>`,
-  },
-  {
-    id: "appearance",
-    label: "Appearance",
-    icon: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="17.5" cy="10.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="8.5" cy="7.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="6.5" cy="12.5" r="1.5" fill="currentColor" stroke="none"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>`,
-  },
-  {
-    id: "widgets",
-    label: "Widgets",
-    icon: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>`,
-  },
-  {
-    id: "advanced",
-    label: "Advanced",
-    icon: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>`,
-  },
+  { id: "general", label: "General", iconName: "tabGeneral" },
+  { id: "shortcuts", label: "Shortcuts", iconName: "tabShortcuts" },
+  { id: "appearance", label: "Appearance", iconName: "tabAppearance" },
+  { id: "widgets", label: "Widgets", iconName: "tabWidgets" },
+  { id: "advanced", label: "Advanced", iconName: "tabAdvanced" },
 ]
 
 function settingsRow(
@@ -122,8 +103,6 @@ function buildGeneralTab(): void {
   store.sync.subscribe("clockSize", (v) => { clockSize.value = v })
 }
 
-const SWATCH_CHECK = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>`
-
 const SWATCH_COLORS = ["red", "green", "blue"] as const
 const SWATCH_BG: Record<string, string> = {
   red: "bg-swatch-red",
@@ -163,7 +142,7 @@ function buildSwatchGroup(
     for (const btn of buttons) {
       const isSelected = btn.dataset.color === val
       if (isSelected) {
-        btn.innerHTML = SWATCH_CHECK
+        btn.innerHTML = getIconSvg("swatchCheck")
         btn.style.outline = "2px solid"
         btn.style.outlineOffset = "2px"
         btn.style.outlineColor = `var(--swatch-${val})`
@@ -183,12 +162,6 @@ function buildSwatchGroup(
   return container
 }
 
-const MODE_ICONS = {
-  light: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>`,
-  dark: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>`,
-  auto: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></svg>`,
-} as const
-
 function buildModeSelector(): HTMLElement {
   const container = document.createElement("div")
   container.className = "flex gap-2"
@@ -197,8 +170,9 @@ function buildModeSelector(): HTMLElement {
   const buttons: HTMLButtonElement[] = []
 
   for (const mode of modes) {
+    const modeIconName = mode === "light" ? "modeLight" : mode === "dark" ? "modeDark" : "modeAuto"
     const btn = createButton(mode.charAt(0).toUpperCase() + mode.slice(1), "override", {
-      icon: MODE_ICONS[mode],
+      icon: icon(modeIconName),
     })
     btn.className += " flex-1 justify-center py-2 border rounded-theme transition-colors"
 
@@ -519,7 +493,7 @@ function buildNav(): { refreshIndicator: () => void } {
     btn.className = `relative w-12 h-12 flex items-center justify-center rounded-theme transition-colors ${
       index === 0 ? "text-accent" : "text-muted hover:text-foreground hover:bg-surface"
     }`
-    btn.innerHTML = tab.icon
+    btn.appendChild(icon(tab.iconName, { size: 18 }))
     btn.setAttribute("aria-label", tab.label)
     if (index === 0) btn.setAttribute("aria-selected", "true")
 
@@ -695,7 +669,12 @@ function buildAdvancedPanel(): HTMLDivElement {
 
   const center = document.createElement("div")
   center.className = "flex flex-col items-center justify-center min-h-[320px] gap-3"
-  center.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="text-muted/30"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg><p class="text-sm text-muted/40">No advanced settings yet</p>`
+  const wrenchIcon = icon("tabAdvanced", { size: 32, class: "text-muted/30" })
+  center.appendChild(wrenchIcon)
+  const msg = document.createElement("p")
+  msg.className = "text-sm text-muted/40"
+  msg.textContent = "No advanced settings yet"
+  center.appendChild(msg)
   panel.appendChild(center)
   return panel
 }
@@ -730,7 +709,7 @@ export function initSettings(): void {
   closeBtn.id = "settings-close"
   closeBtn.className = "w-8 h-8 flex items-center justify-center rounded-theme text-muted hover:text-foreground hover:bg-surface transition-colors"
   closeBtn.setAttribute("aria-label", "Close settings")
-  closeBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>`
+  closeBtn.appendChild(icon("close"))
   closeBtn.addEventListener("click", close)
   header.appendChild(closeBtn)
   main.appendChild(header)
