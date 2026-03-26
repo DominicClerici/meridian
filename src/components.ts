@@ -66,29 +66,309 @@ export function createInput(opts: {
   return el
 }
 
+export type SelectElement = HTMLDivElement & { value: string }
+
+const CHECK_SVG = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>`
+
+const CHEVRON_SVG = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>`
+
 export function createSelect(opts: {
   options: { value: string; label: string }[]
   value?: string
   name?: string
   onChange?: (value: string) => void
-}): HTMLSelectElement {
-  const el = document.createElement("select")
-  el.className = "text-sm rounded-theme px-2 py-1.5 border border-input-border bg-input text-foreground outline-none focus:border-accent transition-colors"
+}): SelectElement {
+  let currentValue = opts.value ?? opts.options[0]?.value ?? ""
+  let expanded = false
+  let highlightIndex = -1
+  let openAnim: Animation | null = null
+  let closeAnim: Animation | null = null
+  let dragging = false
 
-  for (const opt of opts.options) {
-    const option = document.createElement("option")
-    option.value = opt.value
-    option.textContent = opt.label
-    el.appendChild(option)
+  const container = document.createElement("div") as SelectElement
+  container.className = "relative font-body"
+  container.setAttribute("role", "combobox")
+  container.setAttribute("aria-expanded", "false")
+  container.setAttribute("aria-haspopup", "listbox")
+  container.dataset.value = currentValue
+  if (opts.name) container.dataset.name = opts.name
+
+  const trigger = document.createElement("button")
+  trigger.type = "button"
+  trigger.className = "select__trigger flex items-center justify-between gap-2 w-full text-sm rounded-theme px-2 py-1.5 border border-input-border bg-input text-foreground outline-none transition-colors hover:border-accent focus-visible:border-accent cursor-pointer"
+
+  const valueSpan = document.createElement("span")
+  valueSpan.className = "select__value truncate"
+
+  const arrow = document.createElement("span")
+  arrow.className = "select__arrow shrink-0 text-muted transition-transform duration-100 [&>svg]:block"
+  arrow.innerHTML = CHEVRON_SVG
+
+  trigger.appendChild(valueSpan)
+  trigger.appendChild(arrow)
+
+  const list = document.createElement("ul")
+  list.setAttribute("role", "listbox")
+  list.tabIndex = -1
+  list.className = "select__list absolute left-0 right-0 top-full z-50 border border-input-border border-t-0 bg-popover text-popover-foreground overflow-auto"
+  list.style.maxHeight = "192px"
+  list.style.display = "none"
+  list.style.boxShadow = "0 8px 24px rgba(0,0,0,0.15), 0 2px 8px rgba(0,0,0,0.08)"
+
+  const items: HTMLLIElement[] = []
+
+  function labelFor(val: string): string {
+    return opts.options.find((o) => o.value === val)?.label ?? val
   }
 
-  if (opts.value) el.value = opts.value
-  if (opts.name) el.name = opts.name
-  if (opts.onChange) {
-    el.addEventListener("change", () => opts.onChange!(el.value))
+  function buildItems(): void {
+    list.innerHTML = ""
+    items.length = 0
+
+    for (let i = 0; i < opts.options.length; i++) {
+      const opt = opts.options[i]
+      const li = document.createElement("li")
+      li.setAttribute("role", "option")
+      li.setAttribute("aria-selected", String(opt.value === currentValue))
+      li.dataset.value = opt.value
+
+      li.className = "flex items-center gap-2 px-2 py-1.5 text-sm cursor-pointer transition-colors"
+
+      const check = document.createElement("span")
+      check.className = "shrink-0 w-3.5 text-accent [&>svg]:block"
+      check.innerHTML = opt.value === currentValue ? CHECK_SVG : ""
+
+      const label = document.createElement("span")
+      label.className = "truncate"
+      label.textContent = opt.label
+
+      li.appendChild(check)
+      li.appendChild(label)
+
+      li.addEventListener("mouseenter", () => {
+        setHighlight(i)
+      })
+
+      li.addEventListener("mouseup", () => {
+        selectOption(opt.value)
+        close()
+      })
+
+      items.push(li)
+      list.appendChild(li)
+    }
   }
 
-  return el
+  buildItems()
+  valueSpan.textContent = labelFor(currentValue)
+
+  container.appendChild(trigger)
+  container.appendChild(list)
+
+  function setHighlight(index: number): void {
+    if (highlightIndex >= 0 && highlightIndex < items.length) {
+      items[highlightIndex].classList.remove("bg-surface")
+    }
+    highlightIndex = index
+    if (index >= 0 && index < items.length) {
+      items[index].classList.add("bg-surface")
+      items[index].scrollIntoView({ block: "nearest" })
+    }
+  }
+
+  function selectOption(val: string): void {
+    if (val === currentValue) return
+    currentValue = val
+    container.dataset.value = val
+    valueSpan.textContent = labelFor(val)
+
+    for (let i = 0; i < items.length; i++) {
+      const isSelected = opts.options[i].value === val
+      items[i].setAttribute("aria-selected", String(isSelected))
+      const check = items[i].firstElementChild as HTMLElement
+      check.innerHTML = isSelected ? CHECK_SVG : ""
+    }
+
+    opts.onChange?.(val)
+  }
+
+  function open(): void {
+    if (expanded) return
+    expanded = true
+    container.setAttribute("aria-expanded", "true")
+
+    if (closeAnim) {
+      closeAnim.cancel()
+      closeAnim = null
+    }
+
+    trigger.classList.remove("rounded-theme")
+    trigger.classList.add("rounded-t-theme")
+    list.classList.add("rounded-b-theme")
+
+    list.style.display = ""
+    list.style.opacity = "0"
+    list.style.transform = "translateY(-4px)"
+
+    arrow.style.transform = "rotate(180deg)"
+
+    const idx = opts.options.findIndex((o) => o.value === currentValue)
+    setHighlight(idx)
+
+    openAnim = list.animate(
+      [
+        { opacity: 0, transform: "translateY(-4px)" },
+        { opacity: 1, transform: "translateY(0)" },
+      ],
+      { duration: 100, easing: "ease-out", fill: "forwards" }
+    )
+    openAnim.onfinish = () => {
+      if (!openAnim) return
+      openAnim = null
+      list.style.opacity = "1"
+      list.style.transform = "translateY(0)"
+    }
+
+    setTimeout(() => document.addEventListener("mousedown", onClickOutside), 0)
+  }
+
+  function close(): void {
+    if (!expanded) return
+    expanded = false
+    dragging = false
+    container.setAttribute("aria-expanded", "false")
+
+    if (openAnim) {
+      openAnim.cancel()
+      openAnim = null
+    }
+
+    arrow.style.transform = ""
+
+    closeAnim = list.animate(
+      [
+        { opacity: 1, transform: "translateY(0)" },
+        { opacity: 0, transform: "translateY(-4px)" },
+      ],
+      { duration: 75, easing: "ease-in", fill: "forwards" }
+    )
+    closeAnim.onfinish = () => {
+      if (!closeAnim) return
+      closeAnim = null
+      list.style.display = "none"
+      list.style.opacity = ""
+      list.style.transform = ""
+
+      trigger.classList.remove("rounded-t-theme")
+      trigger.classList.add("rounded-theme")
+      list.classList.remove("rounded-b-theme")
+
+      setHighlight(-1)
+    }
+
+    document.removeEventListener("mousedown", onClickOutside)
+  }
+
+  function onClickOutside(e: MouseEvent): void {
+    if (!container.contains(e.target as Node)) close()
+  }
+
+  // Mousedown on trigger opens list and starts drag mode
+  trigger.addEventListener("mousedown", (e) => {
+    e.preventDefault()
+    if (expanded) {
+      close()
+      return
+    }
+    open()
+    dragging = true
+
+    function onMouseUp(ev: MouseEvent): void {
+      document.removeEventListener("mouseup", onMouseUp)
+      dragging = false
+      const target = ev.target as HTMLElement
+      const li = target.closest?.("[role=option]") as HTMLElement | null
+      if (li && list.contains(li) && li.dataset.value) {
+        selectOption(li.dataset.value)
+        close()
+      }
+    }
+    document.addEventListener("mouseup", onMouseUp)
+  })
+
+  trigger.addEventListener("keydown", (e) => {
+    switch (e.key) {
+      case "ArrowDown":
+        e.preventDefault()
+        if (!expanded) {
+          open()
+        } else {
+          setHighlight(Math.min(highlightIndex + 1, items.length - 1))
+        }
+        break
+      case "ArrowUp":
+        e.preventDefault()
+        if (!expanded) {
+          open()
+        } else {
+          setHighlight(Math.max(highlightIndex - 1, 0))
+        }
+        break
+      case "Home":
+        e.preventDefault()
+        if (expanded) setHighlight(0)
+        break
+      case "End":
+        e.preventDefault()
+        if (expanded) setHighlight(items.length - 1)
+        break
+      case "Enter":
+      case " ":
+        e.preventDefault()
+        if (expanded && highlightIndex >= 0) {
+          selectOption(opts.options[highlightIndex].value)
+          close()
+          trigger.focus()
+        } else if (!expanded) {
+          open()
+        }
+        break
+      case "Escape":
+        e.preventDefault()
+        if (expanded) {
+          close()
+          trigger.focus()
+        }
+        break
+      case "Tab":
+        if (expanded) close()
+        break
+    }
+  })
+
+  Object.defineProperty(container, "value", {
+    get(): string {
+      return currentValue
+    },
+    set(val: string) {
+      if (val === currentValue) return
+      if (!opts.options.some((o) => o.value === val)) return
+      currentValue = val
+      container.dataset.value = val
+      valueSpan.textContent = labelFor(val)
+
+      for (let i = 0; i < items.length; i++) {
+        const isSelected = opts.options[i].value === val
+        items[i].setAttribute("aria-selected", String(isSelected))
+        const check = items[i].firstElementChild as HTMLElement
+        check.innerHTML = isSelected ? CHECK_SVG : ""
+      }
+    },
+    enumerable: true,
+    configurable: true,
+  })
+
+  return container
 }
 
 export function createCheckbox(
