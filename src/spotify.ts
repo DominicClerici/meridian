@@ -1,4 +1,5 @@
 import { store } from "./store"
+import { getIconSvg } from "./icons/registry"
 
 const CLIENT_ID = "acd29601607e4e1c8896ab4c1ab534d7"
 const SCOPES =
@@ -312,8 +313,6 @@ let cardEl: HTMLElement | null = null
 let controlsDisabled = false
 let loadingAction: string | null = null
 
-const SPINNER_SVG = `<svg class="animate-spin" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>`
-
 function escapeHtml(str: string): string {
   const div = document.createElement("div")
   div.textContent = str
@@ -321,16 +320,14 @@ function escapeHtml(str: string): string {
 }
 
 function btnIcon(action: string, isPlaying: boolean): string {
-  if (loadingAction === action) return SPINNER_SVG
+  if (loadingAction === action) return getIconSvg("spinner")
   switch (action) {
     case "previous":
-      return `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>`
+      return getIconSvg("skipBack")
     case "next":
-      return `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>`
+      return getIconSvg("skipForward")
     default:
-      return isPlaying
-        ? `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M6 4h4v16H6zm8 0h4v16h-4z"/></svg>`
-        : `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>`
+      return isPlaying ? getIconSvg("pause") : getIconSvg("play")
   }
 }
 
