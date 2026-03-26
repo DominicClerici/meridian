@@ -143,10 +143,11 @@ export function createAccordion(
 
   const content = document.createElement("div")
   content.className = isSettings
-    ? "flex flex-col gap-3 px-6 pb-4"
+    ? "flex flex-col gap-3 px-6 py-4"
     : "flex flex-col gap-0.5"
 
   let expanded = opts?.defaultOpen !== false
+  let currentAnim: Animation | null = null
 
   if (!expanded) {
     content.hidden = true
@@ -154,9 +155,61 @@ export function createAccordion(
   }
 
   function toggle() {
+    if (currentAnim) {
+      currentAnim.cancel()
+      currentAnim = null
+    }
+
     expanded = !expanded
-    content.hidden = !expanded
     chevron.style.transform = expanded ? "" : "rotate(-90deg)"
+
+    if (expanded) {
+      content.hidden = false
+      content.style.overflow = "hidden"
+      const h = content.scrollHeight
+      content.style.height = "0px"
+      content.style.opacity = "0"
+
+      const anim = content.animate(
+        [
+          { height: "0px", opacity: 0 },
+          { height: `${h}px`, opacity: 1 },
+        ],
+        { duration: 200, easing: "ease-out", fill: "forwards" }
+      )
+      currentAnim = anim
+
+      anim.onfinish = () => {
+        if (currentAnim !== anim) return
+        currentAnim = null
+        content.style.height = ""
+        content.style.opacity = ""
+        content.style.overflow = ""
+        anim.cancel()
+      }
+    } else {
+      content.style.overflow = "hidden"
+      const h = content.offsetHeight
+
+      const anim = content.animate(
+        [
+          { height: `${h}px`, opacity: 1 },
+          { height: "0px", opacity: 0 },
+        ],
+        { duration: 150, easing: "ease-in", fill: "forwards" }
+      )
+      currentAnim = anim
+
+      anim.onfinish = () => {
+        if (currentAnim !== anim) return
+        currentAnim = null
+        content.hidden = true
+        content.style.height = ""
+        content.style.opacity = ""
+        content.style.overflow = ""
+        anim.cancel()
+      }
+    }
   }
 
   trigger.addEventListener("click", toggle)
