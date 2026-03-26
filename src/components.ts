@@ -1,18 +1,21 @@
-type ButtonVariant = "primary" | "outline" | "ghost"
+type ButtonVariant = "primary" | "outline" | "ghost" | "destructive" | "destructive-outline" | "override"
 
 const BUTTON_CLASSES: Record<ButtonVariant, string> = {
   primary: "bg-accent text-accent-foreground hover:bg-accent-hover",
   outline: "border border-accent text-accent bg-transparent hover:bg-accent/10",
   ghost: "text-foreground bg-transparent hover:bg-surface",
+  destructive: "bg-danger text-danger-foreground hover:bg-danger-hover",
+  "destructive-outline": "border border-danger text-danger bg-transparent hover:bg-danger/10",
+  override: "",
 }
 
 export function createButton(
   label: string,
   variant: ButtonVariant,
-  opts?: { icon?: string; onClick?: () => void }
+  opts?: { icon?: string; onClick?: () => void; className?: string }
 ): HTMLButtonElement {
   const btn = document.createElement("button")
-  btn.className = `inline-flex items-center gap-1.5 px-3 py-1.5 rounded-theme text-sm font-medium transition-colors ${BUTTON_CLASSES[variant]}`
+  btn.className = `inline-flex items-center gap-1.5 px-3 py-1.5 rounded-theme text-sm font-medium transition-colors ${BUTTON_CLASSES[variant]} ${opts?.className ?? ""}`.trim()
 
   if (opts?.icon) {
     const iconSpan = document.createElement("span")
