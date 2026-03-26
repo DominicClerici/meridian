@@ -97,15 +97,57 @@ export function createCheckbox(
   onChange: (checked: boolean) => void
 ): HTMLLabelElement {
   const wrapper = document.createElement("label")
-  wrapper.className = "inline-flex items-center gap-2 cursor-pointer"
+  wrapper.className = "inline-flex items-center gap-2 cursor-pointer group"
 
   const input = document.createElement("input")
   input.type = "checkbox"
   input.checked = checked
-  input.className = "rounded accent-accent shrink-0"
-  input.addEventListener("change", () => onChange(input.checked))
+  input.className = "sr-only peer"
+
+  const box = document.createElement("span")
+  box.className = "relative shrink-0 w-[18px] h-[18px] rounded-[4px] border transition-all duration-150 " +
+    "peer-focus-visible:ring-2 peer-focus-visible:ring-accent/50 peer-focus-visible:ring-offset-1 " +
+    "peer-disabled:opacity-50 peer-disabled:cursor-not-allowed"
+
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg")
+  svg.setAttribute("width", "12")
+  svg.setAttribute("height", "12")
+  svg.setAttribute("viewBox", "0 0 24 24")
+  svg.setAttribute("fill", "none")
+  svg.setAttribute("stroke", "currentColor")
+  svg.setAttribute("stroke-width", "3")
+  svg.setAttribute("stroke-linecap", "round")
+  svg.setAttribute("stroke-linejoin", "round")
+  svg.classList.add("absolute", "top-[3px]", "left-[3px]", "transition-all", "duration-150")
+
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path")
+  path.setAttribute("d", "M20 6 9 17l-5-5")
+  svg.appendChild(path)
+  box.appendChild(svg)
+
+  function applyState(isChecked: boolean) {
+    if (isChecked) {
+      box.classList.remove("bg-input", "border-input-border", "group-hover:border-accent/50")
+      box.classList.add("bg-accent", "border-accent", "text-accent-foreground")
+      svg.style.opacity = "1"
+      svg.style.transform = "scale(1)"
+    } else {
+      box.classList.remove("bg-accent", "border-accent", "text-accent-foreground")
+      box.classList.add("bg-input", "border-input-border", "group-hover:border-accent/50")
+      svg.style.opacity = "0"
+      svg.style.transform = "scale(0.8)"
+    }
+  }
+
+  applyState(checked)
+
+  input.addEventListener("change", () => {
+    applyState(input.checked)
+    onChange(input.checked)
+  })
 
   wrapper.appendChild(input)
+  wrapper.appendChild(box)
 
   if (label) {
     const span = document.createElement("span")
