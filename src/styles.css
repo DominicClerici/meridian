@@ -440,10 +440,6 @@
   src: url("fonts/red-hat-mono/RedHatMono-Bold.ttf") format("truetype");
 }
 
-button[aria-pressed="true"] {
-  outline: 3px solid white;
-  outline-offset: 2px;
-}
 
 @layer base {
   body {
