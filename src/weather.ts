@@ -1,4 +1,5 @@
 import { store } from "./store"
+import { icon } from "./icons/registry"
 
 type WeatherData = {
   temperature: number
@@ -174,7 +175,12 @@ function renderTrigger(): void {
   trigger.hidden = false
 
   if (currentState === "no-permission") {
-    trigger.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><line x1="2" y1="2" x2="22" y2="22"/></svg> <span class="text-xs">Enable location</span>`
+    trigger.innerHTML = ""
+    trigger.appendChild(icon("locationOff"))
+    const locLabel = document.createElement("span")
+    locLabel.className = "text-xs"
+    locLabel.textContent = "Enable location"
+    trigger.appendChild(locLabel)
     return
   }
 
@@ -184,7 +190,8 @@ function renderTrigger(): void {
   }
 
   if (currentState === "error") {
-    trigger.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>`
+    trigger.innerHTML = ""
+    trigger.appendChild(icon("refresh"))
     return
   }
 

@@ -1,4 +1,5 @@
 import { store } from "./store"
+import { icon } from "./icons/registry"
 
 type CalendarEvent = {
   id: string
@@ -219,7 +220,6 @@ function formatTime(isoString: string): string {
   })
 }
 
-const CALENDAR_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`
 
 function renderTrigger(): void {
   const trigger = document.getElementById(
@@ -239,18 +239,29 @@ function renderTrigger(): void {
   trigger.hidden = false
 
   if (currentState === "loading") {
-    trigger.innerHTML = `${CALENDAR_ICON} <span class="text-xs">Loading...</span>`
+    trigger.innerHTML = ""
+    trigger.appendChild(icon("calendar"))
+    const loadLabel = document.createElement("span")
+    loadLabel.className = "text-xs"
+    loadLabel.textContent = "Loading..."
+    trigger.appendChild(loadLabel)
     return
   }
 
   if (currentState === "error") {
-    trigger.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>`
+    trigger.innerHTML = ""
+    trigger.appendChild(icon("refresh"))
     return
   }
 
   const count = currentEvents.length
   const label = count === 1 ? "1 event today" : `${count} events today`
-  trigger.innerHTML = `${CALENDAR_ICON} <span class="text-sm">${label}</span>`
+  trigger.innerHTML = ""
+  trigger.appendChild(icon("calendar"))
+  const evtLabel = document.createElement("span")
+  evtLabel.className = "text-sm"
+  evtLabel.textContent = label
+  trigger.appendChild(evtLabel)
 }
 
 function showCalendarPopover(anchor: HTMLElement): void {
