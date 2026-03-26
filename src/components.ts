@@ -1,3 +1,5 @@
+import { icon, getIconSvg } from "./icons/registry"
+
 type ButtonVariant = "primary" | "outline" | "ghost" | "destructive" | "destructive-outline" | "override"
 
 const BUTTON_CLASSES: Record<ButtonVariant, string> = {
@@ -12,16 +14,21 @@ const BUTTON_CLASSES: Record<ButtonVariant, string> = {
 export function createButton(
   label: string,
   variant: ButtonVariant,
-  opts?: { icon?: string; onClick?: () => void; className?: string }
+  opts?: { icon?: string | HTMLElement; onClick?: () => void; className?: string }
 ): HTMLButtonElement {
   const btn = document.createElement("button")
   btn.className = `inline-flex items-center gap-1.5 px-3 py-1.5 rounded-theme text-sm font-medium transition-colors ${BUTTON_CLASSES[variant]} ${opts?.className ?? ""}`.trim()
 
   if (opts?.icon) {
-    const iconSpan = document.createElement("span")
-    iconSpan.className = "shrink-0 [&>svg]:w-3.5 [&>svg]:h-3.5"
-    iconSpan.innerHTML = opts.icon
-    btn.appendChild(iconSpan)
+    if (opts.icon instanceof HTMLElement) {
+      opts.icon.classList.add("shrink-0")
+      btn.appendChild(opts.icon)
+    } else {
+      const iconSpan = document.createElement("span")
+      iconSpan.className = "shrink-0 [&>svg]:w-3.5 [&>svg]:h-3.5"
+      iconSpan.innerHTML = opts.icon
+      btn.appendChild(iconSpan)
+    }
   }
 
   if (label) {
@@ -68,9 +75,6 @@ export function createInput(opts: {
 
 export type SelectElement = HTMLDivElement & { value: string }
 
-const CHECK_SVG = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>`
-
-const CHEVRON_SVG = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>`
 
 export function createSelect(opts: {
   options: { value: string; label: string }[]
@@ -100,8 +104,8 @@ export function createSelect(opts: {
   valueSpan.className = "select__value truncate"
 
   const arrow = document.createElement("span")
-  arrow.className = "select__arrow shrink-0 text-muted [&>svg]:block"
-  arrow.innerHTML = CHEVRON_SVG
+  arrow.className = "select__arrow shrink-0 text-muted"
+  arrow.appendChild(icon("chevronDown"))
 
   trigger.appendChild(valueSpan)
   trigger.appendChild(arrow)
@@ -140,7 +144,7 @@ export function createSelect(opts: {
 
       const check = document.createElement("span")
       check.className = "shrink-0 w-3.5 text-accent [&>svg]:block"
-      check.innerHTML = isSelected ? CHECK_SVG : ""
+      check.innerHTML = isSelected ? getIconSvg("check") : ""
 
       li.appendChild(label)
       li.appendChild(check)
@@ -207,7 +211,7 @@ export function createSelect(opts: {
       const isSelected = opts.options[i].value === val
       items[i].setAttribute("aria-selected", String(isSelected))
       const check = items[i].lastElementChild as HTMLElement
-      check.innerHTML = isSelected ? CHECK_SVG : ""
+      check.innerHTML = isSelected ? getIconSvg("check") : ""
       if (isSelected) {
         items[i].classList.add("font-medium")
       } else {
@@ -346,7 +350,7 @@ export function createSelect(opts: {
         const isSelected = opts.options[i].value === val
         items[i].setAttribute("aria-selected", String(isSelected))
         const check = items[i].lastElementChild as HTMLElement
-        check.innerHTML = isSelected ? CHECK_SVG : ""
+        check.innerHTML = isSelected ? getIconSvg("check") : ""
         if (isSelected) {
           items[i].classList.add("font-medium")
         } else {
@@ -447,11 +451,9 @@ export function createAccordion(
     ? `w-full text-left text-sm font-medium px-6 py-3 flex items-center gap-2 transition-colors hover:bg-surface/50 ${opts?.labelClass ?? ""}`
     : `w-full text-left text-xs font-medium px-1 py-1.5 flex items-center gap-1.5 transition-colors ${opts?.labelClass ?? ""}`
 
-  const chevron = document.createElement("span")
-  chevron.textContent = "\u25BC"
-  chevron.className = isSettings
-    ? "text-[11px] transition-transform opacity-40"
-    : "text-[10px] transition-transform opacity-50"
+  const chevron = icon("chevronDown", { size: isSettings ? 11 : 10 })
+  chevron.classList.add("transition-transform")
+  chevron.style.opacity = isSettings ? "0.4" : "0.5"
   trigger.appendChild(chevron)
 
   const labelSpan = document.createElement("span")
