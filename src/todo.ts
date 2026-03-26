@@ -265,7 +265,6 @@ function renderTodoItem(
     const handle = document.createElement("span")
     handle.className =
       "opacity-0 group-hover:opacity-30 transition-opacity cursor-grab shrink-0"
-    handle.innerHTML = ""
     handle.appendChild(icon("dragHandle"))
     row.appendChild(handle)
   }
@@ -371,7 +370,6 @@ function showPopover(anchor: HTMLElement): void {
       empty.className = "flex flex-col items-center justify-center py-8 gap-2"
       const emptyIcon = document.createElement("div")
       emptyIcon.className = "text-popover-foreground/15"
-      emptyIcon.innerHTML = ""
       emptyIcon.appendChild(icon("todoEmpty"))
       const emptyText = document.createElement("p")
       emptyText.className = "text-xs text-popover-foreground/30"
