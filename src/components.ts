@@ -158,6 +158,9 @@ export function createAccordion(
     if (currentAnim) {
       currentAnim.cancel()
       currentAnim = null
+      content.style.height = ""
+      content.style.opacity = ""
+      content.style.overflow = ""
     }
 
     expanded = !expanded
