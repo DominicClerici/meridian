@@ -17,8 +17,8 @@ import { initCalendar } from "./calendar"
 applyTheme()
 subscribeTheme()
 
-document.getElementById("settings-open")!.prepend(icon("settings"))
-document.getElementById("todo-trigger")!.prepend(icon("todoList"))
+document.getElementById("settings-open")!.prepend(icon("settings", { size: 24 }))
+document.getElementById("todo-trigger")!.prepend(icon("todoList", { size: 24 }))
 
 document.addEventListener("DOMContentLoaded", async () => {
   await store.init()

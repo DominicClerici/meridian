@@ -493,7 +493,7 @@ function buildNav(): { refreshIndicator: () => void } {
     btn.className = `relative w-12 h-12 flex items-center justify-center rounded-theme transition-colors ${
       index === 0 ? "text-accent" : "text-muted hover:text-foreground hover:bg-surface"
     }`
-    btn.appendChild(icon(tab.iconName, { size: 18 }))
+    btn.appendChild(icon(tab.iconName, { size: 22 }))
     btn.setAttribute("aria-label", tab.label)
     if (index === 0) btn.setAttribute("aria-selected", "true")
 

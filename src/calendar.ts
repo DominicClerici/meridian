@@ -240,7 +240,7 @@ function renderTrigger(): void {
 
   if (currentState === "loading") {
     trigger.innerHTML = ""
-    trigger.appendChild(icon("calendar"))
+    trigger.appendChild(icon("calendar", { size: 24 }))
     const loadLabel = document.createElement("span")
     loadLabel.className = "text-xs"
     loadLabel.textContent = "Loading..."
@@ -250,14 +250,14 @@ function renderTrigger(): void {
 
   if (currentState === "error") {
     trigger.innerHTML = ""
-    trigger.appendChild(icon("refresh"))
+    trigger.appendChild(icon("refresh", { size: 24 }))
     return
   }
 
   const count = currentEvents.length
   const label = count === 1 ? "1 event today" : `${count} events today`
   trigger.innerHTML = ""
-  trigger.appendChild(icon("calendar"))
+  trigger.appendChild(icon("calendar", { size: 24 }))
   const evtLabel = document.createElement("span")
   evtLabel.className = "text-sm"
   evtLabel.textContent = label

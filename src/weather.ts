@@ -176,7 +176,7 @@ function renderTrigger(): void {
 
   if (currentState === "no-permission") {
     trigger.innerHTML = ""
-    trigger.appendChild(icon("locationOff"))
+    trigger.appendChild(icon("locationOff", { size: 24 }))
     const locLabel = document.createElement("span")
     locLabel.className = "text-xs"
     locLabel.textContent = "Enable location"
@@ -191,7 +191,7 @@ function renderTrigger(): void {
 
   if (currentState === "error") {
     trigger.innerHTML = ""
-    trigger.appendChild(icon("refresh"))
+    trigger.appendChild(icon("refresh", { size: 24 }))
     return
   }
 
