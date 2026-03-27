@@ -85,26 +85,28 @@ function openAddShortcutPopover(anchor: HTMLElement): void {
   }
 
   saveBtn.addEventListener("click", submit)
-  urlInput.addEventListener("keydown", (_e) => {
-    const e = _e as KeyboardEvent
-    if (e.key === "Enter") { e.preventDefault(); submit() }
-    if (e.key === "Escape") close()
+  urlInput.addEventListener("keydown", (e) => {
+    if ((e as KeyboardEvent).key === "Enter") { e.preventDefault(); submit() }
+    if ((e as KeyboardEvent).key === "Escape") close()
   })
-  nameInput.addEventListener("keydown", (_e) => {
-    const e = _e as KeyboardEvent
-    if (e.key === "Escape") close()
+  nameInput.addEventListener("keydown", (e) => {
+    if ((e as KeyboardEvent).key === "Escape") close()
   })
 
   requestAnimationFrame(() => (nameInput as HTMLInputElement).focus())
 }
 
-function openAddFolderPopover(anchor: HTMLElement): void {
+function openCreateFolderPopover(
+  anchor: HTMLElement,
+  onSave: (name: string) => void,
+  onCancel?: () => void
+): void {
   const container = document.createElement("div")
   container.className = "flex flex-col gap-2 min-w-[220px]"
 
   const title = document.createElement("span")
   title.className = "text-xs font-semibold text-foreground"
-  title.textContent = "Add Folder"
+  title.textContent = "Create Folder"
   container.appendChild(title)
 
   const nameInput = createInput({ placeholder: "Folder name", value: "New Folder" })
@@ -116,27 +118,34 @@ function openAddFolderPopover(anchor: HTMLElement): void {
   btnRow.appendChild(saveBtn)
   container.appendChild(btnRow)
 
-  const { close } = createPopover(anchor, container)
+  const { close } = createPopover(anchor, container, {
+    onClose: () => onCancel?.(),
+  })
 
   function submit() {
     const name = (nameInput as HTMLInputElement).value.trim()
     if (!name) return
-    const tabs = addFolder(getTabs(), selectedTabId!, name)
-    save(tabs)
+    onSave(name)
     close()
   }
 
   saveBtn.addEventListener("click", submit)
-  nameInput.addEventListener("keydown", (_e) => {
-    const e = _e as KeyboardEvent
-    if (e.key === "Enter") { e.preventDefault(); submit() }
-    if (e.key === "Escape") close()
+  nameInput.addEventListener("keydown", (e) => {
+    if ((e as KeyboardEvent).key === "Enter") { e.preventDefault(); submit() }
+    if ((e as KeyboardEvent).key === "Escape") { close() }
   })
 
   requestAnimationFrame(() => {
     const input = nameInput as HTMLInputElement
     input.focus()
     input.select()
+  })
+}
+
+function openAddFolderPopover(anchor: HTMLElement): void {
+  openCreateFolderPopover(anchor, (name) => {
+    const tabs = addFolder(getTabs(), selectedTabId!, name)
+    save(tabs)
   })
 }
 
@@ -188,15 +197,13 @@ function openEditPopover(anchor: HTMLElement, item: TabItem | Shortcut, inFolder
 
   const lastInput = urlInput ?? nameInput
   saveBtn.addEventListener("click", submit)
-  lastInput.addEventListener("keydown", (_e) => {
-    const e = _e as KeyboardEvent
-    if (e.key === "Enter") { e.preventDefault(); submit() }
-    if (e.key === "Escape") close()
+  lastInput.addEventListener("keydown", (e) => {
+    if ((e as KeyboardEvent).key === "Enter") { e.preventDefault(); submit() }
+    if ((e as KeyboardEvent).key === "Escape") close()
   })
   if (urlInput) {
-    nameInput.addEventListener("keydown", (_e) => {
-      const e = _e as KeyboardEvent
-      if (e.key === "Escape") close()
+    nameInput.addEventListener("keydown", (e) => {
+      if ((e as KeyboardEvent).key === "Escape") close()
     })
   }
 
@@ -215,7 +222,7 @@ function renderTabBar(): void {
     pill.className = `relative flex items-center gap-1.5 px-3 py-1.5 rounded-theme text-sm cursor-pointer transition-colors group ${
       isActive
         ? "bg-accent text-accent-foreground"
-        : "bg-surface text-foreground hover:bg-surface"
+        : "bg-surface text-foreground hover:bg-accent/10"
     }`
 
     if (selectionMode) {
@@ -291,7 +298,7 @@ function renderTabBar(): void {
   }
 
   if (tabs.length < MAX_TABS && !selectionMode) {
-    const addBtn = createButton("", "ghost", { icon: icon("plus", { size: 12 }) })
+    const addBtn = createButton("", "override", { icon: icon("plus", { size: 12 }) })
     addBtn.className = "w-8 h-8 flex items-center justify-center rounded-theme border border-dashed border-input-border text-muted hover:text-foreground hover:border-accent transition-colors"
     addBtn.addEventListener("click", () => {
       const tabs = addTab(getTabs(), `Tab ${getTabs().length + 1}`)
@@ -379,7 +386,7 @@ function createRow(
   row.appendChild(label)
 
   if (!selectionMode) {
-    const editBtn = createButton("", "ghost", { icon: icon("edit", { size: 12 }) })
+    const editBtn = createButton("", "override", { icon: icon("edit", { size: 12 }) })
     editBtn.className = "shrink-0 w-6 h-6 flex items-center justify-center rounded-theme text-muted hover:text-foreground hover:bg-surface transition-colors opacity-0 group-hover:opacity-100"
     editBtn.addEventListener("click", (e) => {
       e.stopPropagation()
@@ -387,7 +394,7 @@ function createRow(
     })
     row.appendChild(editBtn)
 
-    const delBtn = createButton("", "ghost", { icon: icon("trash", { size: 12 }) })
+    const delBtn = createButton("", "override", { icon: icon("trash", { size: 12 }) })
     delBtn.className = "shrink-0 w-6 h-6 flex items-center justify-center rounded-theme text-muted hover:text-danger hover:bg-danger/10 transition-colors opacity-0 group-hover:opacity-100"
     delBtn.addEventListener("click", (e) => {
       e.stopPropagation()
@@ -529,7 +536,7 @@ function renderControlBar(): void {
   right.className = "flex items-center gap-2"
 
   if (viewingFolderId) {
-    const backBtn = createButton("", "ghost", { icon: icon("chevronLeft", { size: 14 }) })
+    const backBtn = createButton("", "override", { icon: icon("chevronLeft", { size: 14 }) })
     backBtn.className = "w-8 h-8 flex items-center justify-center rounded-theme text-muted hover:text-foreground hover:bg-surface transition-colors"
     if (selectionMode) {
       backBtn.disabled = true
@@ -743,7 +750,7 @@ function initDragAndDrop(
     }
   })
 
-  list.addEventListener("drop", async (e: DragEvent) => {
+  list.addEventListener("drop", (e: DragEvent) => {
     e.preventDefault()
     if (dragIndex === null) return
 
@@ -791,28 +798,7 @@ function initDragAndDrop(
         )
         save(tabs)
       } else if (targetType === "shortcut") {
-        const container = document.createElement("div")
-        container.className = "flex flex-col gap-2 min-w-[220px]"
-
-        const title = document.createElement("span")
-        title.className = "text-xs font-semibold text-foreground"
-        title.textContent = "Create Folder"
-        container.appendChild(title)
-
-        const nameInput = createInput({ placeholder: "Folder name", value: "New Folder" })
-        container.appendChild(nameInput)
-
-        const btnRow = document.createElement("div")
-        btnRow.className = "flex justify-end"
-        const saveBtn = createButton("Save", "primary")
-        btnRow.appendChild(saveBtn)
-        container.appendChild(btnRow)
-
-        const { close } = createPopover(row, container)
-
-        function doMerge() {
-          const name = (nameInput as HTMLInputElement).value.trim()
-          if (!name) return
+        openCreateFolderPopover(row, (name) => {
           tabs = mergeShortcutsIntoNewFolder(
             tabs,
             selectedTabId!,
@@ -821,25 +807,8 @@ function initDragAndDrop(
             name
           )
           save(tabs)
-          close()
-        }
-
-        function doCancel() {
+        }, () => {
           if (preDropSnapshot) save(preDropSnapshot)
-          close()
-        }
-
-        saveBtn.addEventListener("click", doMerge)
-        nameInput.addEventListener("keydown", (_ev) => {
-          const ev = _ev as KeyboardEvent
-          if (ev.key === "Enter") { ev.preventDefault(); doMerge() }
-          if (ev.key === "Escape") doCancel()
-        })
-
-        requestAnimationFrame(() => {
-          const input = nameInput as HTMLInputElement
-          input.focus()
-          input.select()
         })
       }
     } else {
