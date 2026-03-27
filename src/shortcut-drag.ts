@@ -156,6 +156,34 @@ function onItemPointerDown(e: PointerEvent): void {
 }
 
 function onTabPointerDown(e: PointerEvent): void {
+  if (e.button !== 0) return
+  if (cb.getSelectionMode()) return
+
+  const pill = (e.target as HTMLElement).closest("[data-tab-id]") as HTMLElement | null
+  if (!pill) return
+
+  if ((e.target as HTMLElement).closest("input") || (e.target as HTMLElement).closest("button")) return
+
+  const tabId = pill.dataset.tabId!
+  const tabs = cb.getTabs()
+  const index = tabs.findIndex((t) => t.id === tabId)
+  if (index === -1) return
+
+  ctx = {
+    mode: "tab",
+    sourceTabId: tabId,
+    sourceIndex: index,
+    clone: null!,
+    offsetX: e.clientX - pill.getBoundingClientRect().left,
+    offsetY: e.clientY - pill.getBoundingClientRect().top,
+  }
+
+  state = "pending"
+  pendingStart = { x: e.clientX, y: e.clientY }
+
+  e.preventDefault()
+  document.addEventListener("pointermove", onPointerMove)
+  document.addEventListener("pointerup", onPointerUp)
 }
 
 function onPointerMove(e: PointerEvent): void {
@@ -561,6 +589,193 @@ function showTabHighlight(tabId: string): void {
   pill.classList.add("ring-2", "ring-accent/50")
 }
 
-function updateTabDrag(e: PointerEvent): void {}
+function updateTabDrag(e: PointerEvent): void {
+  if (!ctx || ctx.mode !== "tab") return
 
-function processDrop(e: PointerEvent): void {}
+  tabIndicator.style.display = "none"
+  tabBarEl.querySelectorAll("[data-tab-id]").forEach((el) => el.classList.remove("opacity-50"))
+  const sourcePill = tabBarEl.querySelector(`[data-tab-id="${ctx.sourceTabId}"]`)
+  sourcePill?.classList.add("opacity-50")
+
+  const el = document.elementFromPoint(e.clientX, e.clientY)
+  if (!el) return
+  const pill = el.closest("[data-tab-id]") as HTMLElement | null
+  if (!pill || !tabBarEl.contains(pill)) return
+  if (pill.dataset.tabId === ctx.sourceTabId) return
+
+  const rect = pill.getBoundingClientRect()
+  const midX = rect.left + rect.width / 2
+  const insertLeft = e.clientX < midX
+
+  tabIndicator.style.display = ""
+  tabIndicator.style.left = `${insertLeft ? rect.left - 1 : rect.right - 1}px`
+  tabIndicator.style.top = `${rect.top}px`
+  tabIndicator.style.height = `${rect.height}px`
+}
+
+function processDrop(e: PointerEvent): void {
+  if (!ctx) return
+
+  if (ctx.mode === "tab") {
+    processTabDrop(e)
+    return
+  }
+
+  const zone = resolveDropZone(e.clientX, e.clientY)
+
+  if (ctx.isSelectionDrag) {
+    processSelectionDrop(zone)
+    return
+  }
+
+  processNormalDrop(zone)
+}
+
+function processNormalDrop(zone: DropZone): void {
+  if (!ctx || ctx.mode !== "item") return
+  const currentTabId = cb.getSelectedTabId()
+  if (!currentTabId) return
+
+  let tabs = ctx.snapshot
+
+  switch (zone.type) {
+    case "reorder": {
+      const sameTab = currentTabId === ctx.sourceTabId
+      const sameLocation =
+        (zone.location === "folder" && ctx.sourceFolderId !== null) ||
+        (zone.location === "top-level" && ctx.sourceFolderId === null)
+
+      if (sameTab && sameLocation) {
+        const sourceIndex = Number(
+          itemListEl.querySelector(`[data-id="${ctx.sourceItemId}"]`)?.getAttribute("data-index") ?? 0
+        )
+        if (zone.location === "folder") {
+          const folderId = cb.getViewingFolderId()
+          if (folderId) {
+            tabs = reorderFolderChildren(tabs, ctx.sourceTabId, folderId, sourceIndex, zone.index)
+          }
+        } else {
+          tabs = reorderItems(tabs, ctx.sourceTabId, sourceIndex, zone.index)
+        }
+      } else {
+        let item: TabItem
+        ;[tabs, item] = extractItem(tabs, ctx.sourceTabId, ctx.sourceItemId)
+        if (zone.location === "folder") {
+          const folderId = cb.getViewingFolderId()
+          if (folderId && item.type === "shortcut") {
+            tabs = insertIntoFolder(tabs, currentTabId, folderId, item, zone.index)
+          }
+        } else {
+          tabs = insertItem(tabs, currentTabId, item, zone.index)
+        }
+      }
+      cb.save(tabs)
+      break
+    }
+
+    case "into-folder": {
+      if (zone.blocked) break
+      const row = itemListEl.querySelector(`[data-id="${zone.folderId}"]`)
+      const targetType = row?.getAttribute("data-type")
+
+      if (targetType === "folder") {
+        let item: TabItem
+        ;[tabs, item] = extractItem(tabs, ctx.sourceTabId, ctx.sourceItemId)
+        if (item.type === "shortcut") {
+          tabs = insertIntoFolder(tabs, currentTabId, zone.folderId, item, 0)
+        }
+        cb.save(tabs)
+      }
+      break
+    }
+
+    case "merge-shortcut": {
+      const anchor = itemListEl.querySelector(`[data-id="${zone.targetId}"]`) as HTMLElement
+      if (!anchor) break
+      const snapshot = ctx.snapshot
+      const sourceId = ctx.sourceItemId
+      const targetId = zone.targetId
+      const tabId = currentTabId
+      cb.openCreateFolderPopover(
+        anchor,
+        (name) => {
+          const merged = mergeShortcutsIntoNewFolder(snapshot, tabId, targetId, sourceId, name)
+          cb.save(merged)
+        },
+        () => {
+          cb.save(snapshot)
+        }
+      )
+      break
+    }
+  }
+}
+
+function processSelectionDrop(zone: DropZone): void {
+  if (!ctx || ctx.mode !== "item") return
+  const currentTabId = cb.getSelectedTabId()
+  if (!currentTabId) return
+
+  let tabs = ctx.snapshot
+  const ids = [...ctx.draggedIds]
+
+  switch (zone.type) {
+    case "tab": {
+      const extracted: TabItem[] = []
+      for (const id of ids) {
+        let item: TabItem
+        ;[tabs, item] = extractItem(tabs, ctx.sourceTabId, id)
+        extracted.push(item)
+      }
+      for (let i = 0; i < extracted.length; i++) {
+        tabs = insertItem(tabs, zone.tabId, extracted[i], i)
+      }
+      cb.save(tabs)
+      cb.setSelectedTabId(zone.tabId)
+      cb.setViewingFolderId(null)
+      break
+    }
+
+    case "into-folder": {
+      if (zone.blocked) break
+      const extracted: Shortcut[] = []
+      for (const id of ids) {
+        let item: TabItem
+        ;[tabs, item] = extractItem(tabs, ctx.sourceTabId, id)
+        if (item.type === "shortcut") extracted.push(item)
+      }
+      for (let i = 0; i < extracted.length; i++) {
+        tabs = insertIntoFolder(tabs, currentTabId, zone.folderId, extracted[i], i)
+      }
+      cb.save(tabs)
+      break
+    }
+  }
+
+  cb.exitSelectionMode()
+  cb.render()
+}
+
+function processTabDrop(e: PointerEvent): void {
+  if (!ctx || ctx.mode !== "tab") return
+
+  const el = document.elementFromPoint(e.clientX, e.clientY)
+  if (!el) return
+  const pill = el.closest("[data-tab-id]") as HTMLElement | null
+  if (!pill || !tabBarEl.contains(pill)) return
+
+  const targetTabId = pill.dataset.tabId!
+  if (targetTabId === ctx.sourceTabId) return
+
+  const tabs = cb.getTabs()
+  const toIndex = tabs.findIndex((t) => t.id === targetTabId)
+  if (toIndex === -1) return
+
+  const rect = pill.getBoundingClientRect()
+  const midX = rect.left + rect.width / 2
+  const insertBefore = e.clientX < midX
+  const finalIndex = insertBefore ? toIndex : toIndex + 1
+
+  const updated = reorderTabs(tabs, ctx.sourceIndex, finalIndex > ctx.sourceIndex ? finalIndex - 1 : finalIndex)
+  cb.save(updated)
+}
