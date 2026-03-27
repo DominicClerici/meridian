@@ -41,19 +41,6 @@ function render(): void {
   renderControlBar()
 }
 
-export function getSelectedTabId(): string | null { return selectedTabId }
-export function getViewingFolderId(): string | null { return viewingFolderId }
-export function getSelectionMode(): boolean { return selectionMode }
-export function getSelectedIds(): Set<string> { return selectedIds }
-
-export function setSelectedTabId(id: string | null): void { selectedTabId = id }
-export function setViewingFolderId(id: string | null): void { viewingFolderId = id }
-
-export function exitSelectionMode(): void {
-  selectionMode = false
-  selectedIds.clear()
-}
-
 function openAddShortcutPopover(anchor: HTMLElement): void {
   const container = document.createElement("div")
   container.className = "flex flex-col gap-2 min-w-[220px]"

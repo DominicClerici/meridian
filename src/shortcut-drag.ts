@@ -730,9 +730,10 @@ function processSelectionDrop(zone: DropZone): void {
       for (let i = 0; i < extracted.length; i++) {
         tabs = insertItem(tabs, zone.tabId, extracted[i], i)
       }
-      cb.save(tabs)
       cb.setSelectedTabId(zone.tabId)
       cb.setViewingFolderId(null)
+      cb.exitSelectionMode()
+      cb.save(tabs)
       break
     }
 
@@ -747,13 +748,11 @@ function processSelectionDrop(zone: DropZone): void {
       for (let i = 0; i < extracted.length; i++) {
         tabs = insertIntoFolder(tabs, currentTabId, zone.folderId, extracted[i], i)
       }
+      cb.exitSelectionMode()
       cb.save(tabs)
       break
     }
   }
-
-  cb.exitSelectionMode()
-  cb.render()
 }
 
 function processTabDrop(e: PointerEvent): void {
