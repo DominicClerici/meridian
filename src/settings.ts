@@ -600,50 +600,26 @@ function buildNav(): { refreshIndicator: () => void } {
 function buildShortcutsPanel(): HTMLDivElement {
   const panel = document.createElement("div")
   panel.dataset.settingsTab = "shortcuts"
-  panel.className = "settings-panel px-6 pb-6"
+  panel.className = "settings-panel flex flex-col h-full"
   panel.hidden = true
 
-  const controls = document.createElement("div")
-  controls.id = "sc-controls"
-  controls.className = "flex gap-2 mb-3 flex-wrap items-center"
+  const tabBar = document.createElement("div")
+  tabBar.id = "sc-tab-bar"
+  tabBar.className = "flex items-center gap-1.5 px-6 pt-4 pb-3 shrink-0"
+  panel.appendChild(tabBar)
 
-  const tabSelect = document.createElement("select")
-  tabSelect.id = "sc-tab-select"
-  tabSelect.className = "text-sm rounded px-2 py-1 border border-input-border bg-input"
-  controls.appendChild(tabSelect)
+  const itemList = document.createElement("div")
+  itemList.id = "sc-item-list"
+  itemList.className = "flex-1 overflow-y-auto px-6"
+  panel.appendChild(itemList)
 
-  const scBtn = (id: string, text: string, cls: string, hidden = false) => {
-    const b = document.createElement("button")
-    b.id = id
-    b.className = `text-xs px-2 py-1 rounded ${cls}`
-    b.textContent = text
-    if (hidden) b.hidden = true
-    controls.appendChild(b)
-  }
-
-  scBtn("sc-add-tab", "Add Tab", "bg-accent text-accent-foreground hover:bg-accent-hover")
-  scBtn("sc-delete-tab", "Delete Tab", "bg-danger text-danger-foreground hover:bg-danger-hover", true)
-  scBtn("sc-add-shortcut", "Add Shortcut", "bg-success text-success-foreground hover:bg-success-hover", true)
-  scBtn("sc-add-folder", "Add Folder", "bg-warning text-warning-foreground hover:bg-warning-hover", true)
-  scBtn("sc-back", "Back", "bg-neutral text-neutral-foreground hover:bg-neutral-hover", true)
-
-  panel.appendChild(controls)
-
-  const importBtn = document.createElement("button")
-  importBtn.id = "sc-import-history"
-  importBtn.type = "button"
-  importBtn.className = "text-xs px-2 py-1 rounded bg-special text-special-foreground hover:bg-special-hover mb-3"
-  importBtn.textContent = "Import from History"
-  importBtn.hidden = true
-  panel.appendChild(importBtn)
-
-  const list = document.createElement("div")
-  list.id = "sc-list"
-  list.className = "flex flex-col gap-1 max-h-[320px] overflow-y-auto"
-  panel.appendChild(list)
+  const controlBar = document.createElement("div")
+  controlBar.id = "sc-control-bar"
+  controlBar.className = "flex items-center justify-between px-6 py-3 shrink-0 border-t border-input-border/15"
+  panel.appendChild(controlBar)
 
   const recsRow = document.createElement("div")
-  recsRow.className = "flex items-center gap-2 mt-4 pt-3 border-t border-input-border/15"
+  recsRow.className = "flex items-center gap-2 px-6 pb-4 pt-1 border-t border-input-border/15"
 
   const recsInput = document.createElement("input")
   recsInput.type = "checkbox"
@@ -658,6 +634,7 @@ function buildShortcutsPanel(): HTMLDivElement {
   recsRow.appendChild(recsLabel)
 
   panel.appendChild(recsRow)
+
   return panel
 }
 
