@@ -45,7 +45,6 @@ function render(): void {
   renderControlBar()
 }
 
-// ---------- Popover Forms ----------
 
 function openAddShortcutPopover(anchor: HTMLElement): void {
   const container = document.createElement("div")
@@ -210,7 +209,6 @@ function openEditPopover(anchor: HTMLElement, item: TabItem | Shortcut, inFolder
   requestAnimationFrame(() => (nameInput as HTMLInputElement).focus())
 }
 
-// ---------- Tab Bar ----------
 
 function renderTabBar(): void {
   tabBarEl.innerHTML = ""
@@ -301,7 +299,8 @@ function renderTabBar(): void {
     const addBtn = createButton("", "override", { icon: icon("plus", { size: 12 }) })
     addBtn.className = "w-8 h-8 flex items-center justify-center rounded-theme border border-dashed border-input-border text-muted hover:text-foreground hover:border-accent transition-colors"
     addBtn.addEventListener("click", () => {
-      const tabs = addTab(getTabs(), `Tab ${getTabs().length + 1}`)
+      const currentTabs = getTabs()
+      const tabs = addTab(currentTabs, `Tab ${currentTabs.length + 1}`)
       save(tabs)
       selectedTabId = tabs[tabs.length - 1].id
       viewingFolderId = null
@@ -321,7 +320,6 @@ function renderTabBar(): void {
   }
 }
 
-// ---------- Item List ----------
 
 function createRow(
   item: TabItem | Shortcut,
@@ -524,7 +522,6 @@ function renderItemList(): void {
   }
 }
 
-// ---------- Control Bar ----------
 
 function renderControlBar(): void {
   controlBarEl.innerHTML = ""
@@ -540,7 +537,7 @@ function renderControlBar(): void {
     backBtn.className = "w-8 h-8 flex items-center justify-center rounded-theme text-muted hover:text-foreground hover:bg-surface transition-colors"
     if (selectionMode) {
       backBtn.disabled = true
-      backBtn.style.opacity = "0.4"
+      backBtn.style.opacity = "0.5"
     } else {
       backBtn.addEventListener("click", () => {
         viewingFolderId = null
@@ -617,10 +614,9 @@ function renderControlBar(): void {
   controlBarEl.appendChild(right)
 }
 
-// ---------- Delete Confirmation ----------
 
 function openDeleteConfirmation(): void {
-  const { dialog, body, close } = createDialog()
+  const { dialog, body, open, close } = createDialog()
 
   body.className = "p-6 min-w-[300px] flex flex-col gap-4"
 
@@ -656,10 +652,9 @@ function openDeleteConfirmation(): void {
 
   body.appendChild(btnRow)
 
-  dialog.showModal()
+  open()
 }
 
-// ---------- Drag and Drop ----------
 
 function initDragAndDrop(
   list: HTMLElement,
@@ -818,7 +813,6 @@ function initDragAndDrop(
   })
 }
 
-// ---------- Sync from Store ----------
 
 function syncFromStore(): void {
   const tabs = getTabs()
@@ -838,7 +832,6 @@ function syncFromStore(): void {
   render()
 }
 
-// ---------- Init ----------
 
 export function initShortcutSettings(): void {
   tabBarEl = document.getElementById("sc-tab-bar")!
