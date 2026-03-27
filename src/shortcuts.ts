@@ -299,3 +299,68 @@ export function deleteItems(
     }
   })
 }
+
+export function reorderTabs(tabs: Tab[], fromIndex: number, toIndex: number): Tab[] {
+  const result = [...tabs]
+  const [moved] = result.splice(fromIndex, 1)
+  result.splice(toIndex, 0, moved)
+  return result
+}
+
+export function extractItem(tabs: Tab[], tabId: string, itemId: string): [Tab[], TabItem] {
+  let extracted: TabItem | null = null
+  const updated = tabs.map((t) => {
+    if (t.id !== tabId) return t
+    const topIdx = t.items.findIndex((i) => i.id === itemId)
+    if (topIdx !== -1) {
+      extracted = t.items[topIdx]
+      return { ...t, items: t.items.filter((i) => i.id !== itemId) }
+    }
+    let found = false
+    const items = t.items.map((i) => {
+      if (i.type !== "folder" || found) return i
+      const childIdx = i.children.findIndex((c) => c.id === itemId)
+      if (childIdx === -1) return i
+      extracted = i.children[childIdx]
+      found = true
+      return { ...i, children: i.children.filter((c) => c.id !== itemId) }
+    })
+    return found ? { ...t, items } : t
+  })
+  return [updated, extracted!]
+}
+
+export function insertItem(
+  tabs: Tab[],
+  tabId: string,
+  item: TabItem,
+  index: number
+): Tab[] {
+  return tabs.map((t) => {
+    if (t.id !== tabId || t.items.length >= MAX_ITEMS_PER_TAB) return t
+    const items = [...t.items]
+    items.splice(Math.min(index, items.length), 0, item)
+    return { ...t, items }
+  })
+}
+
+export function insertIntoFolder(
+  tabs: Tab[],
+  tabId: string,
+  folderId: string,
+  shortcut: Shortcut,
+  index: number
+): Tab[] {
+  return tabs.map((t) => {
+    if (t.id !== tabId) return t
+    return {
+      ...t,
+      items: t.items.map((i) => {
+        if (i.id !== folderId || i.type !== "folder" || i.children.length >= MAX_CHILDREN_PER_FOLDER) return i
+        const children = [...i.children]
+        children.splice(Math.min(index, children.length), 0, shortcut)
+        return { ...i, children }
+      }),
+    }
+  })
+}
