@@ -20,7 +20,7 @@ export type Tab = {
   items: TabItem[]
 }
 
-export const MAX_TABS = 10
+export const MAX_TABS = 6
 export const MAX_ITEMS_PER_TAB = 256
 export const MAX_CHILDREN_PER_FOLDER = 64
 
@@ -274,5 +274,28 @@ export function mergeShortcutsIntoNewFolder(
       .filter((i) => i.id !== draggedId)
       .map((i) => (i.id === targetId ? folder : i))
     return { ...t, items: items as TabItem[] }
+  })
+}
+
+export function deleteItems(
+  tabs: Tab[],
+  tabId: string,
+  itemIds: string[]
+): Tab[] {
+  const idSet = new Set(itemIds)
+  return tabs.map((t) => {
+    if (t.id !== tabId) return t
+    return {
+      ...t,
+      items: t.items
+        .filter((i) => !idSet.has(i.id))
+        .map((i) => {
+          if (i.type !== "folder") return i
+          return {
+            ...i,
+            children: i.children.filter((c) => !idSet.has(c.id)),
+          }
+        }),
+    }
   })
 }
