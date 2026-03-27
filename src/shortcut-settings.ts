@@ -1,5 +1,6 @@
 import { store } from "./store"
 import type { Tab, TabItem, Folder, Shortcut } from "./shortcuts"
+import { initDrag } from "./shortcut-drag"
 import {
   addTab,
   deleteTab,
@@ -12,12 +13,7 @@ import {
   addShortcutToFolder,
   deleteShortcutFromFolder,
   editShortcutInFolder,
-  reorderItems,
-  reorderFolderChildren,
-  moveShortcutIntoFolder,
-  mergeShortcutsIntoNewFolder,
   MAX_TABS,
-  MAX_CHILDREN_PER_FOLDER,
 } from "./shortcuts"
 import { createButton, createInput, createCheckbox, createPopover, createDialog } from "./components"
 import { icon } from "./icons/registry"
@@ -45,6 +41,18 @@ function render(): void {
   renderControlBar()
 }
 
+export function getSelectedTabId(): string | null { return selectedTabId }
+export function getViewingFolderId(): string | null { return viewingFolderId }
+export function getSelectionMode(): boolean { return selectionMode }
+export function getSelectedIds(): Set<string> { return selectedIds }
+
+export function setSelectedTabId(id: string | null): void { selectedTabId = id }
+export function setViewingFolderId(id: string | null): void { viewingFolderId = id }
+
+export function exitSelectionMode(): void {
+  selectionMode = false
+  selectedIds.clear()
+}
 
 function openAddShortcutPopover(anchor: HTMLElement): void {
   const container = document.createElement("div")
@@ -222,10 +230,10 @@ function renderTabBar(): void {
         ? "bg-accent text-accent-foreground"
         : "bg-surface text-foreground hover:bg-accent/10"
     }`
+    pill.dataset.tabId = tab.id
 
     if (selectionMode) {
       pill.style.opacity = "0.4"
-      pill.style.pointerEvents = "none"
     }
 
     const tabIcon = icon("tab", { size: 12 })
@@ -336,14 +344,11 @@ function createRow(
   row.dataset.id = item.id
   row.dataset.type = item.type
 
-  if (!selectionMode) {
-    row.draggable = true
-
-    const handle = document.createElement("span")
-    handle.className = "cursor-grab text-muted shrink-0"
-    handle.appendChild(icon("dragHandle", { size: 10 }))
-    row.appendChild(handle)
-  }
+  const handle = document.createElement("span")
+  handle.dataset.dragHandle = ""
+  handle.className = "cursor-grab text-muted shrink-0"
+  handle.appendChild(icon("dragHandle", { size: 10 }))
+  row.appendChild(handle)
 
   if (selectionMode) {
     const cb = createCheckbox("", selectedIds.has(item.id), (checked) => {
@@ -437,6 +442,7 @@ function renderItemList(): void {
   if (!inFolder) {
     const list = document.createElement("div")
     list.className = "grid grid-cols-3 gap-1"
+    list.dataset.zone = "top-level"
 
     if (tab.items.length === 0) {
       const empty = document.createElement("div")
@@ -463,13 +469,13 @@ function renderItemList(): void {
     }
 
     itemListEl.appendChild(list)
-    if (!selectionMode) initDragAndDrop(list, false, null)
   } else {
     const grid = document.createElement("div")
     grid.className = "grid grid-cols-3 gap-3 h-full"
 
     const leftCol = document.createElement("div")
     leftCol.className = "col-span-1 flex flex-col gap-0.5 overflow-y-auto"
+    leftCol.dataset.zone = "top-level"
 
     for (let i = 0; i < tab.items.length; i++) {
       const item = tab.items[i]
@@ -497,6 +503,8 @@ function renderItemList(): void {
 
     const rightCol = document.createElement("div")
     rightCol.className = "col-span-2 flex flex-col gap-0.5 overflow-y-auto border-l border-input-border/20 pl-3"
+    rightCol.dataset.zone = "folder"
+    rightCol.dataset.folderId = viewingFolderId!
 
     if (folder!.children.length === 0) {
       const empty = document.createElement("div")
@@ -514,11 +522,6 @@ function renderItemList(): void {
     grid.appendChild(leftCol)
     grid.appendChild(rightCol)
     itemListEl.appendChild(grid)
-
-    if (!selectionMode) {
-      initDragAndDrop(leftCol, false, null)
-      initDragAndDrop(rightCol, true, folder!)
-    }
   }
 }
 
@@ -656,164 +659,6 @@ function openDeleteConfirmation(): void {
 }
 
 
-function initDragAndDrop(
-  list: HTMLElement,
-  inFolder: boolean,
-  folder: Folder | null
-): void {
-  let dragIndex: number | null = null
-  let dragType: string | null = null
-  let preDropSnapshot: Tab[] | null = null
-
-  list.addEventListener("dragstart", (e: DragEvent) => {
-    const row = (e.target as HTMLElement).closest("[data-index]") as HTMLElement
-    if (!row) return
-    dragIndex = Number(row.dataset.index)
-    dragType = row.dataset.type ?? null
-    preDropSnapshot = getTabs()
-    row.classList.add("opacity-50")
-    e.dataTransfer!.effectAllowed = "move"
-  })
-
-  list.addEventListener("dragend", (e: DragEvent) => {
-    const row = (e.target as HTMLElement).closest("[data-index]") as HTMLElement
-    if (row) row.classList.remove("opacity-50")
-    dragIndex = null
-    dragType = null
-    preDropSnapshot = null
-    list
-      .querySelectorAll("[data-index]")
-      .forEach((el) =>
-        el.classList.remove(
-          "border-t-2",
-          "border-accent",
-          "bg-accent/20",
-          "bg-warning/20",
-          "bg-danger/30"
-        )
-      )
-  })
-
-  list.addEventListener("dragover", (e: DragEvent) => {
-    e.preventDefault()
-    e.dataTransfer!.dropEffect = "move"
-    const row = (e.target as HTMLElement).closest("[data-index]") as HTMLElement
-    if (!row) return
-
-    list
-      .querySelectorAll("[data-index]")
-      .forEach((el) =>
-        el.classList.remove(
-          "border-t-2",
-          "border-accent",
-          "bg-accent/20",
-          "bg-warning/20",
-          "bg-danger/30"
-        )
-      )
-
-    const targetIndex = Number(row.dataset.index)
-    const targetType = row.dataset.type
-
-    if (dragType === "folder" || inFolder) {
-      row.classList.add("border-t-2", "border-accent")
-      return
-    }
-
-    const rect = row.getBoundingClientRect()
-    const midY = rect.top + rect.height / 2
-    const overCenter = Math.abs(e.clientY - midY) < rect.height * 0.25
-
-    if (overCenter && targetIndex !== dragIndex) {
-      if (targetType === "folder") {
-        const tabs = getTabs()
-        const tab = tabs.find((t) => t.id === selectedTabId)
-        const targetFolder = tab?.items[targetIndex] as Folder | undefined
-        if (
-          targetFolder &&
-          targetFolder.children.length >= MAX_CHILDREN_PER_FOLDER
-        ) {
-          row.classList.add("bg-danger/30")
-        } else {
-          row.classList.add("bg-accent/20")
-        }
-      } else if (targetType === "shortcut") {
-        row.classList.add("bg-warning/20")
-      }
-    } else {
-      row.classList.add("border-t-2", "border-accent")
-    }
-  })
-
-  list.addEventListener("drop", (e: DragEvent) => {
-    e.preventDefault()
-    if (dragIndex === null) return
-
-    const row = (e.target as HTMLElement).closest("[data-index]") as HTMLElement
-    if (!row) return
-
-    const targetIndex = Number(row.dataset.index)
-    const targetType = row.dataset.type
-    const targetId = row.dataset.id!
-    let tabs = getTabs()
-    const tab = tabs.find((t) => t.id === selectedTabId)
-    if (!tab) return
-
-    const draggedItem = (inFolder ? folder!.children : tab.items)[dragIndex]
-
-    if (dragType === "folder" || inFolder) {
-      if (inFolder && folder) {
-        tabs = reorderFolderChildren(
-          tabs,
-          selectedTabId!,
-          folder.id,
-          dragIndex,
-          targetIndex
-        )
-      } else {
-        tabs = reorderItems(tabs, selectedTabId!, dragIndex, targetIndex)
-      }
-      save(tabs)
-      return
-    }
-
-    const rect = row.getBoundingClientRect()
-    const midY = rect.top + rect.height / 2
-    const overCenter = Math.abs(e.clientY - midY) < rect.height * 0.25
-
-    if (overCenter && targetIndex !== dragIndex) {
-      if (targetType === "folder") {
-        const targetFolder = tab.items[targetIndex] as Folder
-        if (targetFolder.children.length >= MAX_CHILDREN_PER_FOLDER) return
-        tabs = moveShortcutIntoFolder(
-          tabs,
-          selectedTabId!,
-          draggedItem.id,
-          targetId
-        )
-        save(tabs)
-      } else if (targetType === "shortcut") {
-        openCreateFolderPopover(row, (name) => {
-          tabs = mergeShortcutsIntoNewFolder(
-            tabs,
-            selectedTabId!,
-            targetId,
-            draggedItem.id,
-            name
-          )
-          save(tabs)
-        }, () => {
-          if (preDropSnapshot) save(preDropSnapshot)
-        })
-      }
-    } else {
-      tabs = reorderItems(tabs, selectedTabId!, dragIndex, targetIndex)
-      save(tabs)
-    }
-  })
-}
-
-
 function syncFromStore(): void {
   const tabs = getTabs()
   if (selectedTabId && !tabs.find((t) => t.id === selectedTabId)) {
@@ -845,4 +690,18 @@ export function initShortcutSettings(): void {
 
   render()
   store.local.subscribe("shortcuts", syncFromStore)
+
+  initDrag(tabBarEl, itemListEl, {
+    getTabs,
+    save,
+    render,
+    getSelectedTabId: () => selectedTabId,
+    getViewingFolderId: () => viewingFolderId,
+    getSelectionMode: () => selectionMode,
+    getSelectedIds: () => selectedIds,
+    setSelectedTabId: (id) => { selectedTabId = id },
+    setViewingFolderId: (id) => { viewingFolderId = id },
+    exitSelectionMode: () => { selectionMode = false; selectedIds.clear() },
+    openCreateFolderPopover,
+  })
 }
