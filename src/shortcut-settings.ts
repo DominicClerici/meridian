@@ -6,6 +6,7 @@ import {
   addShortcut,
   addFolder,
   deleteItem,
+  deleteItems,
   editShortcut,
   editFolder,
   addShortcutToFolder,
@@ -18,9 +19,17 @@ import {
   MAX_TABS,
   MAX_CHILDREN_PER_FOLDER,
 } from "./shortcuts"
+import { createButton, createInput, createCheckbox, createPopover, createDialog } from "./components"
+import { icon } from "./icons/registry"
 
 let selectedTabId: string | null = null
 let viewingFolderId: string | null = null
+let selectionMode = false
+let selectedIds = new Set<string>()
+
+let tabBarEl: HTMLElement
+let itemListEl: HTMLElement
+let controlBarEl: HTMLElement
 
 function getTabs(): Tab[] {
   return store.local.get("shortcuts")
@@ -30,230 +39,620 @@ function save(tabs: Tab[]): void {
   store.local.set("shortcuts", tabs)
 }
 
-function prompt(
-  title: string,
-  fields: { name?: string; url?: string; showUrl?: boolean }
-): Promise<{ name: string; url: string } | null> {
-  return new Promise((resolve) => {
-    const dialog = document.getElementById(
-      "sc-prompt-dialog"
-    ) as HTMLDialogElement
-    const titleEl = document.getElementById(
-      "sc-prompt-title"
-    ) as HTMLHeadingElement
-    const nameInput = document.getElementById(
-      "sc-prompt-name"
-    ) as HTMLInputElement
-    const urlInput = document.getElementById(
-      "sc-prompt-url"
-    ) as HTMLInputElement
-    const cancelBtn = document.getElementById(
-      "sc-prompt-cancel"
-    ) as HTMLButtonElement
-    const form = dialog.querySelector("form") as HTMLFormElement
+function render(): void {
+  renderTabBar()
+  renderItemList()
+  renderControlBar()
+}
 
-    titleEl.textContent = title
-    nameInput.value = fields.name ?? ""
-    urlInput.value = fields.url ?? ""
-    urlInput.hidden = !fields.showUrl
-    urlInput.required = !!fields.showUrl
+// ---------- Popover Forms ----------
 
-    let resolved = false
+function openAddShortcutPopover(anchor: HTMLElement): void {
+  const container = document.createElement("div")
+  container.className = "flex flex-col gap-2 min-w-[220px]"
 
-    function cleanup() {
-      form.removeEventListener("submit", onSubmit)
-      cancelBtn.removeEventListener("click", onCancel)
-      dialog.removeEventListener("close", onClose)
+  const title = document.createElement("span")
+  title.className = "text-xs font-semibold text-foreground"
+  title.textContent = "Add Shortcut"
+  container.appendChild(title)
+
+  const nameInput = createInput({ placeholder: "Name" })
+  container.appendChild(nameInput)
+
+  const urlInput = createInput({ placeholder: "https://..." })
+  container.appendChild(urlInput)
+
+  const btnRow = document.createElement("div")
+  btnRow.className = "flex justify-end"
+  const saveBtn = createButton("Save", "primary")
+  btnRow.appendChild(saveBtn)
+  container.appendChild(btnRow)
+
+  const { close } = createPopover(anchor, container)
+
+  function submit() {
+    const name = (nameInput as HTMLInputElement).value.trim()
+    const url = (urlInput as HTMLInputElement).value.trim()
+    if (!name || !url) return
+    let tabs = getTabs()
+    if (viewingFolderId) {
+      tabs = addShortcutToFolder(tabs, selectedTabId!, viewingFolderId, name, url)
+    } else {
+      tabs = addShortcut(tabs, selectedTabId!, name, url)
     }
+    save(tabs)
+    close()
+  }
 
-    function onSubmit(e: Event) {
-      e.preventDefault()
-      resolved = true
-      cleanup()
-      dialog.close()
-      resolve({ name: nameInput.value.trim(), url: urlInput.value.trim() })
-    }
+  saveBtn.addEventListener("click", submit)
+  urlInput.addEventListener("keydown", (_e) => {
+    const e = _e as KeyboardEvent
+    if (e.key === "Enter") { e.preventDefault(); submit() }
+    if (e.key === "Escape") close()
+  })
+  nameInput.addEventListener("keydown", (_e) => {
+    const e = _e as KeyboardEvent
+    if (e.key === "Escape") close()
+  })
 
-    function onCancel() {
-      resolved = true
-      cleanup()
-      dialog.close()
-      resolve(null)
-    }
+  requestAnimationFrame(() => (nameInput as HTMLInputElement).focus())
+}
 
-    function onClose() {
-      if (!resolved) {
-        cleanup()
-        resolve(null)
-      }
-    }
+function openAddFolderPopover(anchor: HTMLElement): void {
+  const container = document.createElement("div")
+  container.className = "flex flex-col gap-2 min-w-[220px]"
 
-    form.addEventListener("submit", onSubmit)
-    cancelBtn.addEventListener("click", onCancel)
-    dialog.addEventListener("close", onClose)
-    dialog.showModal()
-    nameInput.focus()
+  const title = document.createElement("span")
+  title.className = "text-xs font-semibold text-foreground"
+  title.textContent = "Add Folder"
+  container.appendChild(title)
+
+  const nameInput = createInput({ placeholder: "Folder name", value: "New Folder" })
+  container.appendChild(nameInput)
+
+  const btnRow = document.createElement("div")
+  btnRow.className = "flex justify-end"
+  const saveBtn = createButton("Save", "primary")
+  btnRow.appendChild(saveBtn)
+  container.appendChild(btnRow)
+
+  const { close } = createPopover(anchor, container)
+
+  function submit() {
+    const name = (nameInput as HTMLInputElement).value.trim()
+    if (!name) return
+    const tabs = addFolder(getTabs(), selectedTabId!, name)
+    save(tabs)
+    close()
+  }
+
+  saveBtn.addEventListener("click", submit)
+  nameInput.addEventListener("keydown", (_e) => {
+    const e = _e as KeyboardEvent
+    if (e.key === "Enter") { e.preventDefault(); submit() }
+    if (e.key === "Escape") close()
+  })
+
+  requestAnimationFrame(() => {
+    const input = nameInput as HTMLInputElement
+    input.focus()
+    input.select()
   })
 }
 
-function renderList(): void {
-  const list = document.getElementById("sc-list") as HTMLElement
-  const addShortcutBtn = document.getElementById(
-    "sc-add-shortcut"
-  ) as HTMLButtonElement
-  const addFolderBtn = document.getElementById(
-    "sc-add-folder"
-  ) as HTMLButtonElement
-  const deleteTabBtn = document.getElementById(
-    "sc-delete-tab"
-  ) as HTMLButtonElement
-  const backBtn = document.getElementById("sc-back") as HTMLButtonElement
-  const importHistoryBtn = document.getElementById(
-    "sc-import-history"
-  ) as HTMLButtonElement
-  const tabSelect = document.getElementById(
-    "sc-tab-select"
-  ) as HTMLSelectElement
+function openEditPopover(anchor: HTMLElement, item: TabItem | Shortcut, inFolder: boolean, folder: Folder | null): void {
+  const isShortcut = item.type === "shortcut"
+  const container = document.createElement("div")
+  container.className = "flex flex-col gap-2 min-w-[220px]"
 
+  const title = document.createElement("span")
+  title.className = "text-xs font-semibold text-foreground"
+  title.textContent = isShortcut ? "Edit Shortcut" : "Edit Folder"
+  container.appendChild(title)
+
+  const nameInput = createInput({ placeholder: "Name", value: item.name })
+  container.appendChild(nameInput)
+
+  let urlInput: HTMLInputElement | HTMLTextAreaElement | null = null
+  if (isShortcut) {
+    urlInput = createInput({ placeholder: "https://...", value: (item as Shortcut).url })
+    container.appendChild(urlInput)
+  }
+
+  const btnRow = document.createElement("div")
+  btnRow.className = "flex justify-end"
+  const saveBtn = createButton("Save", "primary")
+  btnRow.appendChild(saveBtn)
+  container.appendChild(btnRow)
+
+  const { close } = createPopover(anchor, container)
+
+  function submit() {
+    const name = (nameInput as HTMLInputElement).value.trim()
+    if (!name) return
+    let tabs = getTabs()
+    if (isShortcut) {
+      const url = (urlInput as HTMLInputElement).value.trim()
+      if (!url) return
+      if (inFolder && folder) {
+        tabs = editShortcutInFolder(tabs, selectedTabId!, folder.id, item.id, name, url)
+      } else {
+        tabs = editShortcut(tabs, selectedTabId!, item.id, name, url)
+      }
+    } else {
+      tabs = editFolder(tabs, selectedTabId!, item.id, name)
+    }
+    save(tabs)
+    close()
+  }
+
+  const lastInput = urlInput ?? nameInput
+  saveBtn.addEventListener("click", submit)
+  lastInput.addEventListener("keydown", (_e) => {
+    const e = _e as KeyboardEvent
+    if (e.key === "Enter") { e.preventDefault(); submit() }
+    if (e.key === "Escape") close()
+  })
+  if (urlInput) {
+    nameInput.addEventListener("keydown", (_e) => {
+      const e = _e as KeyboardEvent
+      if (e.key === "Escape") close()
+    })
+  }
+
+  requestAnimationFrame(() => (nameInput as HTMLInputElement).focus())
+}
+
+// ---------- Tab Bar ----------
+
+function renderTabBar(): void {
+  tabBarEl.innerHTML = ""
   const tabs = getTabs()
-  const tab = tabs.find((t) => t.id === selectedTabId)
 
-  list.innerHTML = ""
+  for (const tab of tabs) {
+    const isActive = tab.id === selectedTabId
+    const pill = document.createElement("div")
+    pill.className = `relative flex items-center gap-1.5 px-3 py-1.5 rounded-theme text-sm cursor-pointer transition-colors group ${
+      isActive
+        ? "bg-accent text-accent-foreground"
+        : "bg-surface text-foreground hover:bg-surface"
+    }`
 
-  if (!tab) {
-    addShortcutBtn.hidden = true
-    addFolderBtn.hidden = true
-    deleteTabBtn.hidden = true
-    backBtn.hidden = true
-    importHistoryBtn.hidden = true
-    return
+    if (selectionMode) {
+      pill.style.opacity = "0.4"
+      pill.style.pointerEvents = "none"
+    }
+
+    const tabIcon = icon("tab", { size: 12 })
+    tabIcon.classList.add("shrink-0")
+    if (isActive) tabIcon.classList.add("text-accent-foreground")
+    pill.appendChild(tabIcon)
+
+    const nameInput = document.createElement("input")
+    nameInput.type = "text"
+    nameInput.value = tab.name
+    nameInput.className = `bg-transparent border-none outline-none font-medium text-sm ${
+      isActive ? "text-accent-foreground" : "text-foreground"
+    }`
+    nameInput.style.width = `${Math.max(tab.name.length, 1)}ch`
+    nameInput.readOnly = !isActive
+
+    nameInput.addEventListener("input", () => {
+      nameInput.style.width = `${Math.max(nameInput.value.length, 1)}ch`
+    })
+
+    nameInput.addEventListener("focus", () => {
+      if (isActive) nameInput.select()
+    })
+
+    nameInput.addEventListener("blur", () => {
+      const newName = nameInput.value.trim()
+      if (newName && newName !== tab.name) {
+        let tabs = getTabs()
+        tabs = tabs.map((t) => (t.id === tab.id ? { ...t, name: newName } : t))
+        save(tabs)
+      }
+    })
+
+    nameInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault()
+        nameInput.blur()
+      }
+    })
+
+    pill.addEventListener("click", (e) => {
+      if (e.target === nameInput && isActive) return
+      if (!isActive) {
+        selectedTabId = tab.id
+        viewingFolderId = null
+        render()
+      }
+    })
+
+    pill.appendChild(nameInput)
+
+    const closeBtn = document.createElement("button")
+    closeBtn.className = "absolute -top-1.5 -right-1.5 w-4 h-4 flex items-center justify-center rounded-full bg-danger text-danger-foreground opacity-0 group-hover:opacity-100 transition-opacity"
+    closeBtn.appendChild(icon("close", { size: 8 }))
+    closeBtn.addEventListener("click", (e) => {
+      e.stopPropagation()
+      let tabs = deleteTab(getTabs(), tab.id)
+      save(tabs)
+      if (selectedTabId === tab.id) {
+        selectedTabId = tabs.length > 0 ? tabs[0].id : null
+        viewingFolderId = null
+      }
+      render()
+    })
+    pill.appendChild(closeBtn)
+
+    tabBarEl.appendChild(pill)
   }
 
-  const inFolder = viewingFolderId !== null
-  const folder = inFolder
-    ? (tab.items.find(
-        (i) => i.id === viewingFolderId && i.type === "folder"
-      ) as Folder | undefined)
-    : null
+  if (tabs.length < MAX_TABS && !selectionMode) {
+    const addBtn = createButton("", "ghost", { icon: icon("plus", { size: 12 }) })
+    addBtn.className = "w-8 h-8 flex items-center justify-center rounded-theme border border-dashed border-input-border text-muted hover:text-foreground hover:border-accent transition-colors"
+    addBtn.addEventListener("click", () => {
+      const tabs = addTab(getTabs(), `Tab ${getTabs().length + 1}`)
+      save(tabs)
+      selectedTabId = tabs[tabs.length - 1].id
+      viewingFolderId = null
+      render()
 
-  if (inFolder && !folder) {
-    viewingFolderId = null
-    renderList()
-    return
+      requestAnimationFrame(() => {
+        const lastPill = tabBarEl.querySelector(`div:nth-child(${tabs.length})`)
+        const input = lastPill?.querySelector("input") as HTMLInputElement | null
+        if (input) {
+          input.readOnly = false
+          input.focus()
+          input.select()
+        }
+      })
+    })
+    tabBarEl.appendChild(addBtn)
   }
+}
 
-  tabSelect.hidden = inFolder
-  backBtn.hidden = !inFolder
-  deleteTabBtn.hidden = inFolder
-  addShortcutBtn.hidden = false
-  addFolderBtn.hidden = inFolder
-  importHistoryBtn.hidden = inFolder
+// ---------- Item List ----------
 
-  const items: (TabItem | Shortcut)[] = inFolder
-    ? folder!.children
-    : tab.items
+function createRow(
+  item: TabItem | Shortcut,
+  index: number,
+  inFolder: boolean,
+  folder: Folder | null,
+  compact: boolean
+): HTMLElement {
+  const row = document.createElement("div")
+  row.className = `flex items-center gap-2 px-2 py-1.5 rounded-theme text-sm group transition-colors hover:bg-surface ${
+    compact ? "text-xs" : ""
+  }`
+  row.dataset.index = String(index)
+  row.dataset.id = item.id
+  row.dataset.type = item.type
 
-  for (let i = 0; i < items.length; i++) {
-    const item = items[i]
-    const row = document.createElement("div")
-    row.className =
-      "flex items-center gap-2 px-2 py-1 bg-surface rounded text-sm group"
+  if (!selectionMode) {
     row.draggable = true
-    row.dataset.index = String(i)
-    row.dataset.id = item.id
-    row.dataset.type = item.type
 
     const handle = document.createElement("span")
-    handle.className = "cursor-grab text-muted"
-    handle.textContent = "\u2630"
+    handle.className = "cursor-grab text-muted shrink-0"
+    handle.appendChild(icon("dragHandle", { size: 10 }))
     row.appendChild(handle)
+  }
 
-    const label = document.createElement("span")
-    label.className = "flex-1 truncate"
-    if (item.type === "folder") {
-      label.textContent = "\uD83D\uDCC1 " + item.name
-    } else {
-      label.textContent = item.name
-      if (item.url) {
-        const urlSpan = document.createElement("span")
-        urlSpan.className = "text-muted ml-1 text-xs"
-        urlSpan.textContent = item.url
-        label.appendChild(urlSpan)
-      }
-    }
-    row.appendChild(label)
+  if (selectionMode) {
+    const cb = createCheckbox("", selectedIds.has(item.id), (checked) => {
+      if (checked) selectedIds.add(item.id)
+      else selectedIds.delete(item.id)
+      renderControlBar()
+    })
+    cb.classList.add("shrink-0")
+    row.appendChild(cb)
 
-    if (item.type === "folder" && !inFolder) {
-      const openBtn = document.createElement("button")
-      openBtn.className = "text-xs text-accent hover:underline"
-      openBtn.textContent = "Open"
-      openBtn.addEventListener("click", () => {
-        viewingFolderId = item.id
-        renderList()
-      })
-      row.appendChild(openBtn)
-    }
+    row.style.cursor = "pointer"
+    row.addEventListener("click", (e) => {
+      if ((e.target as HTMLElement).closest("label")) return
+      const input = cb.querySelector("input") as HTMLInputElement
+      input.checked = !input.checked
+      input.dispatchEvent(new Event("change"))
+    })
+  }
 
-    const editBtn = document.createElement("button")
-    editBtn.className = "text-xs text-accent hover:underline"
-    editBtn.textContent = "Edit"
-    editBtn.addEventListener("click", async () => {
-      const isShortcut = item.type === "shortcut"
-      const result = await prompt(isShortcut ? "Edit Shortcut" : "Edit Folder", {
-        name: item.name,
-        url: isShortcut ? item.url : undefined,
-        showUrl: isShortcut,
-      })
-      if (!result) return
-      let tabs = getTabs()
-      if (inFolder && folder) {
-        tabs = editShortcutInFolder(
-          tabs,
-          selectedTabId!,
-          folder.id,
-          item.id,
-          result.name,
-          result.url
-        )
-      } else if (isShortcut) {
-        tabs = editShortcut(
-          tabs,
-          selectedTabId!,
-          item.id,
-          result.name,
-          result.url
-        )
-      } else {
-        tabs = editFolder(tabs, selectedTabId!, item.id, result.name)
-      }
-      save(tabs)
+  const itemIcon = icon(item.type === "folder" ? "folder" : "link", { size: compact ? 12 : 14 })
+  itemIcon.classList.add("shrink-0", "text-muted")
+  row.appendChild(itemIcon)
+
+  const label = document.createElement("div")
+  label.className = "flex-1 min-w-0 truncate"
+
+  const nameSpan = document.createElement("span")
+  nameSpan.className = "truncate"
+  nameSpan.textContent = item.name
+  label.appendChild(nameSpan)
+
+  if (item.type === "shortcut" && !compact) {
+    const urlSpan = document.createElement("span")
+    urlSpan.className = "text-muted text-xs ml-1.5"
+    urlSpan.textContent = item.url
+    label.appendChild(urlSpan)
+  }
+  row.appendChild(label)
+
+  if (!selectionMode) {
+    const editBtn = createButton("", "ghost", { icon: icon("edit", { size: 12 }) })
+    editBtn.className = "shrink-0 w-6 h-6 flex items-center justify-center rounded-theme text-muted hover:text-foreground hover:bg-surface transition-colors opacity-0 group-hover:opacity-100"
+    editBtn.addEventListener("click", (e) => {
+      e.stopPropagation()
+      openEditPopover(editBtn, item, inFolder, folder)
     })
     row.appendChild(editBtn)
 
-    const delBtn = document.createElement("button")
-    delBtn.className = "text-xs text-danger hover:underline"
-    delBtn.textContent = "Delete"
-    delBtn.addEventListener("click", () => {
+    const delBtn = createButton("", "ghost", { icon: icon("trash", { size: 12 }) })
+    delBtn.className = "shrink-0 w-6 h-6 flex items-center justify-center rounded-theme text-muted hover:text-danger hover:bg-danger/10 transition-colors opacity-0 group-hover:opacity-100"
+    delBtn.addEventListener("click", (e) => {
+      e.stopPropagation()
       let tabs = getTabs()
       if (inFolder && folder) {
-        tabs = deleteShortcutFromFolder(
-          tabs,
-          selectedTabId!,
-          folder.id,
-          item.id
-        )
+        tabs = deleteShortcutFromFolder(tabs, selectedTabId!, folder.id, item.id)
       } else {
         tabs = deleteItem(tabs, selectedTabId!, item.id)
       }
       save(tabs)
     })
     row.appendChild(delBtn)
-
-    list.appendChild(row)
   }
 
-  initDragAndDrop(list, inFolder, folder ?? null)
+  return row
 }
+
+function renderItemList(): void {
+  itemListEl.innerHTML = ""
+  const tabs = getTabs()
+  const tab = tabs.find((t) => t.id === selectedTabId)
+
+  if (!tab) {
+    const empty = document.createElement("div")
+    empty.className = "flex items-center justify-center h-full text-sm text-muted"
+    empty.textContent = "Create a tab to get started"
+    itemListEl.appendChild(empty)
+    return
+  }
+
+  const inFolder = viewingFolderId !== null
+  const folder = inFolder
+    ? (tab.items.find((i) => i.id === viewingFolderId && i.type === "folder") as Folder | undefined)
+    : null
+
+  if (inFolder && !folder) {
+    viewingFolderId = null
+    renderItemList()
+    return
+  }
+
+  if (!inFolder) {
+    const list = document.createElement("div")
+    list.className = "grid grid-cols-3 gap-1"
+
+    if (tab.items.length === 0) {
+      const empty = document.createElement("div")
+      empty.className = "col-span-3 flex items-center justify-center py-8 text-sm text-muted"
+      empty.textContent = "No shortcuts yet"
+      list.appendChild(empty)
+    }
+
+    for (let i = 0; i < tab.items.length; i++) {
+      const item = tab.items[i]
+      const row = createRow(item, i, false, null, false)
+      row.className += " col-span-3"
+
+      if (item.type === "folder" && !selectionMode) {
+        row.style.cursor = "pointer"
+        row.addEventListener("click", (e) => {
+          if ((e.target as HTMLElement).closest("button")) return
+          viewingFolderId = item.id
+          render()
+        })
+      }
+
+      list.appendChild(row)
+    }
+
+    itemListEl.appendChild(list)
+    if (!selectionMode) initDragAndDrop(list, false, null)
+  } else {
+    const grid = document.createElement("div")
+    grid.className = "grid grid-cols-3 gap-3 h-full"
+
+    const leftCol = document.createElement("div")
+    leftCol.className = "col-span-1 flex flex-col gap-0.5 overflow-y-auto"
+
+    for (let i = 0; i < tab.items.length; i++) {
+      const item = tab.items[i]
+      const row = createRow(item, i, false, null, true)
+
+      if (item.id === viewingFolderId) {
+        row.className += " border-l-2 border-accent bg-accent/10"
+      }
+
+      if (item.type === "folder" && !selectionMode) {
+        row.style.cursor = "pointer"
+        row.addEventListener("click", (e) => {
+          if ((e.target as HTMLElement).closest("button")) return
+          if (item.id === viewingFolderId) {
+            viewingFolderId = null
+          } else {
+            viewingFolderId = item.id
+          }
+          render()
+        })
+      }
+
+      leftCol.appendChild(row)
+    }
+
+    const rightCol = document.createElement("div")
+    rightCol.className = "col-span-2 flex flex-col gap-0.5 overflow-y-auto border-l border-input-border/20 pl-3"
+
+    if (folder!.children.length === 0) {
+      const empty = document.createElement("div")
+      empty.className = "flex items-center justify-center h-full text-sm text-muted"
+      empty.textContent = "Empty folder"
+      rightCol.appendChild(empty)
+    }
+
+    for (let i = 0; i < folder!.children.length; i++) {
+      const child = folder!.children[i]
+      const row = createRow(child, i, true, folder!, false)
+      rightCol.appendChild(row)
+    }
+
+    grid.appendChild(leftCol)
+    grid.appendChild(rightCol)
+    itemListEl.appendChild(grid)
+
+    if (!selectionMode) {
+      initDragAndDrop(leftCol, false, null)
+      initDragAndDrop(rightCol, true, folder!)
+    }
+  }
+}
+
+// ---------- Control Bar ----------
+
+function renderControlBar(): void {
+  controlBarEl.innerHTML = ""
+
+  const left = document.createElement("div")
+  left.className = "flex items-center gap-2"
+
+  const right = document.createElement("div")
+  right.className = "flex items-center gap-2"
+
+  if (viewingFolderId) {
+    const backBtn = createButton("", "ghost", { icon: icon("chevronLeft", { size: 14 }) })
+    backBtn.className = "w-8 h-8 flex items-center justify-center rounded-theme text-muted hover:text-foreground hover:bg-surface transition-colors"
+    if (selectionMode) {
+      backBtn.disabled = true
+      backBtn.style.opacity = "0.4"
+    } else {
+      backBtn.addEventListener("click", () => {
+        viewingFolderId = null
+        render()
+      })
+    }
+    left.appendChild(backBtn)
+  }
+
+  if (!selectionMode) {
+    if (selectedTabId) {
+      const addShortcutBtn = createButton("Add Shortcut", "primary", {
+        icon: icon("plus", { size: 12 }),
+      })
+      addShortcutBtn.addEventListener("click", () => {
+        openAddShortcutPopover(addShortcutBtn)
+      })
+      right.appendChild(addShortcutBtn)
+
+      if (!viewingFolderId) {
+        const addFolderBtn = createButton("Add Folder", "outline", {
+          icon: icon("plus", { size: 12 }),
+        })
+        addFolderBtn.addEventListener("click", () => {
+          openAddFolderPopover(addFolderBtn)
+        })
+        right.appendChild(addFolderBtn)
+      }
+
+      const selectManyBtn = createButton("Select", "ghost")
+      selectManyBtn.addEventListener("click", () => {
+        selectionMode = true
+        selectedIds.clear()
+        render()
+      })
+      right.appendChild(selectManyBtn)
+    }
+  } else {
+    const selectAllBtn = createButton("Select All", "outline")
+    selectAllBtn.addEventListener("click", () => {
+      const tabs = getTabs()
+      const tab = tabs.find((t) => t.id === selectedTabId)
+      if (!tab) return
+      for (const item of tab.items) {
+        selectedIds.add(item.id)
+        if (item.type === "folder") {
+          for (const child of item.children) {
+            selectedIds.add(child.id)
+          }
+        }
+      }
+      render()
+    })
+    right.appendChild(selectAllBtn)
+
+    const deleteBtn = createButton("Delete Selected", "destructive")
+    deleteBtn.disabled = selectedIds.size === 0
+    if (selectedIds.size === 0) deleteBtn.style.opacity = "0.5"
+    deleteBtn.addEventListener("click", () => {
+      openDeleteConfirmation()
+    })
+    right.appendChild(deleteBtn)
+
+    const cancelBtn = createButton("Cancel", "ghost")
+    cancelBtn.addEventListener("click", () => {
+      selectionMode = false
+      selectedIds.clear()
+      render()
+    })
+    right.appendChild(cancelBtn)
+  }
+
+  controlBarEl.appendChild(left)
+  controlBarEl.appendChild(right)
+}
+
+// ---------- Delete Confirmation ----------
+
+function openDeleteConfirmation(): void {
+  const { dialog, body, close } = createDialog()
+
+  body.className = "p-6 min-w-[300px] flex flex-col gap-4"
+
+  const title = document.createElement("h3")
+  title.className = "text-sm font-semibold text-foreground"
+  title.textContent = "Delete selected items?"
+  body.appendChild(title)
+
+  const message = document.createElement("p")
+  message.className = "text-sm text-muted"
+  message.textContent = `Are you sure? This will permanently delete ${selectedIds.size} item(s).`
+  body.appendChild(message)
+
+  const btnRow = document.createElement("div")
+  btnRow.className = "flex gap-2 justify-end"
+
+  const cancelBtn = createButton("Cancel", "outline", {
+    onClick: close,
+  })
+  btnRow.appendChild(cancelBtn)
+
+  const delBtn = createButton("Delete", "destructive", {
+    onClick: () => {
+      let tabs = deleteItems(getTabs(), selectedTabId!, Array.from(selectedIds))
+      save(tabs)
+      selectionMode = false
+      selectedIds.clear()
+      close()
+      render()
+    },
+  })
+  btnRow.appendChild(delBtn)
+
+  body.appendChild(btnRow)
+
+  dialog.showModal()
+}
+
+// ---------- Drag and Drop ----------
 
 function initDragAndDrop(
   list: HTMLElement,
@@ -392,22 +791,56 @@ function initDragAndDrop(
         )
         save(tabs)
       } else if (targetType === "shortcut") {
-        const result = await prompt("Create Folder", {
-          name: "New Folder",
-          showUrl: false,
-        })
-        if (!result) {
-          if (preDropSnapshot) save(preDropSnapshot)
-          return
+        const container = document.createElement("div")
+        container.className = "flex flex-col gap-2 min-w-[220px]"
+
+        const title = document.createElement("span")
+        title.className = "text-xs font-semibold text-foreground"
+        title.textContent = "Create Folder"
+        container.appendChild(title)
+
+        const nameInput = createInput({ placeholder: "Folder name", value: "New Folder" })
+        container.appendChild(nameInput)
+
+        const btnRow = document.createElement("div")
+        btnRow.className = "flex justify-end"
+        const saveBtn = createButton("Save", "primary")
+        btnRow.appendChild(saveBtn)
+        container.appendChild(btnRow)
+
+        const { close } = createPopover(row, container)
+
+        function doMerge() {
+          const name = (nameInput as HTMLInputElement).value.trim()
+          if (!name) return
+          tabs = mergeShortcutsIntoNewFolder(
+            tabs,
+            selectedTabId!,
+            targetId,
+            draggedItem.id,
+            name
+          )
+          save(tabs)
+          close()
         }
-        tabs = mergeShortcutsIntoNewFolder(
-          tabs,
-          selectedTabId!,
-          targetId,
-          draggedItem.id,
-          result.name
-        )
-        save(tabs)
+
+        function doCancel() {
+          if (preDropSnapshot) save(preDropSnapshot)
+          close()
+        }
+
+        saveBtn.addEventListener("click", doMerge)
+        nameInput.addEventListener("keydown", (_ev) => {
+          const ev = _ev as KeyboardEvent
+          if (ev.key === "Enter") { ev.preventDefault(); doMerge() }
+          if (ev.key === "Escape") doCancel()
+        })
+
+        requestAnimationFrame(() => {
+          const input = nameInput as HTMLInputElement
+          input.focus()
+          input.select()
+        })
       }
     } else {
       tabs = reorderItems(tabs, selectedTabId!, dragIndex, targetIndex)
@@ -416,41 +849,7 @@ function initDragAndDrop(
   })
 }
 
-function updateTabSelect(): void {
-  const select = document.getElementById(
-    "sc-tab-select"
-  ) as HTMLSelectElement
-  const addTabBtn = document.getElementById(
-    "sc-add-tab"
-  ) as HTMLButtonElement
-  const tabs = getTabs()
-
-  select.innerHTML = ""
-
-  if (tabs.length === 0) {
-    const opt = document.createElement("option")
-    opt.textContent = "No tabs"
-    opt.disabled = true
-    opt.selected = true
-    select.appendChild(opt)
-    selectedTabId = null
-  } else {
-    if (!selectedTabId || !tabs.find((t) => t.id === selectedTabId)) {
-      selectedTabId = tabs[0].id
-    }
-    for (const tab of tabs) {
-      const opt = document.createElement("option")
-      opt.value = tab.id
-      opt.textContent = tab.name
-      opt.selected = tab.id === selectedTabId
-      select.appendChild(opt)
-    }
-  }
-
-  addTabBtn.hidden = tabs.length >= MAX_TABS
-
-  renderList()
-}
+// ---------- Sync from Store ----------
 
 function syncFromStore(): void {
   const tabs = getTabs()
@@ -467,95 +866,21 @@ function syncFromStore(): void {
       viewingFolderId = null
     }
   }
-  updateTabSelect()
+  render()
 }
 
+// ---------- Init ----------
+
 export function initShortcutSettings(): void {
-  const tabSelect = document.getElementById(
-    "sc-tab-select"
-  ) as HTMLSelectElement
-  const addTabBtn = document.getElementById(
-    "sc-add-tab"
-  ) as HTMLButtonElement
-  const deleteTabBtn = document.getElementById(
-    "sc-delete-tab"
-  ) as HTMLButtonElement
-  const addShortcutBtn = document.getElementById(
-    "sc-add-shortcut"
-  ) as HTMLButtonElement
-  const addFolderBtn = document.getElementById(
-    "sc-add-folder"
-  ) as HTMLButtonElement
-  const backBtn = document.getElementById("sc-back") as HTMLButtonElement
+  tabBarEl = document.getElementById("sc-tab-bar")!
+  itemListEl = document.getElementById("sc-item-list")!
+  controlBarEl = document.getElementById("sc-control-bar")!
 
-  tabSelect.addEventListener("change", () => {
-    selectedTabId = tabSelect.value
-    viewingFolderId = null
-    renderList()
-  })
+  const tabs = getTabs()
+  if (tabs.length > 0 && !selectedTabId) {
+    selectedTabId = tabs[0].id
+  }
 
-  addTabBtn.addEventListener("click", async () => {
-    const result = await prompt("Add Tab", {
-      name: "New Tab",
-      showUrl: false,
-    })
-    if (!result) return
-    const tabs = addTab(getTabs(), result.name)
-    save(tabs)
-    selectedTabId = tabs[tabs.length - 1].id
-    viewingFolderId = null
-    updateTabSelect()
-  })
-
-  deleteTabBtn.addEventListener("click", () => {
-    if (!selectedTabId) return
-    const tabs = deleteTab(getTabs(), selectedTabId)
-    save(tabs)
-    selectedTabId = tabs.length > 0 ? tabs[0].id : null
-    viewingFolderId = null
-    updateTabSelect()
-  })
-
-  addShortcutBtn.addEventListener("click", async () => {
-    if (!selectedTabId) return
-    const isInFolder = viewingFolderId !== null
-    const result = await prompt("Add Shortcut", {
-      name: "",
-      url: "",
-      showUrl: true,
-    })
-    if (!result) return
-    let tabs = getTabs()
-    if (isInFolder) {
-      tabs = addShortcutToFolder(
-        tabs,
-        selectedTabId,
-        viewingFolderId!,
-        result.name,
-        result.url
-      )
-    } else {
-      tabs = addShortcut(tabs, selectedTabId, result.name, result.url)
-    }
-    save(tabs)
-  })
-
-  addFolderBtn.addEventListener("click", async () => {
-    if (!selectedTabId) return
-    const result = await prompt("Add Folder", {
-      name: "New Folder",
-      showUrl: false,
-    })
-    if (!result) return
-    const tabs = addFolder(getTabs(), selectedTabId, result.name)
-    save(tabs)
-  })
-
-  backBtn.addEventListener("click", () => {
-    viewingFolderId = null
-    renderList()
-  })
-
-  updateTabSelect()
+  render()
   store.local.subscribe("shortcuts", syncFromStore)
 }
