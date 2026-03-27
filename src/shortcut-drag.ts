@@ -156,7 +156,6 @@ function onItemPointerDown(e: PointerEvent): void {
 }
 
 function onTabPointerDown(e: PointerEvent): void {
-  // Placeholder — will be fully implemented later
 }
 
 function onPointerMove(e: PointerEvent): void {
@@ -304,12 +303,263 @@ function updateDrag(e: PointerEvent): void {
 }
 
 function resolveDropZone(x: number, y: number): DropZone {
+  if (!ctx || ctx.mode !== "item") return { type: "none" }
+
+  const el = document.elementFromPoint(x, y)
+  if (!el) return { type: "none" }
+
+  const pill = el.closest("[data-tab-id]") as HTMLElement | null
+  if (pill && tabBarEl.contains(pill)) {
+    return { type: "tab", tabId: pill.dataset.tabId! }
+  }
+
+  if (!itemListEl.contains(el)) return { type: "none" }
+
+  const row = el.closest("[data-id]") as HTMLElement | null
+  const zoneEl = el.closest("[data-zone]") as HTMLElement | null
+
+  if (!row) {
+    if (!zoneEl) return { type: "none" }
+    const location = zoneEl.dataset.zone as "top-level" | "folder"
+    if (ctx.sourceType === "folder" && location === "folder") return { type: "none" }
+    const rows = zoneEl.querySelectorAll("[data-id]")
+    return { type: "reorder", location, index: rows.length }
+  }
+
+  const targetId = row.dataset.id!
+  const targetType = row.dataset.type as "shortcut" | "folder"
+  const location = zoneEl?.dataset.zone as "top-level" | "folder" | undefined ?? "top-level"
+
+  if (targetId === ctx.sourceItemId && !ctx.isSelectionDrag) return { type: "none" }
+  if (ctx.isSelectionDrag && ctx.draggedIds.includes(targetId)) return { type: "none" }
+  if (ctx.sourceType === "folder" && location === "folder") return { type: "none" }
+
+  if (ctx.isSelectionDrag) {
+    return resolveSelectionZone(row, targetId, targetType, location, x, y)
+  }
+
+  return resolveNormalZone(row, targetId, targetType, location, x, y)
+}
+
+function resolveNormalZone(
+  row: HTMLElement,
+  targetId: string,
+  targetType: string,
+  location: string,
+  _x: number,
+  y: number
+): DropZone {
+  if (!ctx || ctx.mode !== "item") return { type: "none" }
+
+  const rect = row.getBoundingClientRect()
+  const midY = rect.top + rect.height / 2
+  const overCenter = Math.abs(y - midY) < rect.height * 0.25
+
+  const isDraggingFolder = ctx.sourceType === "folder"
+  const isInsideFolder = location === "folder"
+
+  if (overCenter && !isDraggingFolder && !isInsideFolder) {
+    if (targetType === "folder") {
+      const tabs = cb.getTabs()
+      const tab = tabs.find((t) => t.id === cb.getSelectedTabId())
+      const folder = tab?.items.find((i) => i.id === targetId && i.type === "folder") as Folder | undefined
+      const blocked = !folder || folder.children.length >= MAX_CHILDREN_PER_FOLDER
+      return { type: "into-folder", folderId: targetId, blocked }
+    }
+    if (targetType === "shortcut") {
+      if (ctx.mergeReady && ctx.hoverTarget?.id === targetId) {
+        return { type: "merge-shortcut", targetId }
+      }
+      return { type: "into-folder", folderId: targetId, blocked: false }
+    }
+  }
+
+  const index = Number(row.dataset.index)
+  const insertIndex = y < rect.top + rect.height / 2 ? index : index + 1
+  return { type: "reorder", location: location as "top-level" | "folder", index: insertIndex }
+}
+
+function resolveSelectionZone(
+  row: HTMLElement,
+  targetId: string,
+  targetType: string,
+  location: string,
+  _x: number,
+  y: number
+): DropZone {
+  if (!ctx || ctx.mode !== "item") return { type: "none" }
+
+  const rect = row.getBoundingClientRect()
+  const midY = rect.top + rect.height / 2
+  const overCenter = Math.abs(y - midY) < rect.height * 0.25
+
+  if (overCenter && targetType === "folder" && location !== "folder") {
+    const blocked = ctx.selectionHasFolders
+    if (!blocked) {
+      const tabs = cb.getTabs()
+      const tab = tabs.find((t) => t.id === cb.getSelectedTabId())
+      const folder = tab?.items.find((i) => i.id === targetId && i.type === "folder") as Folder | undefined
+      const capacityBlocked = !folder || folder.children.length + ctx.draggedIds.length > MAX_CHILDREN_PER_FOLDER
+      return { type: "into-folder", folderId: targetId, blocked: capacityBlocked }
+    }
+    return { type: "into-folder", folderId: targetId, blocked: true }
+  }
+
   return { type: "none" }
 }
 
-function updateHoverTimer(zone: DropZone): void {}
+function updateHoverTimer(zone: DropZone): void {
+  if (!ctx || ctx.mode !== "item") return
 
-function applyVisualFeedback(zone: DropZone): void {}
+  let newTarget: ItemDragCtx["hoverTarget"] = null
+
+  if (zone.type === "tab") {
+    newTarget = { type: "tab", id: zone.tabId }
+  } else if (zone.type === "into-folder" && !zone.blocked) {
+    const row = itemListEl.querySelector(`[data-id="${zone.folderId}"]`)
+    const targetType = row?.getAttribute("data-type")
+    if (targetType === "folder") {
+      newTarget = { type: "folder", id: zone.folderId }
+    } else if (targetType === "shortcut") {
+      newTarget = { type: "shortcut", id: zone.folderId }
+    }
+  }
+
+  const same = ctx.hoverTarget?.type === newTarget?.type && ctx.hoverTarget?.id === newTarget?.id
+
+  if (same) return
+
+  if (ctx.hoverTimer !== null) {
+    clearTimeout(ctx.hoverTimer)
+    ctx.hoverTimer = null
+  }
+  ctx.hoverTarget = newTarget
+  ctx.mergeReady = false
+
+  if (!newTarget) return
+
+  if (newTarget.type === "tab" && ctx.isSelectionDrag) return
+
+  ctx.hoverTimer = window.setTimeout(() => {
+    if (!ctx || ctx.mode !== "item") return
+    ctx.hoverTimer = null
+    onHoverTimerFire(newTarget!)
+  }, HOVER_DELAY)
+}
+
+function onHoverTimerFire(target: NonNullable<ItemDragCtx["hoverTarget"]>): void {
+  if (!ctx || ctx.mode !== "item") return
+
+  switch (target.type) {
+    case "tab":
+      cb.setSelectedTabId(target.id)
+      cb.setViewingFolderId(null)
+      cb.render()
+      if (ctx.isSelectionDrag) {
+        ctx.draggedIds.forEach((id) => {
+          itemListEl.querySelectorAll(`[data-id="${id}"]`).forEach((el) => el.classList.add("opacity-50"))
+        })
+      } else {
+        const row = itemListEl.querySelector(`[data-id="${ctx.sourceItemId}"]`)
+        row?.classList.add("opacity-50")
+      }
+      break
+
+    case "folder":
+      cb.setViewingFolderId(target.id)
+      cb.render()
+      if (ctx.isSelectionDrag) {
+        ctx.draggedIds.forEach((id) => {
+          itemListEl.querySelectorAll(`[data-id="${id}"]`).forEach((el) => el.classList.add("opacity-50"))
+        })
+      } else {
+        const row = itemListEl.querySelector(`[data-id="${ctx.sourceItemId}"]`)
+        row?.classList.add("opacity-50")
+      }
+      break
+
+    case "shortcut":
+      ctx.mergeReady = true
+      break
+  }
+}
+
+function applyVisualFeedback(zone: DropZone): void {
+  clearVisualFeedback()
+  indicator.style.display = "none"
+
+  if (!ctx || ctx.mode !== "item") return
+
+  const shrinkZone = zone.type === "into-folder" && !zone.blocked
+  const shrinkTab = zone.type === "tab" && ctx.isSelectionDrag
+  ctx.clone.style.transform = (shrinkZone || shrinkTab) ? "scale(0.9)" : "scale(0.97)"
+
+  switch (zone.type) {
+    case "reorder":
+      showReorderIndicator(zone)
+      break
+    case "into-folder":
+      showFolderHighlight(zone)
+      break
+    case "merge-shortcut":
+      showMergeHighlight(zone.targetId)
+      break
+    case "tab":
+      showTabHighlight(zone.tabId)
+      break
+  }
+}
+
+function showReorderIndicator(zone: Extract<DropZone, { type: "reorder" }>): void {
+  const zoneEl = itemListEl.querySelector(`[data-zone="${zone.location}"]`) as HTMLElement | null
+  if (!zoneEl) return
+
+  const rows = Array.from(zoneEl.querySelectorAll("[data-id]")) as HTMLElement[]
+  let targetRow: HTMLElement | null = null
+
+  if (zone.index < rows.length) {
+    targetRow = rows[zone.index]
+  }
+
+  if (targetRow) {
+    const rect = targetRow.getBoundingClientRect()
+    indicator.style.display = ""
+    indicator.style.top = `${rect.top - 1}px`
+    indicator.style.left = `${rect.left}px`
+    indicator.style.width = `${rect.width}px`
+  } else if (rows.length > 0) {
+    const lastRect = rows[rows.length - 1].getBoundingClientRect()
+    indicator.style.display = ""
+    indicator.style.top = `${lastRect.bottom - 1}px`
+    indicator.style.left = `${lastRect.left}px`
+    indicator.style.width = `${lastRect.width}px`
+  }
+}
+
+function showFolderHighlight(zone: Extract<DropZone, { type: "into-folder" }>): void {
+  const row = itemListEl.querySelector(`[data-id="${zone.folderId}"]`) as HTMLElement | null
+  if (!row) return
+  const targetType = row.dataset.type
+  if (zone.blocked) {
+    row.classList.add("bg-danger/30")
+  } else if (targetType === "shortcut") {
+    row.classList.add("bg-accent/10")
+  } else {
+    row.classList.add("bg-accent/20")
+  }
+}
+
+function showMergeHighlight(targetId: string): void {
+  const row = itemListEl.querySelector(`[data-id="${targetId}"]`) as HTMLElement | null
+  if (!row) return
+  row.classList.add("bg-warning/20")
+}
+
+function showTabHighlight(tabId: string): void {
+  const pill = tabBarEl.querySelector(`[data-tab-id="${tabId}"]`) as HTMLElement | null
+  if (!pill) return
+  pill.classList.add("ring-2", "ring-accent/50")
+}
 
 function updateTabDrag(e: PointerEvent): void {}
 
