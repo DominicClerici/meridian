@@ -2,6 +2,7 @@ import "./icons/modern"
 import { store } from "./store"
 import { icon } from "./icons/registry"
 import { applyTheme, subscribeTheme } from "./theme"
+import { applyBackground, subscribeBackground } from "./background"
 import { initSettings } from "./settings"
 import { initDock } from "./dock"
 import { initShortcutSettings } from "./shortcut-settings"
@@ -16,6 +17,8 @@ import { initCalendar } from "./calendar"
 
 applyTheme()
 subscribeTheme()
+applyBackground()
+subscribeBackground()
 
 document.getElementById("settings-open")!.prepend(icon("settings", { size: 24 }))
 document.getElementById("todo-trigger")!.prepend(icon("todoList", { size: 24 }))
