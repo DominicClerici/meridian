@@ -946,8 +946,26 @@ function buildAdvancedPanel(): HTMLDivElement {
   keyLabel.className = "text-sm text-foreground"
   keyLabel.textContent = "Unsplash API key"
 
+  const inputWrapper = document.createElement("div")
+  inputWrapper.className = "flex items-center gap-1"
+  inputWrapper.appendChild(keyInput)
+
+  const toggleBtn = createButton("", "ghost", {
+    onClick: () => {
+      const inp = keyInput as HTMLInputElement
+      const isPassword = inp.type === "password"
+      inp.type = isPassword ? "text" : "password"
+      toggleBtn.querySelector("span")!.innerHTML = isPassword ? "Hide" : "Show"
+    },
+  })
+  const toggleLabel = document.createElement("span")
+  toggleLabel.className = "text-xs"
+  toggleLabel.innerHTML = "Show"
+  toggleBtn.appendChild(toggleLabel)
+  inputWrapper.appendChild(toggleBtn)
+
   keyRow.appendChild(keyLabel)
-  keyRow.appendChild(keyInput)
+  keyRow.appendChild(inputWrapper)
   wrapper.appendChild(keyRow)
 
   const helpText = document.createElement("p")

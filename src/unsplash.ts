@@ -16,8 +16,8 @@ export const TOPICS: { slug: string; label: string }[] = [
   { slug: "architecture-interior", label: "Architecture" },
   { slug: "textures-patterns", label: "Textures" },
   { slug: "travel", label: "Travel" },
-  { slug: "film", label: "Film" },
-  { slug: "street-photography", label: "Street" },
+  { slug: "minimalism", label: "Minimal" },
+  { slug: "experimental", label: "Abstract" },
 ]
 
 function getApiKey(): string {
