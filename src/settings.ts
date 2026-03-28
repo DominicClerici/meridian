@@ -1,8 +1,9 @@
 import { store } from "./store"
 import type { SyncSettings } from "./defaults"
+import { ACCENT_COLORS } from "./defaults"
 import { authenticate as spotifyAuthenticate, clearTokens as spotifyClearTokens } from "./spotify"
 import { authenticate as calendarAuthenticate, disconnect as calendarDisconnect } from "./calendar"
-import { createAccordion, createButton, createCheckbox, createDialog, createSelect } from "./components"
+import { createAccordion, createButton, createCheckbox, createDialog, createInput, createSelect, createTooltip } from "./components"
 import { icon, getIconSvg } from "./icons/registry"
 
 const TABS = [
@@ -103,36 +104,55 @@ function buildGeneralTab(): void {
   store.sync.subscribe("clockSize", (v) => { clockSize.value = v })
 }
 
-const SWATCH_COLORS = ["red", "green", "blue"] as const
 const SWATCH_BG: Record<string, string> = {
-  red: "bg-swatch-red",
-  green: "bg-swatch-green",
-  blue: "bg-swatch-blue",
+  rose: "bg-swatch-rose",
+  coral: "bg-swatch-coral",
+  amber: "bg-swatch-amber",
+  teal: "bg-swatch-teal",
+  sky: "bg-swatch-sky",
+  violet: "bg-swatch-violet",
+  slate: "bg-swatch-slate",
+  stone: "bg-swatch-stone",
+  zinc: "bg-swatch-zinc",
+  graphite: "bg-swatch-graphite",
 }
 
 function buildSwatchGroup(
   storeKey: "accentColor" | "bgColor"
 ): HTMLElement {
+  const isAccent = storeKey === "accentColor"
+  const specialValue = isAccent ? "random" : "auto"
+
   const container = document.createElement("div")
-  container.className = "flex gap-3 items-center"
+  container.className = "flex gap-2.5 items-center flex-wrap"
 
   const buttons: HTMLButtonElement[] = []
 
-  for (const color of SWATCH_COLORS) {
+  const specialBtn = document.createElement("button")
+  specialBtn.className = "w-6 h-6 rounded-full flex items-center justify-center cursor-pointer transition-all duration-150 border border-input-border/50 text-muted"
+  specialBtn.dataset.color = specialValue
+  specialBtn.innerHTML = getIconSvg(isAccent ? "randomAccent" : "autoBg")
+  specialBtn.addEventListener("click", () => store.sync.set(storeKey, specialValue as any))
+  specialBtn.addEventListener("mouseenter", () => {
+    if (store.sync.get(storeKey) !== specialValue) specialBtn.style.transform = "scale(1.1)"
+  })
+  specialBtn.addEventListener("mouseleave", () => { specialBtn.style.transform = "" })
+
+  createTooltip(specialBtn, isAccent ? "Changes color daily" : "Matches accent color")
+
+  buttons.push(specialBtn)
+  container.appendChild(specialBtn)
+
+  for (const color of ACCENT_COLORS) {
     const btn = document.createElement("button")
     btn.className = `w-6 h-6 rounded-full ${SWATCH_BG[color]} flex items-center justify-center cursor-pointer transition-all duration-150`
     btn.dataset.color = color
 
-    btn.addEventListener("click", () => {
-      store.sync.set(storeKey, color)
-    })
-
+    btn.addEventListener("click", () => store.sync.set(storeKey, color))
     btn.addEventListener("mouseenter", () => {
       if (store.sync.get(storeKey) !== color) btn.style.transform = "scale(1.1)"
     })
-    btn.addEventListener("mouseleave", () => {
-      btn.style.transform = ""
-    })
+    btn.addEventListener("mouseleave", () => { btn.style.transform = "" })
 
     buttons.push(btn)
     container.appendChild(btn)
@@ -140,18 +160,35 @@ function buildSwatchGroup(
 
   function updateSelected(val: string): void {
     for (const btn of buttons) {
-      const isSelected = btn.dataset.color === val
+      const color = btn.dataset.color!
+      const isSelected = color === val
+      const isSpecial = color === "random" || color === "auto"
+
       if (isSelected) {
-        btn.innerHTML = getIconSvg("swatchCheck")
-        btn.style.outline = "2px solid"
-        btn.style.outlineOffset = "2px"
-        btn.style.outlineColor = `var(--swatch-${val})`
+        if (isSpecial) {
+          btn.style.outline = "2px solid var(--accent)"
+          btn.style.outlineOffset = "2px"
+          btn.style.borderColor = "var(--accent)"
+          btn.style.color = "var(--accent)"
+        } else {
+          btn.innerHTML = getIconSvg("swatchCheck")
+          btn.style.outline = "2px solid"
+          btn.style.outlineOffset = "2px"
+          btn.style.outlineColor = `var(--swatch-${val})`
+        }
         btn.style.transform = ""
       } else {
-        btn.innerHTML = ""
-        btn.style.outline = ""
-        btn.style.outlineOffset = ""
-        btn.style.outlineColor = ""
+        if (isSpecial) {
+          btn.style.outline = ""
+          btn.style.outlineOffset = ""
+          btn.style.borderColor = ""
+          btn.style.color = ""
+        } else {
+          btn.innerHTML = ""
+          btn.style.outline = ""
+          btn.style.outlineOffset = ""
+          btn.style.outlineColor = ""
+        }
       }
     }
   }
@@ -644,15 +681,34 @@ function buildAdvancedPanel(): HTMLDivElement {
   panel.className = "settings-panel pb-6 px-6"
   panel.hidden = true
 
-  const center = document.createElement("div")
-  center.className = "flex flex-col items-center justify-center min-h-[320px] gap-3"
-  const wrenchIcon = icon("tabAdvanced", { size: 32, class: "text-muted/30" })
-  center.appendChild(wrenchIcon)
-  const msg = document.createElement("p")
-  msg.className = "text-sm text-muted/40"
-  msg.textContent = "No advanced settings yet"
-  center.appendChild(msg)
-  panel.appendChild(center)
+  const wrapper = document.createElement("div")
+  wrapper.className = "flex flex-col"
+
+  const keyInput = createInput({ type: "password", placeholder: "Paste your API key" })
+  keyInput.value = store.sync.get("unsplashApiKey")
+  keyInput.style.width = "220px"
+  keyInput.addEventListener("change", () => {
+    store.sync.set("unsplashApiKey", (keyInput as HTMLInputElement).value.trim())
+  })
+  store.sync.subscribe("unsplashApiKey", (v) => { (keyInput as HTMLInputElement).value = v })
+
+  const keyRow = document.createElement("div")
+  keyRow.className = "flex items-center justify-between py-3 border-b border-input-border/10"
+
+  const keyLabel = document.createElement("span")
+  keyLabel.className = "text-sm text-foreground"
+  keyLabel.textContent = "Unsplash API key"
+
+  keyRow.appendChild(keyLabel)
+  keyRow.appendChild(keyInput)
+  wrapper.appendChild(keyRow)
+
+  const helpText = document.createElement("p")
+  helpText.className = "text-xs text-muted mt-2"
+  helpText.innerHTML = `Get a free key at <a href="https://unsplash.com/developers" target="_blank" rel="noopener" class="underline text-accent">unsplash.com/developers</a>`
+  wrapper.appendChild(helpText)
+
+  panel.appendChild(wrapper)
   return panel
 }
 
