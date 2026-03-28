@@ -10,10 +10,22 @@ export type RecommendationData = {
   builtAt: number
 }
 
+export const ACCENT_COLORS = ["rose", "coral", "amber", "teal", "sky", "violet", "slate", "stone", "zinc", "graphite"] as const
+export type AccentColor = (typeof ACCENT_COLORS)[number]
+
+export type BgImageMeta = {
+  id: string
+  url: string
+  authorName: string
+  authorUrl: string
+  downloadUrl: string
+  cachedAt: number
+}
+
 export type SyncSettings = {
   theme: "modern";
-  accentColor: "red" | "green" | "blue";
-  bgColor: "red" | "green" | "blue";
+  accentColor: AccentColor | "random";
+  bgColor: AccentColor | "auto";
   mode: "light" | "dark" | "auto";
   searchEngine: "google" | "bing" | "yahoo" | "duckduckgo" | "ecosia" | "qwant" | "startpage";
   debounceSearch: boolean;
@@ -31,6 +43,11 @@ export type SyncSettings = {
   spotifyEnabled: boolean;
   recommendationsEnabled: boolean;
   calendarEnabled: boolean;
+  bgType: "color" | "image";
+  bgImageSource: "unsplash" | "upload";
+  unsplashDaily: boolean;
+  unsplashTopic: string;
+  unsplashApiKey: string;
 };
 
 export type LocalSettings = {
@@ -43,12 +60,13 @@ export type LocalSettings = {
   spotifyTokenExpiry: number | null
   recommendationData: RecommendationData | null
   calendarConnected: boolean
+  bgImageMeta: BgImageMeta | null
 }
 
 export const syncDefaults: SyncSettings = {
   theme: "modern",
-  accentColor: "blue",
-  bgColor: "blue",
+  accentColor: "sky",
+  bgColor: "auto",
   mode: "auto",
   searchEngine: "google",
   debounceSearch: false,
@@ -66,6 +84,11 @@ export const syncDefaults: SyncSettings = {
   spotifyEnabled: true,
   recommendationsEnabled: false,
   calendarEnabled: false,
+  bgType: "color",
+  bgImageSource: "unsplash",
+  unsplashDaily: false,
+  unsplashTopic: "wallpapers",
+  unsplashApiKey: "",
 }
 
 export const localDefaults: LocalSettings = {
@@ -78,4 +101,5 @@ export const localDefaults: LocalSettings = {
   spotifyTokenExpiry: null,
   recommendationData: null,
   calendarConnected: false,
+  bgImageMeta: null,
 }
