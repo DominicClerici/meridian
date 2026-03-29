@@ -1,0 +1,265 @@
+<h2>Calendar Widget — 1W (Week) View</h2>
+<p class="subtitle">7 columns of equal width. Events are colored bars. Clicking a bar opens event detail popover.</p>
+
+<div class="mockup">
+  <div class="mockup-header">Week View — "This Week"</div>
+  <div class="mockup-body" style="background: #1a1a2e; color: #e0e0e0; border-radius: 12px; padding: 0; font-family: system-ui, sans-serif; width: 680px; max-width: 100%;">
+
+    <!-- Control Row 1: View Buttons -->
+    <div style="display: flex; gap: 4px; padding: 16px 16px 0; align-items: center;">
+      <div style="display: flex; gap: 2px; background: rgba(255,255,255,0.06); border-radius: 8px; padding: 3px;">
+        <div style="padding: 6px 14px; border-radius: 6px; font-size: 13px; color: rgba(255,255,255,0.5);">1D</div>
+        <div style="background: #60a5fa; color: #fff; padding: 6px 14px; border-radius: 6px; font-size: 13px; font-weight: 600;">1W</div>
+        <div style="padding: 6px 14px; border-radius: 6px; font-size: 13px; color: rgba(255,255,255,0.5);">1M</div>
+      </div>
+    </div>
+
+    <!-- Control Row 2: Navigation -->
+    <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 16px 12px;">
+      <button style="background: rgba(255,255,255,0.08); border: none; color: rgba(255,255,255,0.6); width: 28px; height: 28px; border-radius: 6px; cursor: pointer; font-size: 14px;">‹</button>
+      <span style="font-size: 15px; font-weight: 600; color: #e0e0e0;">This Week</span>
+      <button style="background: rgba(255,255,255,0.08); border: none; color: rgba(255,255,255,0.6); width: 28px; height: 28px; border-radius: 6px; cursor: pointer; font-size: 14px;">›</button>
+    </div>
+
+    <!-- Separator -->
+    <div style="height: 1px; background: rgba(255,255,255,0.08); margin: 0 16px;"></div>
+
+    <!-- Day Headers -->
+    <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 0; padding: 10px 16px 0;">
+      <div style="text-align: center;">
+        <div style="font-size: 10px; color: rgba(255,255,255,0.35); text-transform: uppercase; letter-spacing: 0.5px;">Mon</div>
+        <div style="font-size: 13px; color: rgba(255,255,255,0.5); margin-top: 2px;">24</div>
+      </div>
+      <div style="text-align: center;">
+        <div style="font-size: 10px; color: rgba(255,255,255,0.35); text-transform: uppercase; letter-spacing: 0.5px;">Tue</div>
+        <div style="font-size: 13px; color: rgba(255,255,255,0.5); margin-top: 2px;">25</div>
+      </div>
+      <div style="text-align: center;">
+        <div style="font-size: 10px; color: rgba(255,255,255,0.35); text-transform: uppercase; letter-spacing: 0.5px;">Wed</div>
+        <div style="font-size: 13px; color: rgba(255,255,255,0.5); margin-top: 2px;">26</div>
+      </div>
+      <div style="text-align: center;">
+        <div style="font-size: 10px; color: rgba(255,255,255,0.35); text-transform: uppercase; letter-spacing: 0.5px;">Thu</div>
+        <div style="font-size: 13px; color: rgba(255,255,255,0.5); margin-top: 2px;">27</div>
+      </div>
+      <div style="text-align: center;">
+        <div style="font-size: 10px; color: rgba(255,255,255,0.35); text-transform: uppercase; letter-spacing: 0.5px;">Fri</div>
+        <div style="font-size: 13px; color: rgba(255,255,255,0.5); margin-top: 2px;">28</div>
+      </div>
+      <div style="text-align: center; background: rgba(255,255,255,0.03); border-radius: 6px 6px 0 0; padding-top: 2px;">
+        <div style="font-size: 10px; color: #60a5fa; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;">Today</div>
+        <div style="font-size: 13px; color: #60a5fa; font-weight: 600; margin-top: 2px;">29</div>
+      </div>
+      <div style="text-align: center;">
+        <div style="font-size: 10px; color: rgba(255,255,255,0.35); text-transform: uppercase; letter-spacing: 0.5px;">Sun</div>
+        <div style="font-size: 13px; color: rgba(255,255,255,0.5); margin-top: 2px;">30</div>
+      </div>
+    </div>
+
+    <!-- Event Columns -->
+    <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 0; padding: 6px 16px 16px; min-height: 200px; align-items: start;">
+
+      <!-- Monday -->
+      <div style="display: flex; flex-direction: column; gap: 3px; padding: 4px 2px;">
+        <div style="background: #60a5fa; border-radius: 4px; height: 22px; cursor: pointer; opacity: 0.85;" title="Daily Standup · 9:00–9:30 AM"></div>
+        <div style="background: #34d399; border-radius: 4px; height: 40px; cursor: pointer; opacity: 0.85;" title="Design Review · 10:00–11:30 AM"></div>
+      </div>
+
+      <!-- Tuesday -->
+      <div style="display: flex; flex-direction: column; gap: 3px; padding: 4px 2px;">
+        <div style="background: #60a5fa; border-radius: 4px; height: 22px; cursor: pointer; opacity: 0.85;" title="Daily Standup · 9:00–9:30 AM"></div>
+        <div style="background: #f59e0b; border-radius: 4px; height: 34px; cursor: pointer; opacity: 0.85;" title="Sprint Planning · 1:00–2:00 PM"></div>
+        <div style="background: #f472b6; border-radius: 4px; height: 22px; cursor: pointer; opacity: 0.85;" title="1:1 with Manager · 3:30–4:00 PM"></div>
+      </div>
+
+      <!-- Wednesday -->
+      <div style="display: flex; flex-direction: column; gap: 3px; padding: 4px 2px;">
+        <div style="background: #60a5fa; border-radius: 4px; height: 22px; cursor: pointer; opacity: 0.85;" title="Daily Standup · 9:00–9:30 AM"></div>
+      </div>
+
+      <!-- Thursday -->
+      <div style="display: flex; flex-direction: column; gap: 3px; padding: 4px 2px;">
+        <div style="background: #60a5fa; border-radius: 4px; height: 22px; cursor: pointer; opacity: 0.85;" title="Daily Standup · 9:00–9:30 AM"></div>
+        <div style="background: #a78bfa; border-radius: 4px; height: 34px; cursor: pointer; opacity: 0.85;" title="Team Retro · 11:00 AM–12:00 PM"></div>
+        <div style="background: #34d399; border-radius: 4px; height: 28px; cursor: pointer; opacity: 0.85;" title="Code Review · 2:00–3:00 PM"></div>
+      </div>
+
+      <!-- Friday -->
+      <div style="display: flex; flex-direction: column; gap: 3px; padding: 4px 2px;">
+        <div style="background: #60a5fa; border-radius: 4px; height: 22px; cursor: pointer; opacity: 0.85;" title="Daily Standup · 9:00–9:30 AM"></div>
+        <div style="background: #f59e0b; border-radius: 4px; height: 28px; cursor: pointer; opacity: 0.85;" title="Demo · 4:00–5:00 PM"></div>
+      </div>
+
+      <!-- Saturday (Today) -->
+      <div style="display: flex; flex-direction: column; gap: 3px; padding: 4px 2px; background: rgba(255,255,255,0.03); border-radius: 0 0 6px 6px;">
+        <div style="background: #a78bfa; border-radius: 4px; height: 16px; cursor: pointer; opacity: 0.85;" title="Team Building Day · All day"></div>
+        <div style="background: #34d399; border-radius: 4px; height: 40px; cursor: pointer; opacity: 0.85;" title="Design Review · 10:00–11:30 AM"></div>
+        <div style="background: #f59e0b; border-radius: 4px; height: 28px; cursor: pointer; opacity: 0.85;" title="Sprint Planning · 1:00–2:00 PM"></div>
+        <div style="background: #f472b6; border-radius: 4px; height: 22px; cursor: pointer; opacity: 0.85;" title="1:1 with Manager · 3:30–4:00 PM"></div>
+      </div>
+
+      <!-- Sunday -->
+      <div style="display: flex; flex-direction: column; gap: 3px; padding: 4px 2px;">
+        <!-- empty day -->
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="margin-top: 32px;"></div>
+
+<div class="mockup">
+  <div class="mockup-header">Week View — Event Detail Popover (on bar click)</div>
+  <div class="mockup-body" style="background: #1a1a2e; color: #e0e0e0; border-radius: 12px; padding: 0; font-family: system-ui, sans-serif; width: 320px;">
+    <!-- Nested popover showing event detail -->
+    <div style="padding: 16px;">
+      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
+        <div style="width: 10px; height: 10px; border-radius: 50%; background: #34d399; flex-shrink: 0;"></div>
+        <div style="font-size: 15px; font-weight: 600; color: #e0e0e0;">Design Review</div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <div style="font-size: 12px; color: rgba(255,255,255,0.35); min-width: 50px;">Time</div>
+          <div style="font-size: 13px; color: rgba(255,255,255,0.7);">10:00 AM – 11:30 AM</div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <div style="font-size: 12px; color: rgba(255,255,255,0.35); min-width: 50px;">Where</div>
+          <div style="font-size: 13px; color: rgba(255,255,255,0.7);">Conference Room B</div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <div style="font-size: 12px; color: rgba(255,255,255,0.35); min-width: 50px;">Calendar</div>
+          <div style="font-size: 13px; color: rgba(255,255,255,0.7);">Work</div>
+        </div>
+      </div>
+
+      <a href="#" style="display: flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 16px; background: #60a5fa; color: #fff; border-radius: 6px; font-size: 13px; font-weight: 500; text-decoration: none;">
+        Open in Google Calendar ↗
+      </a>
+    </div>
+  </div>
+</div>
+
+<div style="margin-top: 32px;"></div>
+
+<div class="mockup">
+  <div class="mockup-header">Week View — "Next Week" (navigated)</div>
+  <div class="mockup-body" style="background: #1a1a2e; color: #e0e0e0; border-radius: 12px; padding: 0; font-family: system-ui, sans-serif; width: 680px; max-width: 100%;">
+    <div style="display: flex; gap: 4px; padding: 16px 16px 0; align-items: center;">
+      <div style="display: flex; gap: 2px; background: rgba(255,255,255,0.06); border-radius: 8px; padding: 3px;">
+        <div style="padding: 6px 14px; border-radius: 6px; font-size: 13px; color: rgba(255,255,255,0.5);">1D</div>
+        <div style="background: #60a5fa; color: #fff; padding: 6px 14px; border-radius: 6px; font-size: 13px; font-weight: 600;">1W</div>
+        <div style="padding: 6px 14px; border-radius: 6px; font-size: 13px; color: rgba(255,255,255,0.5);">1M</div>
+      </div>
+    </div>
+    <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 16px 12px;">
+      <button style="background: rgba(255,255,255,0.08); border: none; color: rgba(255,255,255,0.6); width: 28px; height: 28px; border-radius: 6px; cursor: pointer; font-size: 14px;">‹</button>
+      <span style="font-size: 15px; font-weight: 600; color: #e0e0e0;">Next Week</span>
+      <button style="background: rgba(255,255,255,0.08); border: none; color: rgba(255,255,255,0.6); width: 28px; height: 28px; border-radius: 6px; cursor: pointer; font-size: 14px;">›</button>
+    </div>
+    <div style="height: 1px; background: rgba(255,255,255,0.08); margin: 0 16px;"></div>
+
+    <!-- Day Headers (next week dates) -->
+    <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 0; padding: 10px 16px 0;">
+      <div style="text-align: center;">
+        <div style="font-size: 10px; color: rgba(255,255,255,0.35); text-transform: uppercase; letter-spacing: 0.5px;">Mon</div>
+        <div style="font-size: 13px; color: rgba(255,255,255,0.5); margin-top: 2px;">31</div>
+      </div>
+      <div style="text-align: center;">
+        <div style="font-size: 10px; color: rgba(255,255,255,0.35); text-transform: uppercase; letter-spacing: 0.5px;">Tue</div>
+        <div style="font-size: 13px; color: rgba(255,255,255,0.5); margin-top: 2px;">1</div>
+      </div>
+      <div style="text-align: center;">
+        <div style="font-size: 10px; color: rgba(255,255,255,0.35); text-transform: uppercase; letter-spacing: 0.5px;">Wed</div>
+        <div style="font-size: 13px; color: rgba(255,255,255,0.5); margin-top: 2px;">2</div>
+      </div>
+      <div style="text-align: center;">
+        <div style="font-size: 10px; color: rgba(255,255,255,0.35); text-transform: uppercase; letter-spacing: 0.5px;">Thu</div>
+        <div style="font-size: 13px; color: rgba(255,255,255,0.5); margin-top: 2px;">3</div>
+      </div>
+      <div style="text-align: center;">
+        <div style="font-size: 10px; color: rgba(255,255,255,0.35); text-transform: uppercase; letter-spacing: 0.5px;">Fri</div>
+        <div style="font-size: 13px; color: rgba(255,255,255,0.5); margin-top: 2px;">4</div>
+      </div>
+      <div style="text-align: center;">
+        <div style="font-size: 10px; color: rgba(255,255,255,0.35); text-transform: uppercase; letter-spacing: 0.5px;">Sat</div>
+        <div style="font-size: 13px; color: rgba(255,255,255,0.5); margin-top: 2px;">5</div>
+      </div>
+      <div style="text-align: center;">
+        <div style="font-size: 10px; color: rgba(255,255,255,0.35); text-transform: uppercase; letter-spacing: 0.5px;">Sun</div>
+        <div style="font-size: 13px; color: rgba(255,255,255,0.5); margin-top: 2px;">6</div>
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 0; padding: 6px 16px 16px; min-height: 160px; align-items: start;">
+      <div style="display: flex; flex-direction: column; gap: 3px; padding: 4px 2px;">
+        <div style="background: #60a5fa; border-radius: 4px; height: 22px; cursor: pointer; opacity: 0.85;"></div>
+        <div style="background: #f472b6; border-radius: 4px; height: 34px; cursor: pointer; opacity: 0.85;"></div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 3px; padding: 4px 2px;">
+        <div style="background: #60a5fa; border-radius: 4px; height: 22px; cursor: pointer; opacity: 0.85;"></div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 3px; padding: 4px 2px;">
+        <div style="background: #60a5fa; border-radius: 4px; height: 22px; cursor: pointer; opacity: 0.85;"></div>
+        <div style="background: #a78bfa; border-radius: 4px; height: 40px; cursor: pointer; opacity: 0.85;"></div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 3px; padding: 4px 2px;">
+        <div style="background: #60a5fa; border-radius: 4px; height: 22px; cursor: pointer; opacity: 0.85;"></div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 3px; padding: 4px 2px;">
+        <div style="background: #60a5fa; border-radius: 4px; height: 22px; cursor: pointer; opacity: 0.85;"></div>
+        <div style="background: #f59e0b; border-radius: 4px; height: 28px; cursor: pointer; opacity: 0.85;"></div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 3px; padding: 4px 2px;"></div>
+      <div style="display: flex; flex-direction: column; gap: 3px; padding: 4px 2px;"></div>
+    </div>
+  </div>
+</div>
+
+<div style="margin-top: 32px;"></div>
+
+<div class="mockup">
+  <div class="mockup-header">Week View — "Mar 16th – Mar 22nd" (2 weeks back)</div>
+  <div class="mockup-body" style="background: #1a1a2e; color: #e0e0e0; border-radius: 12px; padding: 0; font-family: system-ui, sans-serif; width: 680px; max-width: 100%;">
+    <div style="display: flex; gap: 4px; padding: 16px 16px 0; align-items: center;">
+      <div style="display: flex; gap: 2px; background: rgba(255,255,255,0.06); border-radius: 8px; padding: 3px;">
+        <div style="padding: 6px 14px; border-radius: 6px; font-size: 13px; color: rgba(255,255,255,0.5);">1D</div>
+        <div style="background: #60a5fa; color: #fff; padding: 6px 14px; border-radius: 6px; font-size: 13px; font-weight: 600;">1W</div>
+        <div style="padding: 6px 14px; border-radius: 6px; font-size: 13px; color: rgba(255,255,255,0.5);">1M</div>
+      </div>
+    </div>
+    <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 16px 12px;">
+      <button style="background: rgba(255,255,255,0.08); border: none; color: rgba(255,255,255,0.6); width: 28px; height: 28px; border-radius: 6px; cursor: pointer; font-size: 14px;">‹</button>
+      <span style="font-size: 15px; font-weight: 600; color: #e0e0e0;">Mar 16th – Mar 22nd</span>
+      <button style="background: rgba(255,255,255,0.08); border: none; color: rgba(255,255,255,0.6); width: 28px; height: 28px; border-radius: 6px; cursor: pointer; font-size: 14px;">›</button>
+    </div>
+    <div style="height: 1px; background: rgba(255,255,255,0.08); margin: 0 16px;"></div>
+    <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 0; padding: 10px 16px 0;">
+      <div style="text-align: center;"><div style="font-size: 10px; color: rgba(255,255,255,0.35); text-transform: uppercase;">Mon</div><div style="font-size: 13px; color: rgba(255,255,255,0.5); margin-top: 2px;">16</div></div>
+      <div style="text-align: center;"><div style="font-size: 10px; color: rgba(255,255,255,0.35); text-transform: uppercase;">Tue</div><div style="font-size: 13px; color: rgba(255,255,255,0.5); margin-top: 2px;">17</div></div>
+      <div style="text-align: center;"><div style="font-size: 10px; color: rgba(255,255,255,0.35); text-transform: uppercase;">Wed</div><div style="font-size: 13px; color: rgba(255,255,255,0.5); margin-top: 2px;">18</div></div>
+      <div style="text-align: center;"><div style="font-size: 10px; color: rgba(255,255,255,0.35); text-transform: uppercase;">Thu</div><div style="font-size: 13px; color: rgba(255,255,255,0.5); margin-top: 2px;">19</div></div>
+      <div style="text-align: center;"><div style="font-size: 10px; color: rgba(255,255,255,0.35); text-transform: uppercase;">Fri</div><div style="font-size: 13px; color: rgba(255,255,255,0.5); margin-top: 2px;">20</div></div>
+      <div style="text-align: center;"><div style="font-size: 10px; color: rgba(255,255,255,0.35); text-transform: uppercase;">Sat</div><div style="font-size: 13px; color: rgba(255,255,255,0.5); margin-top: 2px;">21</div></div>
+      <div style="text-align: center;"><div style="font-size: 10px; color: rgba(255,255,255,0.35); text-transform: uppercase;">Sun</div><div style="font-size: 13px; color: rgba(255,255,255,0.5); margin-top: 2px;">22</div></div>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 0; padding: 6px 16px 16px; min-height: 120px; align-items: start;">
+      <div style="display: flex; flex-direction: column; gap: 3px; padding: 4px 2px;">
+        <div style="background: #60a5fa; border-radius: 4px; height: 22px; cursor: pointer; opacity: 0.85;"></div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 3px; padding: 4px 2px;">
+        <div style="background: #60a5fa; border-radius: 4px; height: 22px; cursor: pointer; opacity: 0.85;"></div>
+        <div style="background: #34d399; border-radius: 4px; height: 34px; cursor: pointer; opacity: 0.85;"></div>
+      </div>
+      <div style="padding: 4px 2px;"></div>
+      <div style="display: flex; flex-direction: column; gap: 3px; padding: 4px 2px;">
+        <div style="background: #60a5fa; border-radius: 4px; height: 22px; cursor: pointer; opacity: 0.85;"></div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 3px; padding: 4px 2px;">
+        <div style="background: #f59e0b; border-radius: 4px; height: 28px; cursor: pointer; opacity: 0.85;"></div>
+      </div>
+      <div style="padding: 4px 2px;"></div>
+      <div style="padding: 4px 2px;"></div>
+    </div>
+  </div>
+</div>

@@ -680,7 +680,7 @@ document.addEventListener("click", (e: MouseEvent) => {
 export function createPopover(
   anchor: HTMLElement,
   content: HTMLElement,
-  opts?: { onClose?: () => void; modal?: boolean }
+  opts?: { onClose?: () => void; modal?: boolean; position?: "below-right" | "above-center" }
 ): { el: HTMLDivElement; close: () => void } {
   const popover = document.createElement("div")
   popover.className = "fixed bg-popover text-popover-foreground rounded-theme p-3 flex flex-col gap-2 border border-white/[0.08] glass-surface popover-enter"
@@ -706,14 +706,23 @@ export function createPopover(
   const availW = dialogHost ? dialogHost.clientWidth : window.innerWidth
   const availH = dialogHost ? dialogHost.clientHeight : window.innerHeight
 
-  let top = rect.bottom + 4 - oy
-  let left = rect.right - popoverRect.width - ox
+  let top: number
+  let left: number
+
+  if (opts?.position === "above-center") {
+    top = (rect.top - oy) - popoverRect.height - 4
+    left = rect.left + rect.width / 2 - popoverRect.width / 2 - ox
+    if (top < 8) top = rect.bottom + 4 - oy
+  } else {
+    top = rect.bottom + 4 - oy
+    left = rect.right - popoverRect.width - ox
+    if (top + popoverRect.height > availH - 8) {
+      top = (rect.top - oy) - popoverRect.height - 4
+    }
+  }
 
   if (left < 8) left = 8
   if (left + popoverRect.width > availW - 8) left = availW - popoverRect.width - 8
-  if (top + popoverRect.height > availH - 8) {
-    top = (rect.top - oy) - popoverRect.height - 4
-  }
 
   popover.style.top = `${top}px`
   popover.style.left = `${left}px`

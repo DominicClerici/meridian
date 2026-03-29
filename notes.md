@@ -18,3 +18,8 @@ The key differentiator is upgraded controls throughout:
 - Widget enables become toggle switches instead of checkboxes
 - Each widget gets a subtle card-within-card treatment with its toggle in the top-right corner and sub-settings indented below
 - The Appearance tab gets a live mini-preview strip at the top showing how the current theme/colors/mode look together
+
+### 3. Calendar improvements
+
+- Let users filter which calendars events show up. (holidays, work, etc). List out user calendars and build filter from that.
+- Scale the views to be time accurate to the day with a current time marker, skip over large gaps and show ui for that skip

@@ -1,0 +1,163 @@
+<h2>Calendar Widget — 1D (Day) View</h2>
+<p class="subtitle">Fixed ~700px wide popover anchored to trigger button. This is the default view on open.</p>
+
+<div class="mockup">
+  <div class="mockup-header">Day View — "Today"</div>
+  <div class="mockup-body" style="background: #1a1a2e; color: #e0e0e0; border-radius: 12px; padding: 0; font-family: system-ui, sans-serif; width: 680px; max-width: 100%;">
+
+    <!-- Control Row 1: View Buttons -->
+    <div style="display: flex; gap: 4px; padding: 16px 16px 0; align-items: center;">
+      <div style="display: flex; gap: 2px; background: rgba(255,255,255,0.06); border-radius: 8px; padding: 3px;">
+        <div style="background: #60a5fa; color: #fff; padding: 6px 14px; border-radius: 6px; font-size: 13px; font-weight: 600;">1D</div>
+        <div style="padding: 6px 14px; border-radius: 6px; font-size: 13px; color: rgba(255,255,255,0.5); cursor: pointer;">1W</div>
+        <div style="padding: 6px 14px; border-radius: 6px; font-size: 13px; color: rgba(255,255,255,0.5); cursor: pointer;">1M</div>
+      </div>
+    </div>
+
+    <!-- Control Row 2: Navigation -->
+    <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 16px 12px;">
+      <button style="background: rgba(255,255,255,0.08); border: none; color: rgba(255,255,255,0.6); width: 28px; height: 28px; border-radius: 6px; cursor: pointer; font-size: 14px;">‹</button>
+      <span style="font-size: 15px; font-weight: 600; color: #e0e0e0;">Today</span>
+      <button style="background: rgba(255,255,255,0.08); border: none; color: rgba(255,255,255,0.6); width: 28px; height: 28px; border-radius: 6px; cursor: pointer; font-size: 14px;">›</button>
+    </div>
+
+    <!-- Separator -->
+    <div style="height: 1px; background: rgba(255,255,255,0.08); margin: 0 16px;"></div>
+
+    <!-- All-day section -->
+    <div style="padding: 10px 16px 6px;">
+      <div style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: rgba(255,255,255,0.35); margin-bottom: 6px;">All Day</div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: rgba(255,255,255,0.04); border-radius: 8px; border-left: 3px solid #a78bfa;">
+        <div style="font-size: 13px; color: #e0e0e0;">Team Building Day</div>
+        <a href="#" style="color: rgba(255,255,255,0.3); font-size: 11px; margin-left: auto; text-decoration: none;">↗</a>
+      </div>
+    </div>
+
+    <!-- Separator -->
+    <div style="height: 1px; background: rgba(255,255,255,0.08); margin: 6px 16px;"></div>
+
+    <!-- Timed events -->
+    <div style="padding: 8px 16px 16px; display: flex; flex-direction: column; gap: 4px;">
+
+      <!-- Event 1 -->
+      <div style="display: flex; align-items: flex-start; gap: 10px; padding: 10px; background: rgba(255,255,255,0.04); border-radius: 8px; border-left: 3px solid #60a5fa; cursor: pointer;">
+        <div style="min-width: 70px;">
+          <div style="font-size: 13px; color: rgba(255,255,255,0.7);">9:00 AM</div>
+          <div style="font-size: 11px; color: rgba(255,255,255,0.35);">9:30 AM</div>
+        </div>
+        <div style="flex: 1;">
+          <div style="font-size: 13px; color: #e0e0e0; font-weight: 500;">Daily Standup</div>
+          <div style="font-size: 11px; color: rgba(255,255,255,0.4); margin-top: 2px;">Google Meet</div>
+        </div>
+        <a href="#" style="color: rgba(255,255,255,0.3); font-size: 11px; text-decoration: none;">↗</a>
+      </div>
+
+      <!-- Event 2 -->
+      <div style="display: flex; align-items: flex-start; gap: 10px; padding: 10px; background: rgba(255,255,255,0.04); border-radius: 8px; border-left: 3px solid #34d399; cursor: pointer;">
+        <div style="min-width: 70px;">
+          <div style="font-size: 13px; color: rgba(255,255,255,0.7);">10:00 AM</div>
+          <div style="font-size: 11px; color: rgba(255,255,255,0.35);">11:30 AM</div>
+        </div>
+        <div style="flex: 1;">
+          <div style="font-size: 13px; color: #e0e0e0; font-weight: 500;">Design Review</div>
+          <div style="font-size: 11px; color: rgba(255,255,255,0.4); margin-top: 2px;">Conference Room B</div>
+        </div>
+        <a href="#" style="color: rgba(255,255,255,0.3); font-size: 11px; text-decoration: none;">↗</a>
+      </div>
+
+      <!-- Event 3 -->
+      <div style="display: flex; align-items: flex-start; gap: 10px; padding: 10px; background: rgba(255,255,255,0.04); border-radius: 8px; border-left: 3px solid #f59e0b; cursor: pointer;">
+        <div style="min-width: 70px;">
+          <div style="font-size: 13px; color: rgba(255,255,255,0.7);">1:00 PM</div>
+          <div style="font-size: 11px; color: rgba(255,255,255,0.35);">2:00 PM</div>
+        </div>
+        <div style="flex: 1;">
+          <div style="font-size: 13px; color: #e0e0e0; font-weight: 500;">Sprint Planning</div>
+          <div style="font-size: 11px; color: rgba(255,255,255,0.4); margin-top: 2px;">Zoom</div>
+        </div>
+        <a href="#" style="color: rgba(255,255,255,0.3); font-size: 11px; text-decoration: none;">↗</a>
+      </div>
+
+      <!-- Event 4 -->
+      <div style="display: flex; align-items: flex-start; gap: 10px; padding: 10px; background: rgba(255,255,255,0.04); border-radius: 8px; border-left: 3px solid #f472b6; cursor: pointer;">
+        <div style="min-width: 70px;">
+          <div style="font-size: 13px; color: rgba(255,255,255,0.7);">3:30 PM</div>
+          <div style="font-size: 11px; color: rgba(255,255,255,0.35);">4:00 PM</div>
+        </div>
+        <div style="flex: 1;">
+          <div style="font-size: 13px; color: #e0e0e0; font-weight: 500;">1:1 with Manager</div>
+        </div>
+        <a href="#" style="color: rgba(255,255,255,0.3); font-size: 11px; text-decoration: none;">↗</a>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div style="margin-top: 24px;"></div>
+
+<div class="mockup">
+  <div class="mockup-header">Day View — Navigated to "Tomorrow"</div>
+  <div class="mockup-body" style="background: #1a1a2e; color: #e0e0e0; border-radius: 12px; padding: 0; font-family: system-ui, sans-serif; width: 680px; max-width: 100%;">
+    <div style="display: flex; gap: 4px; padding: 16px 16px 0; align-items: center;">
+      <div style="display: flex; gap: 2px; background: rgba(255,255,255,0.06); border-radius: 8px; padding: 3px;">
+        <div style="background: #60a5fa; color: #fff; padding: 6px 14px; border-radius: 6px; font-size: 13px; font-weight: 600;">1D</div>
+        <div style="padding: 6px 14px; border-radius: 6px; font-size: 13px; color: rgba(255,255,255,0.5);">1W</div>
+        <div style="padding: 6px 14px; border-radius: 6px; font-size: 13px; color: rgba(255,255,255,0.5);">1M</div>
+      </div>
+    </div>
+    <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 16px 12px;">
+      <button style="background: rgba(255,255,255,0.08); border: none; color: rgba(255,255,255,0.6); width: 28px; height: 28px; border-radius: 6px; cursor: pointer; font-size: 14px;">‹</button>
+      <span style="font-size: 15px; font-weight: 600; color: #e0e0e0;">Tomorrow</span>
+      <button style="background: rgba(255,255,255,0.08); border: none; color: rgba(255,255,255,0.6); width: 28px; height: 28px; border-radius: 6px; cursor: pointer; font-size: 14px;">›</button>
+    </div>
+    <div style="height: 1px; background: rgba(255,255,255,0.08); margin: 0 16px;"></div>
+    <div style="padding: 12px 16px 16px; display: flex; flex-direction: column; gap: 4px;">
+      <div style="display: flex; align-items: flex-start; gap: 10px; padding: 10px; background: rgba(255,255,255,0.04); border-radius: 8px; border-left: 3px solid #60a5fa; cursor: pointer;">
+        <div style="min-width: 70px;">
+          <div style="font-size: 13px; color: rgba(255,255,255,0.7);">10:00 AM</div>
+          <div style="font-size: 11px; color: rgba(255,255,255,0.35);">11:00 AM</div>
+        </div>
+        <div style="flex: 1;">
+          <div style="font-size: 13px; color: #e0e0e0; font-weight: 500;">Project Kickoff</div>
+        </div>
+        <a href="#" style="color: rgba(255,255,255,0.3); font-size: 11px; text-decoration: none;">↗</a>
+      </div>
+      <div style="display: flex; align-items: flex-start; gap: 10px; padding: 10px; background: rgba(255,255,255,0.04); border-radius: 8px; border-left: 3px solid #34d399; cursor: pointer;">
+        <div style="min-width: 70px;">
+          <div style="font-size: 13px; color: rgba(255,255,255,0.7);">2:00 PM</div>
+          <div style="font-size: 11px; color: rgba(255,255,255,0.35);">3:00 PM</div>
+        </div>
+        <div style="flex: 1;">
+          <div style="font-size: 13px; color: #e0e0e0; font-weight: 500;">Client Call</div>
+          <div style="font-size: 11px; color: rgba(255,255,255,0.4); margin-top: 2px;">Google Meet</div>
+        </div>
+        <a href="#" style="color: rgba(255,255,255,0.3); font-size: 11px; text-decoration: none;">↗</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="margin-top: 24px;"></div>
+
+<div class="mockup">
+  <div class="mockup-header">Day View — Navigated to "March 25th" (4 days ahead)</div>
+  <div class="mockup-body" style="background: #1a1a2e; color: #e0e0e0; border-radius: 12px; padding: 0; font-family: system-ui, sans-serif; width: 680px; max-width: 100%;">
+    <div style="display: flex; gap: 4px; padding: 16px 16px 0; align-items: center;">
+      <div style="display: flex; gap: 2px; background: rgba(255,255,255,0.06); border-radius: 8px; padding: 3px;">
+        <div style="background: #60a5fa; color: #fff; padding: 6px 14px; border-radius: 6px; font-size: 13px; font-weight: 600;">1D</div>
+        <div style="padding: 6px 14px; border-radius: 6px; font-size: 13px; color: rgba(255,255,255,0.5);">1W</div>
+        <div style="padding: 6px 14px; border-radius: 6px; font-size: 13px; color: rgba(255,255,255,0.5);">1M</div>
+      </div>
+    </div>
+    <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 16px 12px;">
+      <button style="background: rgba(255,255,255,0.08); border: none; color: rgba(255,255,255,0.6); width: 28px; height: 28px; border-radius: 6px; cursor: pointer; font-size: 14px;">‹</button>
+      <span style="font-size: 15px; font-weight: 600; color: #e0e0e0;">March 25th</span>
+      <button style="background: rgba(255,255,255,0.08); border: none; color: rgba(255,255,255,0.6); width: 28px; height: 28px; border-radius: 6px; cursor: pointer; font-size: 14px;">›</button>
+    </div>
+    <div style="height: 1px; background: rgba(255,255,255,0.08); margin: 0 16px;"></div>
+    <div style="padding: 24px 16px; text-align: center;">
+      <div style="font-size: 13px; color: rgba(255,255,255,0.35);">No events</div>
+    </div>
+  </div>
+</div>

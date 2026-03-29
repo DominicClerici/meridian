@@ -1,0 +1,314 @@
+<h2>Calendar Widget — 1M (Month) View</h2>
+<p class="subtitle">Full month grid. Events shown as colored dots. Clicking a cell opens a day's event list popover.</p>
+
+<div class="mockup">
+  <div class="mockup-header">Month View — "March" (current month)</div>
+  <div class="mockup-body" style="background: #1a1a2e; color: #e0e0e0; border-radius: 12px; padding: 0; font-family: system-ui, sans-serif; width: 680px; max-width: 100%;">
+
+    <!-- Control Row 1: View Buttons -->
+    <div style="display: flex; gap: 4px; padding: 16px 16px 0; align-items: center;">
+      <div style="display: flex; gap: 2px; background: rgba(255,255,255,0.06); border-radius: 8px; padding: 3px;">
+        <div style="padding: 6px 14px; border-radius: 6px; font-size: 13px; color: rgba(255,255,255,0.5);">1D</div>
+        <div style="padding: 6px 14px; border-radius: 6px; font-size: 13px; color: rgba(255,255,255,0.5);">1W</div>
+        <div style="background: #60a5fa; color: #fff; padding: 6px 14px; border-radius: 6px; font-size: 13px; font-weight: 600;">1M</div>
+      </div>
+    </div>
+
+    <!-- Control Row 2: Navigation -->
+    <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 16px 12px;">
+      <button style="background: rgba(255,255,255,0.08); border: none; color: rgba(255,255,255,0.6); width: 28px; height: 28px; border-radius: 6px; cursor: pointer; font-size: 14px;">‹</button>
+      <span style="font-size: 15px; font-weight: 600; color: #e0e0e0;">March</span>
+      <button style="background: rgba(255,255,255,0.08); border: none; color: rgba(255,255,255,0.6); width: 28px; height: 28px; border-radius: 6px; cursor: pointer; font-size: 14px;">›</button>
+    </div>
+
+    <!-- Separator -->
+    <div style="height: 1px; background: rgba(255,255,255,0.08); margin: 0 16px;"></div>
+
+    <!-- Day-of-week headers -->
+    <div style="display: grid; grid-template-columns: repeat(7, 1fr); padding: 10px 16px 4px;">
+      <div style="text-align: center; font-size: 10px; color: rgba(255,255,255,0.35); text-transform: uppercase; letter-spacing: 0.5px;">Mon</div>
+      <div style="text-align: center; font-size: 10px; color: rgba(255,255,255,0.35); text-transform: uppercase; letter-spacing: 0.5px;">Tue</div>
+      <div style="text-align: center; font-size: 10px; color: rgba(255,255,255,0.35); text-transform: uppercase; letter-spacing: 0.5px;">Wed</div>
+      <div style="text-align: center; font-size: 10px; color: rgba(255,255,255,0.35); text-transform: uppercase; letter-spacing: 0.5px;">Thu</div>
+      <div style="text-align: center; font-size: 10px; color: rgba(255,255,255,0.35); text-transform: uppercase; letter-spacing: 0.5px;">Fri</div>
+      <div style="text-align: center; font-size: 10px; color: rgba(255,255,255,0.35); text-transform: uppercase; letter-spacing: 0.5px;">Sat</div>
+      <div style="text-align: center; font-size: 10px; color: rgba(255,255,255,0.35); text-transform: uppercase; letter-spacing: 0.5px;">Sun</div>
+    </div>
+
+    <!-- Calendar Grid -->
+    <div style="display: grid; grid-template-columns: repeat(7, 1fr); padding: 0 16px 16px; gap: 1px;">
+
+      <!-- Week 1: March starts on Sunday, so pad Mon-Sat with blanks -->
+      <!-- Actually March 2026 starts on a Sunday. So Mon-Sat are blank, Sun=1 -->
+      <!-- Let me recalculate: March 1, 2026 is a Sunday -->
+      <div style="padding: 6px 4px; min-height: 48px;"></div><!-- Mon blank -->
+      <div style="padding: 6px 4px; min-height: 48px;"></div><!-- Tue blank -->
+      <div style="padding: 6px 4px; min-height: 48px;"></div><!-- Wed blank -->
+      <div style="padding: 6px 4px; min-height: 48px;"></div><!-- Thu blank -->
+      <div style="padding: 6px 4px; min-height: 48px;"></div><!-- Fri blank -->
+      <div style="padding: 6px 4px; min-height: 48px;"></div><!-- Sat blank -->
+      <div style="padding: 6px 4px; min-height: 48px; text-align: center;">
+        <div style="font-size: 12px; color: rgba(255,255,255,0.5);">1</div>
+      </div>
+
+      <!-- Week 2: 2-8 -->
+      <div style="padding: 6px 4px; min-height: 48px; text-align: center; cursor: pointer; border-radius: 6px;" onmouseenter="this.style.background='rgba(255,255,255,0.04)'" onmouseleave="this.style.background='transparent'">
+        <div style="font-size: 12px; color: rgba(255,255,255,0.5);">2</div>
+        <div style="display: flex; gap: 3px; justify-content: center; margin-top: 4px;">
+          <div style="width: 6px; height: 6px; border-radius: 50%; background: #60a5fa;"></div>
+          <div style="width: 6px; height: 6px; border-radius: 50%; background: #34d399;"></div>
+        </div>
+      </div>
+      <div style="padding: 6px 4px; min-height: 48px; text-align: center; cursor: pointer; border-radius: 6px;" onmouseenter="this.style.background='rgba(255,255,255,0.04)'" onmouseleave="this.style.background='transparent'">
+        <div style="font-size: 12px; color: rgba(255,255,255,0.5);">3</div>
+        <div style="display: flex; gap: 3px; justify-content: center; margin-top: 4px;">
+          <div style="width: 6px; height: 6px; border-radius: 50%; background: #60a5fa;"></div>
+        </div>
+      </div>
+      <div style="padding: 6px 4px; min-height: 48px; text-align: center; cursor: pointer; border-radius: 6px;" onmouseenter="this.style.background='rgba(255,255,255,0.04)'" onmouseleave="this.style.background='transparent'">
+        <div style="font-size: 12px; color: rgba(255,255,255,0.5);">4</div>
+        <div style="display: flex; gap: 3px; justify-content: center; margin-top: 4px;">
+          <div style="width: 6px; height: 6px; border-radius: 50%; background: #60a5fa;"></div>
+          <div style="width: 6px; height: 6px; border-radius: 50%; background: #a78bfa;"></div>
+        </div>
+      </div>
+      <div style="padding: 6px 4px; min-height: 48px; text-align: center; cursor: pointer; border-radius: 6px;" onmouseenter="this.style.background='rgba(255,255,255,0.04)'" onmouseleave="this.style.background='transparent'">
+        <div style="font-size: 12px; color: rgba(255,255,255,0.5);">5</div>
+        <div style="display: flex; gap: 3px; justify-content: center; margin-top: 4px;">
+          <div style="width: 6px; height: 6px; border-radius: 50%; background: #60a5fa;"></div>
+        </div>
+      </div>
+      <div style="padding: 6px 4px; min-height: 48px; text-align: center; cursor: pointer; border-radius: 6px;" onmouseenter="this.style.background='rgba(255,255,255,0.04)'" onmouseleave="this.style.background='transparent'">
+        <div style="font-size: 12px; color: rgba(255,255,255,0.5);">6</div>
+        <div style="display: flex; gap: 3px; justify-content: center; margin-top: 4px;">
+          <div style="width: 6px; height: 6px; border-radius: 50%; background: #f59e0b;"></div>
+        </div>
+      </div>
+      <div style="padding: 6px 4px; min-height: 48px; text-align: center;">
+        <div style="font-size: 12px; color: rgba(255,255,255,0.5);">7</div>
+      </div>
+      <div style="padding: 6px 4px; min-height: 48px; text-align: center;">
+        <div style="font-size: 12px; color: rgba(255,255,255,0.5);">8</div>
+      </div>
+
+      <!-- Week 3: 9-15 -->
+      <div style="padding: 6px 4px; min-height: 48px; text-align: center; cursor: pointer; border-radius: 6px;" onmouseenter="this.style.background='rgba(255,255,255,0.04)'" onmouseleave="this.style.background='transparent'">
+        <div style="font-size: 12px; color: rgba(255,255,255,0.5);">9</div>
+        <div style="display: flex; gap: 3px; justify-content: center; margin-top: 4px;">
+          <div style="width: 6px; height: 6px; border-radius: 50%; background: #60a5fa;"></div>
+          <div style="width: 6px; height: 6px; border-radius: 50%; background: #34d399;"></div>
+        </div>
+      </div>
+      <div style="padding: 6px 4px; min-height: 48px; text-align: center; cursor: pointer; border-radius: 6px;" onmouseenter="this.style.background='rgba(255,255,255,0.04)'" onmouseleave="this.style.background='transparent'">
+        <div style="font-size: 12px; color: rgba(255,255,255,0.5);">10</div>
+        <div style="display: flex; gap: 3px; justify-content: center; margin-top: 4px;">
+          <div style="width: 6px; height: 6px; border-radius: 50%; background: #60a5fa;"></div>
+        </div>
+      </div>
+      <div style="padding: 6px 4px; min-height: 48px; text-align: center;">
+        <div style="font-size: 12px; color: rgba(255,255,255,0.5);">11</div>
+      </div>
+      <div style="padding: 6px 4px; min-height: 48px; text-align: center; cursor: pointer; border-radius: 6px;" onmouseenter="this.style.background='rgba(255,255,255,0.04)'" onmouseleave="this.style.background='transparent'">
+        <div style="font-size: 12px; color: rgba(255,255,255,0.5);">12</div>
+        <div style="display: flex; gap: 3px; justify-content: center; margin-top: 4px;">
+          <div style="width: 6px; height: 6px; border-radius: 50%; background: #60a5fa;"></div>
+          <div style="width: 6px; height: 6px; border-radius: 50%; background: #f472b6;"></div>
+        </div>
+      </div>
+      <div style="padding: 6px 4px; min-height: 48px; text-align: center; cursor: pointer; border-radius: 6px;" onmouseenter="this.style.background='rgba(255,255,255,0.04)'" onmouseleave="this.style.background='transparent'">
+        <div style="font-size: 12px; color: rgba(255,255,255,0.5);">13</div>
+        <div style="display: flex; gap: 3px; justify-content: center; margin-top: 4px;">
+          <div style="width: 6px; height: 6px; border-radius: 50%; background: #f59e0b;"></div>
+        </div>
+      </div>
+      <div style="padding: 6px 4px; min-height: 48px; text-align: center;">
+        <div style="font-size: 12px; color: rgba(255,255,255,0.5);">14</div>
+      </div>
+      <div style="padding: 6px 4px; min-height: 48px; text-align: center;">
+        <div style="font-size: 12px; color: rgba(255,255,255,0.5);">15</div>
+      </div>
+
+      <!-- Week 4: 16-22 -->
+      <div style="padding: 6px 4px; min-height: 48px; text-align: center; cursor: pointer; border-radius: 6px;" onmouseenter="this.style.background='rgba(255,255,255,0.04)'" onmouseleave="this.style.background='transparent'">
+        <div style="font-size: 12px; color: rgba(255,255,255,0.5);">16</div>
+        <div style="display: flex; gap: 3px; justify-content: center; margin-top: 4px;">
+          <div style="width: 6px; height: 6px; border-radius: 50%; background: #60a5fa;"></div>
+        </div>
+      </div>
+      <div style="padding: 6px 4px; min-height: 48px; text-align: center; cursor: pointer; border-radius: 6px;" onmouseenter="this.style.background='rgba(255,255,255,0.04)'" onmouseleave="this.style.background='transparent'">
+        <div style="font-size: 12px; color: rgba(255,255,255,0.5);">17</div>
+        <div style="display: flex; gap: 3px; justify-content: center; margin-top: 4px;">
+          <div style="width: 6px; height: 6px; border-radius: 50%; background: #60a5fa;"></div>
+          <div style="width: 6px; height: 6px; border-radius: 50%; background: #34d399;"></div>
+        </div>
+      </div>
+      <div style="padding: 6px 4px; min-height: 48px; text-align: center;">
+        <div style="font-size: 12px; color: rgba(255,255,255,0.5);">18</div>
+      </div>
+      <div style="padding: 6px 4px; min-height: 48px; text-align: center; cursor: pointer; border-radius: 6px;" onmouseenter="this.style.background='rgba(255,255,255,0.04)'" onmouseleave="this.style.background='transparent'">
+        <div style="font-size: 12px; color: rgba(255,255,255,0.5);">19</div>
+        <div style="display: flex; gap: 3px; justify-content: center; margin-top: 4px;">
+          <div style="width: 6px; height: 6px; border-radius: 50%; background: #a78bfa;"></div>
+        </div>
+      </div>
+      <div style="padding: 6px 4px; min-height: 48px; text-align: center; cursor: pointer; border-radius: 6px;" onmouseenter="this.style.background='rgba(255,255,255,0.04)'" onmouseleave="this.style.background='transparent'">
+        <div style="font-size: 12px; color: rgba(255,255,255,0.5);">20</div>
+        <div style="display: flex; gap: 3px; justify-content: center; margin-top: 4px;">
+          <div style="width: 6px; height: 6px; border-radius: 50%; background: #f59e0b;"></div>
+        </div>
+      </div>
+      <div style="padding: 6px 4px; min-height: 48px; text-align: center;">
+        <div style="font-size: 12px; color: rgba(255,255,255,0.5);">21</div>
+      </div>
+      <div style="padding: 6px 4px; min-height: 48px; text-align: center;">
+        <div style="font-size: 12px; color: rgba(255,255,255,0.5);">22</div>
+      </div>
+
+      <!-- Week 5: 23-29 -->
+      <div style="padding: 6px 4px; min-height: 48px; text-align: center; cursor: pointer; border-radius: 6px;" onmouseenter="this.style.background='rgba(255,255,255,0.04)'" onmouseleave="this.style.background='transparent'">
+        <div style="font-size: 12px; color: rgba(255,255,255,0.5);">23</div>
+        <div style="display: flex; gap: 3px; justify-content: center; margin-top: 4px;">
+          <div style="width: 6px; height: 6px; border-radius: 50%; background: #60a5fa;"></div>
+          <div style="width: 6px; height: 6px; border-radius: 50%; background: #34d399;"></div>
+        </div>
+      </div>
+      <div style="padding: 6px 4px; min-height: 48px; text-align: center; cursor: pointer; border-radius: 6px;" onmouseenter="this.style.background='rgba(255,255,255,0.04)'" onmouseleave="this.style.background='transparent'">
+        <div style="font-size: 12px; color: rgba(255,255,255,0.5);">24</div>
+        <div style="display: flex; gap: 3px; justify-content: center; margin-top: 4px;">
+          <div style="width: 6px; height: 6px; border-radius: 50%; background: #60a5fa;"></div>
+        </div>
+      </div>
+      <div style="padding: 6px 4px; min-height: 48px; text-align: center; cursor: pointer; border-radius: 6px;" onmouseenter="this.style.background='rgba(255,255,255,0.04)'" onmouseleave="this.style.background='transparent'">
+        <div style="font-size: 12px; color: rgba(255,255,255,0.5);">25</div>
+        <div style="display: flex; gap: 3px; justify-content: center; margin-top: 4px;">
+          <div style="width: 6px; height: 6px; border-radius: 50%; background: #60a5fa;"></div>
+        </div>
+      </div>
+      <div style="padding: 6px 4px; min-height: 48px; text-align: center; cursor: pointer; border-radius: 6px;" onmouseenter="this.style.background='rgba(255,255,255,0.04)'" onmouseleave="this.style.background='transparent'">
+        <div style="font-size: 12px; color: rgba(255,255,255,0.5);">26</div>
+        <div style="display: flex; gap: 3px; justify-content: center; margin-top: 4px;">
+          <div style="width: 6px; height: 6px; border-radius: 50%; background: #60a5fa;"></div>
+          <div style="width: 6px; height: 6px; border-radius: 50%; background: #f472b6;"></div>
+        </div>
+      </div>
+      <div style="padding: 6px 4px; min-height: 48px; text-align: center; cursor: pointer; border-radius: 6px;" onmouseenter="this.style.background='rgba(255,255,255,0.04)'" onmouseleave="this.style.background='transparent'">
+        <div style="font-size: 12px; color: rgba(255,255,255,0.5);">27</div>
+        <div style="display: flex; gap: 3px; justify-content: center; margin-top: 4px;">
+          <div style="width: 6px; height: 6px; border-radius: 50%; background: #f59e0b;"></div>
+        </div>
+      </div>
+      <div style="padding: 6px 4px; min-height: 48px; text-align: center;">
+        <div style="font-size: 12px; color: rgba(255,255,255,0.5);">28</div>
+      </div>
+      <!-- Today -->
+      <div style="padding: 6px 4px; min-height: 48px; text-align: center; background: rgba(96,165,250,0.1); border-radius: 6px; cursor: pointer;">
+        <div style="font-size: 12px; color: #60a5fa; font-weight: 600;">29</div>
+        <div style="display: flex; gap: 3px; justify-content: center; margin-top: 4px;">
+          <div style="width: 6px; height: 6px; border-radius: 50%; background: #a78bfa;"></div>
+          <div style="width: 6px; height: 6px; border-radius: 50%; background: #34d399;"></div>
+          <div style="width: 6px; height: 6px; border-radius: 50%; background: #f59e0b;"></div>
+          <div style="width: 6px; height: 6px; border-radius: 50%; background: #f472b6;"></div>
+        </div>
+      </div>
+
+      <!-- Week 6: 30-31 -->
+      <div style="padding: 6px 4px; min-height: 48px; text-align: center; cursor: pointer; border-radius: 6px;" onmouseenter="this.style.background='rgba(255,255,255,0.04)'" onmouseleave="this.style.background='transparent'">
+        <div style="font-size: 12px; color: rgba(255,255,255,0.5);">30</div>
+        <div style="display: flex; gap: 3px; justify-content: center; margin-top: 4px;">
+          <div style="width: 6px; height: 6px; border-radius: 50%; background: #60a5fa;"></div>
+        </div>
+      </div>
+      <div style="padding: 6px 4px; min-height: 48px; text-align: center;">
+        <div style="font-size: 12px; color: rgba(255,255,255,0.5);">31</div>
+      </div>
+      <div style="padding: 6px 4px; min-height: 48px;"></div>
+      <div style="padding: 6px 4px; min-height: 48px;"></div>
+      <div style="padding: 6px 4px; min-height: 48px;"></div>
+      <div style="padding: 6px 4px; min-height: 48px;"></div>
+      <div style="padding: 6px 4px; min-height: 48px;"></div>
+    </div>
+  </div>
+</div>
+
+<div style="margin-top: 32px;"></div>
+
+<!-- Popover: Multiple events on a day -->
+<div class="mockup">
+  <div class="mockup-header">Month View — Day Cell Popover (multiple events, e.g. clicking March 29)</div>
+  <div class="mockup-body" style="background: #1a1a2e; color: #e0e0e0; border-radius: 12px; padding: 0; font-family: system-ui, sans-serif; width: 300px;">
+    <div style="padding: 12px 16px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+      <div style="font-size: 14px; font-weight: 600; color: #e0e0e0;">March 29th</div>
+      <div style="font-size: 11px; color: rgba(255,255,255,0.35);">4 events</div>
+    </div>
+    <div style="padding: 8px 12px; display: flex; flex-direction: column; gap: 2px;">
+      <div style="display: flex; align-items: center; gap: 8px; padding: 8px; border-radius: 6px; cursor: pointer;" onmouseenter="this.style.background='rgba(255,255,255,0.06)'" onmouseleave="this.style.background='transparent'">
+        <div style="width: 8px; height: 8px; border-radius: 50%; background: #a78bfa; flex-shrink: 0;"></div>
+        <div style="flex: 1; min-width: 0;">
+          <div style="font-size: 13px; color: #e0e0e0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Team Building Day</div>
+          <div style="font-size: 11px; color: rgba(255,255,255,0.35);">All day</div>
+        </div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 8px; border-radius: 6px; cursor: pointer;" onmouseenter="this.style.background='rgba(255,255,255,0.06)'" onmouseleave="this.style.background='transparent'">
+        <div style="width: 8px; height: 8px; border-radius: 50%; background: #34d399; flex-shrink: 0;"></div>
+        <div style="flex: 1; min-width: 0;">
+          <div style="font-size: 13px; color: #e0e0e0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Design Review</div>
+          <div style="font-size: 11px; color: rgba(255,255,255,0.35);">10:00 AM – 11:30 AM</div>
+        </div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 8px; border-radius: 6px; cursor: pointer;" onmouseenter="this.style.background='rgba(255,255,255,0.06)'" onmouseleave="this.style.background='transparent'">
+        <div style="width: 8px; height: 8px; border-radius: 50%; background: #f59e0b; flex-shrink: 0;"></div>
+        <div style="flex: 1; min-width: 0;">
+          <div style="font-size: 13px; color: #e0e0e0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Sprint Planning</div>
+          <div style="font-size: 11px; color: rgba(255,255,255,0.35);">1:00 PM – 2:00 PM</div>
+        </div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 8px; border-radius: 6px; cursor: pointer;" onmouseenter="this.style.background='rgba(255,255,255,0.06)'" onmouseleave="this.style.background='transparent'">
+        <div style="width: 8px; height: 8px; border-radius: 50%; background: #f472b6; flex-shrink: 0;"></div>
+        <div style="flex: 1; min-width: 0;">
+          <div style="font-size: 13px; color: #e0e0e0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">1:1 with Manager</div>
+          <div style="font-size: 11px; color: rgba(255,255,255,0.35);">3:30 PM – 4:00 PM</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="margin-top: 32px;"></div>
+
+<!-- Popover: Single event (direct detail, or after clicking from multi-event list) -->
+<div class="mockup">
+  <div class="mockup-header">Month View — Event Detail (single event day, or after clicking from list above)</div>
+  <div class="mockup-body" style="background: #1a1a2e; color: #e0e0e0; border-radius: 12px; padding: 0; font-family: system-ui, sans-serif; width: 300px;">
+    <div style="padding: 16px;">
+      <!-- Back button (only shown when navigated from multi-event list) -->
+      <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 12px; cursor: pointer; color: rgba(255,255,255,0.4); font-size: 12px;">
+        <span>‹</span>
+        <span>March 29th</span>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
+        <div style="width: 10px; height: 10px; border-radius: 50%; background: #34d399; flex-shrink: 0;"></div>
+        <div style="font-size: 15px; font-weight: 600; color: #e0e0e0;">Design Review</div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <div style="font-size: 12px; color: rgba(255,255,255,0.35); min-width: 50px;">Time</div>
+          <div style="font-size: 13px; color: rgba(255,255,255,0.7);">10:00 AM – 11:30 AM</div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <div style="font-size: 12px; color: rgba(255,255,255,0.35); min-width: 50px;">Where</div>
+          <div style="font-size: 13px; color: rgba(255,255,255,0.7);">Conference Room B</div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <div style="font-size: 12px; color: rgba(255,255,255,0.35); min-width: 50px;">Calendar</div>
+          <div style="font-size: 13px; color: rgba(255,255,255,0.7);">Work</div>
+        </div>
+      </div>
+
+      <a href="#" style="display: flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 16px; background: #60a5fa; color: #fff; border-radius: 6px; font-size: 13px; font-weight: 500; text-decoration: none;">
+        Open in Google Calendar ↗
+      </a>
+    </div>
+  </div>
+</div>

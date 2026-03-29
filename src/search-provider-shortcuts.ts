@@ -1,4 +1,5 @@
 import { store } from "./store"
+import { prettyUrl } from "./url"
 import { icon as makeIcon } from "./icons/registry"
 import type { Tab, Shortcut } from "./shortcuts"
 import type { SearchProvider, SearchResult } from "./search"
@@ -86,7 +87,7 @@ export const shortcutsProvider: SearchProvider = {
         const url = sc.url
         matches.push({
           label: sc.name,
-          description: sc.url,
+          description: prettyUrl(sc.url),
           icon: shortcutIcon(sc),
           group: "shortcuts",
           action: () => {

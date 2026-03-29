@@ -1,4 +1,5 @@
 import { store } from "./store"
+import { prettyUrl } from "./url"
 import type { Tab, TabItem, Folder, Shortcut, ShortcutIcon, FolderIcon } from "./shortcuts"
 import { initDrag } from "./shortcut-drag"
 import {
@@ -578,7 +579,7 @@ function createRow(
   if (item.type === "shortcut" && !compact) {
     const urlSpan = document.createElement("span")
     urlSpan.className = "text-muted text-xs ml-1.5"
-    urlSpan.textContent = item.url
+    urlSpan.textContent = prettyUrl(item.url)
     label.appendChild(urlSpan)
   }
   row.appendChild(label)

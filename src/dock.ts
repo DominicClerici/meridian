@@ -179,15 +179,15 @@ function openFolderPopover(anchor: HTMLElement, folder: Folder): void {
   header.appendChild(headerName)
   content.appendChild(header)
 
+  const grid = document.createElement("div")
+  grid.className = "dock-folder-grid"
+
   if (folder.children.length === 0) {
     const empty = document.createElement("div")
-    empty.className = "text-xs text-muted py-4 text-center"
+    empty.className = "col-span-3 flex items-center justify-center text-xs text-muted"
     empty.textContent = "Empty folder"
-    content.appendChild(empty)
+    grid.appendChild(empty)
   } else {
-    const grid = document.createElement("div")
-    grid.className = "dock-folder-grid"
-
     for (const child of folder.children) {
       const item = document.createElement("button")
       item.className = "dock-folder-item"
@@ -213,11 +213,14 @@ function openFolderPopover(anchor: HTMLElement, folder: Folder): void {
 
       grid.appendChild(item)
     }
-
-    content.appendChild(grid)
   }
 
-  const { close } = createPopover(anchor, content)
+  content.appendChild(grid)
+
+  const { close } = createPopover(anchor, content, {
+    modal: true,
+    position: "above-center",
+  })
   closePopover = close
 }
 
