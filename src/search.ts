@@ -40,28 +40,53 @@ function queryProviders(input: string, skipDebounced: boolean): SearchResult[] {
 
 function render(resultsEl: HTMLElement): void {
   resultsEl.innerHTML = ""
+
+  const groups: { key: string; items: { result: SearchResult; index: number }[] }[] = []
+  let currentGroup: (typeof groups)[number] | null = null
+
   for (let i = 0; i < currentResults.length; i++) {
     const r = currentResults[i]
-    const div = document.createElement("div")
-    div.className =
-      "px-3 py-2 cursor-pointer text-page-foreground text-sm flex items-center gap-2" +
-      (i === activeIndex ? " bg-page-foreground/20" : " hover:bg-page-foreground/10")
-    div.dataset.index = String(i)
+    const key = r.group ?? ""
+    if (!currentGroup || currentGroup.key !== key) {
+      currentGroup = { key, items: [] }
+      groups.push(currentGroup)
+    }
+    currentGroup.items.push({ result: r, index: i })
+  }
 
-    const labelSpan = document.createElement("span")
-    labelSpan.className = "truncate"
-    labelSpan.textContent = r.label
-    div.appendChild(labelSpan)
-
-    if (r.description) {
-      const descSpan = document.createElement("span")
-      descSpan.className = "text-page-foreground/50 text-xs truncate ml-auto"
-      descSpan.textContent = r.description
-      div.appendChild(descSpan)
+  for (let g = 0; g < groups.length; g++) {
+    if (g > 0) {
+      const hr = document.createElement("hr")
+      hr.className = "border-input-border/20 mx-2"
+      resultsEl.appendChild(hr)
     }
 
-    div.addEventListener("click", () => r.action())
-    resultsEl.appendChild(div)
+    for (const { result: r, index: i } of groups[g].items) {
+      const div = document.createElement("div")
+      div.className =
+        "px-3 py-2 cursor-pointer text-foreground text-sm flex items-center gap-2" +
+        (i === activeIndex ? " bg-surface" : " hover:bg-surface/50")
+      div.dataset.index = String(i)
+
+      if (r.icon) {
+        div.appendChild(r.icon)
+      }
+
+      const labelSpan = document.createElement("span")
+      labelSpan.className = "truncate"
+      labelSpan.textContent = r.label
+      div.appendChild(labelSpan)
+
+      if (r.description) {
+        const descSpan = document.createElement("span")
+        descSpan.className = "text-muted text-xs truncate ml-auto"
+        descSpan.textContent = r.description
+        div.appendChild(descSpan)
+      }
+
+      div.addEventListener("click", () => r.action())
+      resultsEl.appendChild(div)
+    }
   }
 }
 
