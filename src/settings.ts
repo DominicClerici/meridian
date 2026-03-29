@@ -1224,6 +1224,28 @@ function buildShortcutsPanel(): HTMLDivElement {
 
   panel.appendChild(recsRow)
 
+  const openInRow = document.createElement("div")
+  openInRow.className =
+    "flex items-center justify-between px-6 pb-4 pt-1 border-t border-input-border/15"
+
+  const openInLabel = document.createElement("span")
+  openInLabel.className = "text-sm"
+  openInLabel.textContent = "Open shortcuts in"
+  openInRow.appendChild(openInLabel)
+
+  const openInSelect = createSelect({
+    options: [
+      { value: "current", label: "Current tab" },
+      { value: "new", label: "New tab" },
+    ],
+    value: store.sync.get("shortcutsOpenIn"),
+    width: "130px",
+    onChange: (v) => store.sync.set("shortcutsOpenIn", v as "current" | "new"),
+  })
+  openInRow.appendChild(openInSelect)
+
+  panel.appendChild(openInRow)
+
   return panel
 }
 

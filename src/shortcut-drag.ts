@@ -1,4 +1,4 @@
-import type { Tab, TabItem, Folder, Shortcut } from "./shortcuts"
+import type { Tab, TabItem, Folder, Shortcut, FolderIcon } from "./shortcuts"
 import {
   reorderTabs,
   reorderItems,
@@ -23,7 +23,7 @@ export interface DragCallbacks {
   exitSelectionMode: () => void
   openCreateFolderPopover: (
     anchor: HTMLElement,
-    onSave: (name: string) => void,
+    onSave: (name: string, icon?: FolderIcon) => void,
     onCancel?: () => void
   ) => void
 }
@@ -74,8 +74,28 @@ let cb: DragCallbacks
 let tabBarEl: HTMLElement
 let itemListEl: HTMLElement
 let dialogEl: HTMLElement
-let indicator: HTMLElement
+let preview: HTMLElement
 let tabIndicator: HTMLElement
+
+interface RowSnap {
+  id: string
+  type: "shortcut" | "folder"
+  index: number
+  contentTop: number
+  height: number
+  left: number
+  width: number
+}
+
+interface ZoneSnap {
+  location: "top-level" | "folder"
+  folderId: string | null
+  rows: RowSnap[]
+  stride: number
+  el: HTMLElement
+}
+
+let zoneSnaps: ZoneSnap[] = []
 
 const DRAG_THRESHOLD = 3
 const HOVER_DELAY = 1000
@@ -92,13 +112,15 @@ export function initDrag(
   cb = callbacks
   dialogEl = itemListEl.closest("dialog") ?? document.body
 
-  indicator = document.createElement("div")
-  indicator.className = "fixed h-0.5 bg-accent rounded-full pointer-events-none z-[9999]"
-  indicator.style.display = "none"
-  dialogEl.appendChild(indicator)
+  preview = document.createElement("div")
+  preview.className = "fixed rounded-theme pointer-events-none z-[9998]"
+  preview.style.cssText =
+    "display:none; outline: 2px solid var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent);"
+  dialogEl.appendChild(preview)
 
   tabIndicator = document.createElement("div")
-  tabIndicator.className = "fixed w-0.5 bg-accent rounded-full pointer-events-none z-[9999]"
+  tabIndicator.className =
+    "fixed w-0.5 bg-accent rounded-full pointer-events-none z-[9999]"
   tabIndicator.style.display = "none"
   dialogEl.appendChild(tabIndicator)
 
@@ -109,7 +131,12 @@ export function initDrag(
 function onItemPointerDown(e: PointerEvent): void {
   if (e.button !== 0) return
   const target = e.target as HTMLElement
-  if (target.closest("button") || target.closest("input") || target.closest("label")) return
+  if (
+    target.closest("button") ||
+    target.closest("input") ||
+    target.closest("label")
+  )
+    return
   const row = target.closest("[data-id]") as HTMLElement | null
   if (!row) return
 
@@ -124,14 +151,17 @@ function onItemPointerDown(e: PointerEvent): void {
   if (isSelection && !cb.getSelectedIds().has(itemId)) return
 
   const zone = row.closest("[data-zone]") as HTMLElement | null
-  const folderId = zone?.dataset.zone === "folder" ? (zone.dataset.folderId ?? null) : null
+  const folderId =
+    zone?.dataset.zone === "folder" ? zone.dataset.folderId ?? null : null
 
   const tabs = cb.getTabs()
   const draggedIds = isSelection ? Array.from(cb.getSelectedIds()) : [itemId]
-  const selectionHasFolders = isSelection && draggedIds.some((id) => {
-    const tab = tabs.find((t) => t.id === selectedTabId)
-    return tab?.items.some((i) => i.id === id && i.type === "folder") ?? false
-  })
+  const selectionHasFolders =
+    isSelection &&
+    draggedIds.some((id) => {
+      const tab = tabs.find((t) => t.id === selectedTabId)
+      return tab?.items.some((i) => i.id === id && i.type === "folder") ?? false
+    })
 
   ctx = {
     mode: "item",
@@ -165,10 +195,16 @@ function onTabPointerDown(e: PointerEvent): void {
   if (e.button !== 0) return
   if (cb.getSelectionMode()) return
 
-  const pill = (e.target as HTMLElement).closest("[data-tab-id]") as HTMLElement | null
+  const pill = (e.target as HTMLElement).closest(
+    "[data-tab-id]"
+  ) as HTMLElement | null
   if (!pill) return
 
-  if ((e.target as HTMLElement).closest("input") || (e.target as HTMLElement).closest("button")) return
+  if (
+    (e.target as HTMLElement).closest("input") ||
+    (e.target as HTMLElement).closest("button")
+  )
+    return
 
   const tabId = pill.dataset.tabId!
   const tabs = cb.getTabs()
@@ -239,9 +275,16 @@ function cleanup(): void {
   ctx = null
   state = "idle"
   pendingStart = null
-  indicator.style.display = "none"
+  preview.style.display = "none"
   tabIndicator.style.display = "none"
   clearVisualFeedback()
+  zoneSnaps = []
+  itemListEl.querySelectorAll("[data-id]").forEach((el) => {
+    const h = el as HTMLElement
+    h.style.transition = ""
+    h.style.transform = ""
+    h.style.opacity = ""
+  })
   document.removeEventListener("pointermove", onPointerMove)
   document.removeEventListener("pointerup", onPointerUp)
   document.removeEventListener("keydown", onKeyDown)
@@ -249,7 +292,13 @@ function cleanup(): void {
 
 function clearVisualFeedback(): void {
   itemListEl.querySelectorAll("[data-id]").forEach((el) => {
-    el.classList.remove("bg-accent/20", "bg-accent/10", "bg-warning/20", "bg-danger/30", "opacity-50")
+    el.classList.remove(
+      "bg-accent/20",
+      "bg-accent/10",
+      "bg-warning/20",
+      "bg-danger/30",
+      "opacity-50"
+    )
   })
   tabBarEl.querySelectorAll("[data-tab-id]").forEach((el) => {
     el.classList.remove("ring-2", "ring-accent/50", "bg-accent/10")
@@ -264,7 +313,13 @@ function dialogOffset(): { x: number; y: number } {
   return { x: r.left, y: r.top }
 }
 
-function positionClone(clone: HTMLElement, clientX: number, clientY: number, offsetX: number, offsetY: number): void {
+function positionClone(
+  clone: HTMLElement,
+  clientX: number,
+  clientY: number,
+  offsetX: number,
+  offsetY: number
+): void {
   const d = dialogOffset()
   clone.style.left = `${clientX - offsetX - d.x}px`
   clone.style.top = `${clientY - offsetY - d.y}px`
@@ -279,7 +334,46 @@ function autoScroll(clientY: number): void {
   }
 }
 
-function createClone(sourceEl: HTMLElement, isSelection: boolean, count: number): HTMLElement {
+function snapshotZones(): void {
+  zoneSnaps = []
+  const zones = itemListEl.querySelectorAll(
+    "[data-zone]"
+  ) as NodeListOf<HTMLElement>
+  for (const zoneEl of zones) {
+    const location = zoneEl.dataset.zone as "top-level" | "folder"
+    const folderId =
+      location === "folder" ? zoneEl.dataset.folderId ?? null : null
+    const rows = Array.from(
+      zoneEl.querySelectorAll("[data-id]")
+    ) as HTMLElement[]
+    const zoneRect = zoneEl.getBoundingClientRect()
+    const scrollTop = zoneEl.scrollTop
+
+    const snaps: RowSnap[] = rows.map((row, i) => {
+      const rect = row.getBoundingClientRect()
+      return {
+        id: row.dataset.id!,
+        type: row.dataset.type as "shortcut" | "folder",
+        index: i,
+        contentTop: rect.top - zoneRect.top + scrollTop,
+        height: rect.height,
+        left: rect.left,
+        width: rect.width,
+      }
+    })
+
+    let stride = snaps.length > 0 ? snaps[0].height : 0
+    if (snaps.length >= 2) stride = snaps[1].contentTop - snaps[0].contentTop
+
+    zoneSnaps.push({ location, folderId, rows: snaps, stride, el: zoneEl })
+  }
+}
+
+function createClone(
+  sourceEl: HTMLElement,
+  isSelection: boolean,
+  count: number
+): HTMLElement {
   const clone = sourceEl.cloneNode(true) as HTMLElement
   const rect = sourceEl.getBoundingClientRect()
   clone.style.cssText = `
@@ -296,7 +390,8 @@ function createClone(sourceEl: HTMLElement, isSelection: boolean, count: number)
 
   if (isSelection && count > 1) {
     const badge = document.createElement("span")
-    badge.className = "absolute -top-2 -right-2 bg-accent text-accent-foreground text-xs font-medium rounded-full px-1.5 py-0.5 leading-none"
+    badge.className =
+      "absolute -top-2 -right-2 bg-accent text-accent-foreground text-xs font-medium rounded-full px-1.5 py-0.5 leading-none"
     badge.textContent = `+${count - 1}`
     clone.appendChild(badge)
   }
@@ -309,21 +404,34 @@ function startDrag(e: PointerEvent): void {
   if (!ctx) return
 
   if (ctx.mode === "item") {
-    const row = itemListEl.querySelector(`[data-id="${ctx.sourceItemId}"]`) as HTMLElement | null
-    if (!row) { cleanup(); return }
+    const row = itemListEl.querySelector(
+      `[data-id="${ctx.sourceItemId}"]`
+    ) as HTMLElement | null
+    if (!row) {
+      cleanup()
+      return
+    }
     ctx.clone = createClone(row, ctx.isSelectionDrag, ctx.draggedIds.length)
     positionClone(ctx.clone, e.clientX, e.clientY, ctx.offsetX, ctx.offsetY)
 
     if (ctx.isSelectionDrag) {
       ctx.draggedIds.forEach((id) => {
-        itemListEl.querySelectorAll(`[data-id="${id}"]`).forEach((el) => el.classList.add("opacity-50"))
+        itemListEl
+          .querySelectorAll(`[data-id="${id}"]`)
+          .forEach((el) => el.classList.add("opacity-50"))
       })
     } else {
-      row.classList.add("opacity-50")
+      row.style.opacity = "0"
     }
+    snapshotZones()
   } else if (ctx.mode === "tab") {
-    const pill = tabBarEl.querySelector(`[data-tab-id="${ctx.sourceTabId}"]`) as HTMLElement | null
-    if (!pill) { cleanup(); return }
+    const pill = tabBarEl.querySelector(
+      `[data-tab-id="${ctx.sourceTabId}"]`
+    ) as HTMLElement | null
+    if (!pill) {
+      cleanup()
+      return
+    }
     ctx.clone = createClone(pill, false, 1)
     positionClone(ctx.clone, e.clientX, e.clientY, ctx.offsetX, ctx.offsetY)
     pill.classList.add("opacity-50")
@@ -350,103 +458,145 @@ function resolveDropZone(x: number, y: number): DropZone {
   if (!ctx || ctx.mode !== "item") return { type: "none" }
 
   const el = document.elementFromPoint(x, y)
-  if (!el) return { type: "none" }
-
-  const pill = el.closest("[data-tab-id]") as HTMLElement | null
-  if (pill && tabBarEl.contains(pill)) {
-    return { type: "tab", tabId: pill.dataset.tabId! }
+  if (el) {
+    const pill = el.closest("[data-tab-id]") as HTMLElement | null
+    if (pill && tabBarEl.contains(pill)) {
+      return { type: "tab", tabId: pill.dataset.tabId! }
+    }
   }
 
-  if (!itemListEl.contains(el)) return { type: "none" }
-
-  const row = el.closest("[data-id]") as HTMLElement | null
-  const zoneEl = el.closest("[data-zone]") as HTMLElement | null
-
-  if (!row) {
-    if (!zoneEl) return { type: "none" }
-    const location = zoneEl.dataset.zone as "top-level" | "folder"
-    if (ctx.sourceType === "folder" && location === "folder") return { type: "none" }
-    const rows = zoneEl.querySelectorAll("[data-id]")
-    return { type: "reorder", location, index: rows.length }
+  const listRect = itemListEl.getBoundingClientRect()
+  if (
+    x < listRect.left ||
+    x > listRect.right ||
+    y < listRect.top ||
+    y > listRect.bottom
+  ) {
+    return { type: "none" }
   }
 
-  const targetId = row.dataset.id!
-  const targetType = row.dataset.type as "shortcut" | "folder"
-  const location = zoneEl?.dataset.zone as "top-level" | "folder" | undefined ?? "top-level"
+  for (const snap of zoneSnaps) {
+    const zoneRect = snap.el.getBoundingClientRect()
+    if (
+      x < zoneRect.left ||
+      x > zoneRect.right ||
+      y < zoneRect.top ||
+      y > zoneRect.bottom
+    )
+      continue
 
-  if (targetId === ctx.sourceItemId && !ctx.isSelectionDrag) return { type: "none" }
-  if (ctx.isSelectionDrag && ctx.draggedIds.includes(targetId)) return { type: "none" }
-  if (ctx.sourceType === "folder" && location === "folder") return { type: "none" }
+    if (snap.rows.length === 0) {
+      if (ctx.sourceType === "folder" && snap.location === "folder")
+        return { type: "none" }
+      return { type: "reorder", location: snap.location, index: 0 }
+    }
 
-  if (ctx.isSelectionDrag) {
-    return resolveSelectionZone(row, targetId, targetType, location, x, y)
+    const contentY = y - zoneRect.top + snap.el.scrollTop
+
+    let hitRow: RowSnap | null = null
+    for (const row of snap.rows) {
+      if (
+        contentY >= row.contentTop &&
+        contentY < row.contentTop + row.height
+      ) {
+        hitRow = row
+        break
+      }
+    }
+
+    if (!hitRow) {
+      if (ctx.sourceType === "folder" && snap.location === "folder")
+        return { type: "none" }
+      return {
+        type: "reorder",
+        location: snap.location,
+        index: snap.rows.length,
+      }
+    }
+
+    if (hitRow.id === ctx.sourceItemId && !ctx.isSelectionDrag)
+      return { type: "none" }
+    if (ctx.isSelectionDrag && ctx.draggedIds.includes(hitRow.id))
+      return { type: "none" }
+    if (ctx.sourceType === "folder" && snap.location === "folder")
+      return { type: "none" }
+
+    if (ctx.isSelectionDrag) {
+      return resolveSelectionSnap(hitRow, snap, contentY)
+    }
+    return resolveNormalSnap(hitRow, snap, contentY)
   }
 
-  return resolveNormalZone(row, targetId, targetType, location, x, y)
+  const fallback = zoneSnaps.find((s) => s.location === "top-level")
+  if (fallback && fallback.rows.length > 0) {
+    return {
+      type: "reorder",
+      location: "top-level",
+      index: fallback.rows.length,
+    }
+  }
+  return { type: "none" }
 }
 
-function resolveNormalZone(
-  row: HTMLElement,
-  targetId: string,
-  targetType: string,
-  location: string,
-  _x: number,
-  y: number
+function resolveNormalSnap(
+  hit: RowSnap,
+  snap: ZoneSnap,
+  contentY: number
 ): DropZone {
   if (!ctx || ctx.mode !== "item") return { type: "none" }
 
-  const rect = row.getBoundingClientRect()
-  const midY = rect.top + rect.height / 2
-  const overCenter = Math.abs(y - midY) < rect.height * 0.25
-
+  const midY = hit.contentTop + hit.height / 2
+  const overCenter = Math.abs(contentY - midY) < hit.height * 0.25
   const isDraggingFolder = ctx.sourceType === "folder"
-  const isInsideFolder = location === "folder"
+  const isInsideFolder = snap.location === "folder"
 
   if (overCenter && !isDraggingFolder && !isInsideFolder) {
-    if (targetType === "folder") {
+    if (hit.type === "folder") {
       const tabs = cb.getTabs()
       const tab = tabs.find((t) => t.id === cb.getSelectedTabId())
-      const folder = tab?.items.find((i) => i.id === targetId && i.type === "folder") as Folder | undefined
-      const blocked = !folder || folder.children.length >= MAX_CHILDREN_PER_FOLDER
-      return { type: "into-folder", folderId: targetId, blocked }
+      const folder = tab?.items.find(
+        (i) => i.id === hit.id && i.type === "folder"
+      ) as Folder | undefined
+      const blocked =
+        !folder || folder.children.length >= MAX_CHILDREN_PER_FOLDER
+      return { type: "into-folder", folderId: hit.id, blocked }
     }
-    if (targetType === "shortcut") {
-      if (ctx.mergeReady && ctx.hoverTarget?.id === targetId) {
-        return { type: "merge-shortcut", targetId }
+    if (hit.type === "shortcut") {
+      if (ctx.mergeReady && ctx.hoverTarget?.id === hit.id) {
+        return { type: "merge-shortcut", targetId: hit.id }
       }
-      return { type: "into-folder", folderId: targetId, blocked: false }
+      return { type: "into-folder", folderId: hit.id, blocked: false }
     }
   }
 
-  const index = Number(row.dataset.index)
-  const insertIndex = y < rect.top + rect.height / 2 ? index : index + 1
-  return { type: "reorder", location: location as "top-level" | "folder", index: insertIndex }
+  const insertIndex = contentY < midY ? hit.index : hit.index + 1
+  return { type: "reorder", location: snap.location, index: insertIndex }
 }
 
-function resolveSelectionZone(
-  row: HTMLElement,
-  targetId: string,
-  targetType: string,
-  location: string,
-  _x: number,
-  y: number
+function resolveSelectionSnap(
+  hit: RowSnap,
+  snap: ZoneSnap,
+  contentY: number
 ): DropZone {
   if (!ctx || ctx.mode !== "item") return { type: "none" }
 
-  const rect = row.getBoundingClientRect()
-  const midY = rect.top + rect.height / 2
-  const overCenter = Math.abs(y - midY) < rect.height * 0.25
+  const midY = hit.contentTop + hit.height / 2
+  const overCenter = Math.abs(contentY - midY) < hit.height * 0.25
 
-  if (overCenter && targetType === "folder" && location !== "folder") {
+  if (overCenter && hit.type === "folder" && snap.location !== "folder") {
     const blocked = ctx.selectionHasFolders
     if (!blocked) {
       const tabs = cb.getTabs()
       const tab = tabs.find((t) => t.id === cb.getSelectedTabId())
-      const folder = tab?.items.find((i) => i.id === targetId && i.type === "folder") as Folder | undefined
-      const capacityBlocked = !folder || folder.children.length + ctx.draggedIds.length > MAX_CHILDREN_PER_FOLDER
-      return { type: "into-folder", folderId: targetId, blocked: capacityBlocked }
+      const folder = tab?.items.find(
+        (i) => i.id === hit.id && i.type === "folder"
+      ) as Folder | undefined
+      const capacityBlocked =
+        !folder ||
+        folder.children.length + ctx.draggedIds.length > MAX_CHILDREN_PER_FOLDER
+      return { type: "into-folder", folderId: hit.id, blocked: capacityBlocked }
     }
-    return { type: "into-folder", folderId: targetId, blocked: true }
+    return { type: "into-folder", folderId: hit.id, blocked: true }
   }
 
   return { type: "none" }
@@ -469,7 +619,9 @@ function updateHoverTimer(zone: DropZone): void {
     }
   }
 
-  const same = ctx.hoverTarget?.type === newTarget?.type && ctx.hoverTarget?.id === newTarget?.id
+  const same =
+    ctx.hoverTarget?.type === newTarget?.type &&
+    ctx.hoverTarget?.id === newTarget?.id
 
   if (same) return
 
@@ -514,15 +666,20 @@ function clearHoverAnimation(): void {
   }
 }
 
-function startHoverAnimation(target: NonNullable<ItemDragCtx["hoverTarget"]>): void {
+function startHoverAnimation(
+  target: NonNullable<ItemDragCtx["hoverTarget"]>
+): void {
   if (!ctx || ctx.mode !== "item") return
 
   if (target.type === "tab") {
     if (target.id === cb.getSelectedTabId()) return
-    const pill = tabBarEl.querySelector(`[data-tab-id="${target.id}"]`) as HTMLElement | null
+    const pill = tabBarEl.querySelector(
+      `[data-tab-id="${target.id}"]`
+    ) as HTMLElement | null
     if (!pill) return
     ctx.hoverAnimEl = pill
-    pill.style.backgroundColor = "color-mix(in srgb, var(--accent) 10%, transparent)"
+    pill.style.backgroundColor =
+      "color-mix(in srgb, var(--accent) 10%, transparent)"
     ctx.hoverPhase2Timer = window.setTimeout(() => {
       if (!ctx || ctx.mode !== "item") return
       pill.style.transition = "background-color 750ms ease, color 750ms ease"
@@ -535,7 +692,9 @@ function startHoverAnimation(target: NonNullable<ItemDragCtx["hoverTarget"]>): v
       }
     }, 250)
   } else if (target.type === "folder") {
-    const row = itemListEl.querySelector(`[data-id="${target.id}"]`) as HTMLElement | null
+    const row = itemListEl.querySelector(
+      `[data-id="${target.id}"]`
+    ) as HTMLElement | null
     if (!row) return
     ctx.hoverAnimEl = row
     row.style.boxShadow = "0 0 0 0px var(--accent)"
@@ -547,7 +706,9 @@ function startHoverAnimation(target: NonNullable<ItemDragCtx["hoverTarget"]>): v
   }
 }
 
-function onHoverTimerFire(target: NonNullable<ItemDragCtx["hoverTarget"]>): void {
+function onHoverTimerFire(
+  target: NonNullable<ItemDragCtx["hoverTarget"]>
+): void {
   if (!ctx || ctx.mode !== "item") return
 
   switch (target.type) {
@@ -557,12 +718,17 @@ function onHoverTimerFire(target: NonNullable<ItemDragCtx["hoverTarget"]>): void
       cb.render()
       if (ctx.isSelectionDrag) {
         ctx.draggedIds.forEach((id) => {
-          itemListEl.querySelectorAll(`[data-id="${id}"]`).forEach((el) => el.classList.add("opacity-50"))
+          itemListEl
+            .querySelectorAll(`[data-id="${id}"]`)
+            .forEach((el) => el.classList.add("opacity-50"))
         })
       } else {
-        const row = itemListEl.querySelector(`[data-id="${ctx.sourceItemId}"]`)
-        row?.classList.add("opacity-50")
+        const row = itemListEl.querySelector(
+          `[data-id="${ctx.sourceItemId}"]`
+        ) as HTMLElement | null
+        if (row) row.style.opacity = "0"
       }
+      snapshotZones()
       break
 
     case "folder":
@@ -570,12 +736,17 @@ function onHoverTimerFire(target: NonNullable<ItemDragCtx["hoverTarget"]>): void
       cb.render()
       if (ctx.isSelectionDrag) {
         ctx.draggedIds.forEach((id) => {
-          itemListEl.querySelectorAll(`[data-id="${id}"]`).forEach((el) => el.classList.add("opacity-50"))
+          itemListEl
+            .querySelectorAll(`[data-id="${id}"]`)
+            .forEach((el) => el.classList.add("opacity-50"))
         })
       } else {
-        const row = itemListEl.querySelector(`[data-id="${ctx.sourceItemId}"]`)
-        row?.classList.add("opacity-50")
+        const row = itemListEl.querySelector(
+          `[data-id="${ctx.sourceItemId}"]`
+        ) as HTMLElement | null
+        if (row) row.style.opacity = "0"
       }
+      snapshotZones()
       break
 
     case "shortcut":
@@ -586,18 +757,26 @@ function onHoverTimerFire(target: NonNullable<ItemDragCtx["hoverTarget"]>): void
 
 function applyVisualFeedback(zone: DropZone): void {
   clearVisualFeedback()
-  indicator.style.display = "none"
 
   if (!ctx || ctx.mode !== "item") return
 
+  if (zone.type === "reorder") {
+    applyReorderTransforms(zone)
+  } else {
+    resetReorderTransforms()
+  }
+
   const shrinkZone = zone.type === "into-folder" && !zone.blocked
   const shrinkTab = zone.type === "tab" && ctx.isSelectionDrag
-  ctx.clone.style.transform = (shrinkZone || shrinkTab) ? "scale(0.9)" : "scale(0.97)"
+  ctx.clone.style.transform =
+    shrinkZone || shrinkTab ? "scale(0.9)" : "scale(0.97)"
 
   switch (zone.type) {
     case "reorder": {
-      showReorderIndicator(zone)
-      const zoneSelector = zone.location === "folder" ? "[data-zone='folder']" : "[data-zone='top-level']"
+      const zoneSelector =
+        zone.location === "folder"
+          ? "[data-zone='folder']"
+          : "[data-zone='top-level']"
       const zoneEl = itemListEl.querySelector(zoneSelector)
       if (zoneEl && !zoneEl.querySelector("[data-id]")) {
         zoneEl.classList.add("ring-2", "ring-accent/50", "bg-accent/5")
@@ -616,35 +795,80 @@ function applyVisualFeedback(zone: DropZone): void {
   }
 }
 
-function showReorderIndicator(zone: Extract<DropZone, { type: "reorder" }>): void {
-  const zoneEl = itemListEl.querySelector(`[data-zone="${zone.location}"]`) as HTMLElement | null
-  if (!zoneEl) return
+function applyReorderTransforms(
+  zone: Extract<DropZone, { type: "reorder" }>
+): void {
+  if (!ctx || ctx.mode !== "item") return
 
-  const rows = Array.from(zoneEl.querySelectorAll("[data-id]")) as HTMLElement[]
-  let targetRow: HTMLElement | null = null
-
-  if (zone.index < rows.length) {
-    targetRow = rows[zone.index]
+  const snap = zoneSnaps.find((s) => s.location === zone.location)
+  if (!snap || snap.rows.length === 0) {
+    preview.style.display = "none"
+    return
   }
 
+  const rows = Array.from(
+    snap.el.querySelectorAll("[data-id]")
+  ) as HTMLElement[]
+  if (rows.length !== snap.rows.length) {
+    preview.style.display = "none"
+    return
+  }
+
+  const itemCtx = ctx as ItemDragCtx
+  const S = snap.rows.findIndex((r) => r.id === itemCtx.sourceItemId)
+  const D = zone.index
+  const sameZone = S !== -1
+  const noGap = sameZone && (D === S || D === S + 1)
+  const stride = snap.stride
+
+  for (let i = 0; i < rows.length; i++) {
+    let ty = 0
+    if (sameZone) {
+      if (D < S && i >= D && i < S) ty = stride
+      else if (D > S + 1 && i > S && i < D) ty = -stride
+    } else {
+      if (i >= D) ty = stride
+    }
+    rows[i].style.transition = "transform 200ms ease"
+    rows[i].style.transform = ty ? `translateY(${ty}px)` : ""
+  }
+
+  if (noGap) {
+    preview.style.display = "none"
+    return
+  }
+
+  const gapIndex = sameZone ? (D <= S ? D : D - 1) : D
+  let gapContentTop: number
+  if (gapIndex < snap.rows.length) {
+    gapContentTop = snap.rows[gapIndex].contentTop
+  } else {
+    gapContentTop = snap.rows[snap.rows.length - 1].contentTop + stride
+  }
+
+  const zoneRect = snap.el.getBoundingClientRect()
+  const gapViewportTop = zoneRect.top + gapContentTop - snap.el.scrollTop
   const d = dialogOffset()
-  if (targetRow) {
-    const rect = targetRow.getBoundingClientRect()
-    indicator.style.display = ""
-    indicator.style.top = `${rect.top - 1 - d.y}px`
-    indicator.style.left = `${rect.left - d.x}px`
-    indicator.style.width = `${rect.width}px`
-  } else if (rows.length > 0) {
-    const lastRect = rows[rows.length - 1].getBoundingClientRect()
-    indicator.style.display = ""
-    indicator.style.top = `${lastRect.bottom - 1 - d.y}px`
-    indicator.style.left = `${lastRect.left - d.x}px`
-    indicator.style.width = `${lastRect.width}px`
-  }
+  preview.style.display = ""
+  preview.style.top = `${gapViewportTop - d.y}px`
+  preview.style.left = `${snap.rows[0].left - d.x}px`
+  preview.style.width = `${snap.rows[0].width}px`
+  preview.style.height = `${snap.rows[0].height}px`
 }
 
-function showFolderHighlight(zone: Extract<DropZone, { type: "into-folder" }>): void {
-  const row = itemListEl.querySelector(`[data-id="${zone.folderId}"]`) as HTMLElement | null
+function resetReorderTransforms(): void {
+  itemListEl.querySelectorAll("[data-id]").forEach((el) => {
+    ;(el as HTMLElement).style.transform = ""
+  })
+  preview.style.display = "none"
+}
+
+function showFolderHighlight(
+  zone: Extract<DropZone, { type: "into-folder" }>
+): void {
+  const row = itemListEl.querySelector(
+    `[data-id="${zone.folderId}"]`
+  ) as HTMLElement | null
   if (!row) return
   const targetType = row.dataset.type
   if (zone.blocked) {
@@ -657,13 +881,17 @@ function showFolderHighlight(zone: Extract<DropZone, { type: "into-folder" }>): 
 }
 
 function showMergeHighlight(targetId: string): void {
-  const row = itemListEl.querySelector(`[data-id="${targetId}"]`) as HTMLElement | null
+  const row = itemListEl.querySelector(
+    `[data-id="${targetId}"]`
+  ) as HTMLElement | null
   if (!row) return
   row.classList.add("bg-warning/20")
 }
 
 function showTabHighlight(tabId: string): void {
-  const pill = tabBarEl.querySelector(`[data-tab-id="${tabId}"]`) as HTMLElement | null
+  const pill = tabBarEl.querySelector(
+    `[data-tab-id="${tabId}"]`
+  ) as HTMLElement | null
   if (!pill) return
   pill.classList.add("ring-2", "ring-accent/50", "bg-accent/10")
 }
@@ -672,8 +900,12 @@ function updateTabDrag(e: PointerEvent): void {
   if (!ctx || ctx.mode !== "tab") return
 
   tabIndicator.style.display = "none"
-  tabBarEl.querySelectorAll("[data-tab-id]").forEach((el) => el.classList.remove("opacity-50"))
-  const sourcePill = tabBarEl.querySelector(`[data-tab-id="${ctx.sourceTabId}"]`)
+  tabBarEl
+    .querySelectorAll("[data-tab-id]")
+    .forEach((el) => el.classList.remove("opacity-50"))
+  const sourcePill = tabBarEl.querySelector(
+    `[data-tab-id="${ctx.sourceTabId}"]`
+  )
   sourcePill?.classList.add("opacity-50")
 
   const el = document.elementFromPoint(e.clientX, e.clientY)
@@ -688,7 +920,9 @@ function updateTabDrag(e: PointerEvent): void {
 
   const d = dialogOffset()
   tabIndicator.style.display = ""
-  tabIndicator.style.left = `${(insertLeft ? rect.left - 1 : rect.right - 1) - d.x}px`
+  tabIndicator.style.left = `${
+    (insertLeft ? rect.left - 1 : rect.right - 1) - d.x
+  }px`
   tabIndicator.style.top = `${rect.top - d.y}px`
   tabIndicator.style.height = `${rect.height}px`
 }
@@ -727,12 +961,20 @@ function processNormalDrop(zone: DropZone): void {
 
       if (sameTab && sameLocation) {
         const sourceIndex = Number(
-          itemListEl.querySelector(`[data-id="${ctx.sourceItemId}"]`)?.getAttribute("data-index") ?? 0
+          itemListEl
+            .querySelector(`[data-id="${ctx.sourceItemId}"]`)
+            ?.getAttribute("data-index") ?? 0
         )
         if (zone.location === "folder") {
           const folderId = cb.getViewingFolderId()
           if (folderId) {
-            tabs = reorderFolderChildren(tabs, ctx.sourceTabId, folderId, sourceIndex, zone.index)
+            tabs = reorderFolderChildren(
+              tabs,
+              ctx.sourceTabId,
+              folderId,
+              sourceIndex,
+              zone.index
+            )
           }
         } else {
           tabs = reorderItems(tabs, ctx.sourceTabId, sourceIndex, zone.index)
@@ -743,7 +985,13 @@ function processNormalDrop(zone: DropZone): void {
         if (zone.location === "folder") {
           const folderId = cb.getViewingFolderId()
           if (folderId && item.type === "shortcut") {
-            tabs = insertIntoFolder(tabs, currentTabId, folderId, item, zone.index)
+            tabs = insertIntoFolder(
+              tabs,
+              currentTabId,
+              folderId,
+              item,
+              zone.index
+            )
           }
         } else {
           tabs = insertItem(tabs, currentTabId, item, zone.index)
@@ -770,7 +1018,9 @@ function processNormalDrop(zone: DropZone): void {
     }
 
     case "merge-shortcut": {
-      const anchor = itemListEl.querySelector(`[data-id="${zone.targetId}"]`) as HTMLElement
+      const anchor = itemListEl.querySelector(
+        `[data-id="${zone.targetId}"]`
+      ) as HTMLElement
       if (!anchor) break
       const snapshot = ctx.snapshot
       const sourceId = ctx.sourceItemId
@@ -778,8 +1028,15 @@ function processNormalDrop(zone: DropZone): void {
       const tabId = currentTabId
       cb.openCreateFolderPopover(
         anchor,
-        (name) => {
-          const merged = mergeShortcutsIntoNewFolder(snapshot, tabId, targetId, sourceId, name)
+        (name, folderIcon) => {
+          const merged = mergeShortcutsIntoNewFolder(
+            snapshot,
+            tabId,
+            targetId,
+            sourceId,
+            name,
+            folderIcon
+          )
           cb.save(merged)
         },
         () => {
@@ -826,7 +1083,13 @@ function processSelectionDrop(zone: DropZone): void {
         if (item.type === "shortcut") extracted.push(item)
       }
       for (let i = 0; i < extracted.length; i++) {
-        tabs = insertIntoFolder(tabs, currentTabId, zone.folderId, extracted[i], i)
+        tabs = insertIntoFolder(
+          tabs,
+          currentTabId,
+          zone.folderId,
+          extracted[i],
+          i
+        )
       }
       cb.exitSelectionMode()
       cb.save(tabs)
@@ -855,6 +1118,10 @@ function processTabDrop(e: PointerEvent): void {
   const insertBefore = e.clientX < midX
   const finalIndex = insertBefore ? toIndex : toIndex + 1
 
-  const updated = reorderTabs(tabs, ctx.sourceIndex, finalIndex > ctx.sourceIndex ? finalIndex - 1 : finalIndex)
+  const updated = reorderTabs(
+    tabs,
+    ctx.sourceIndex,
+    finalIndex > ctx.sourceIndex ? finalIndex - 1 : finalIndex
+  )
   cb.save(updated)
 }

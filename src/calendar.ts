@@ -7,20 +7,43 @@ type CalendarEvent = {
   startTime: string | null
   endTime: string | null
   allDay: boolean
+  allDayDate: string | null
   htmlLink: string
+  calendarId: string
+  calendarName: string
+  color: string
+  location: string | null
 }
 
-const LS_CACHED_EVENTS = "sp:calendar:cachedEvents"
+type CalendarInfo = {
+  id: string
+  name: string
+  backgroundColor: string
+}
+
+type GoogleColorMap = {
+  event: Record<string, { background: string }>
+}
+
+const LS_CALENDAR_LIST = "sp:calendar:calendarList"
+const LS_CALENDAR_LIST_TS = "sp:calendar:calendarListTs"
+const LS_COLOR_MAP = "sp:calendar:colors"
 const LS_LAST_FETCH = "sp:calendar:lastFetch"
+const EVENTS_PREFIX = "sp:calendar:events:"
+
 const COOLDOWN = 10_000
 const REFRESH_INTERVAL = 300_000
+const CALENDAR_LIST_TTL = 3_600_000
 
 type State = "not-connected" | "loading" | "loaded" | "error"
+type ViewMode = "1d" | "1w" | "1m"
 
 let currentState: State = "loading"
 let currentEvents: CalendarEvent[] = []
 let refreshIntervalId: ReturnType<typeof setInterval> | null = null
-let openPopover: HTMLElement | null = null
+let calendarPopoverClose: (() => void) | null = null
+let viewMode: ViewMode = "1d"
+let offset = 0
 
 function getApi() {
   return globalThis.browser ?? globalThis.chrome
@@ -45,6 +68,64 @@ export async function authenticate(): Promise<boolean> {
   return true
 }
 
+function getCachedCalendarList(): CalendarInfo[] | null {
+  try {
+    const ts = localStorage.getItem(LS_CALENDAR_LIST_TS)
+    if (!ts || Date.now() - Number(ts) > CALENDAR_LIST_TTL) return null
+    const raw = localStorage.getItem(LS_CALENDAR_LIST)
+    return raw ? (JSON.parse(raw) as CalendarInfo[]) : null
+  } catch {
+    return null
+  }
+}
+
+async function fetchCalendarList(token: string): Promise<CalendarInfo[]> {
+  const cached = getCachedCalendarList()
+  if (cached) return cached
+
+  const res = await fetch(
+    "https://www.googleapis.com/calendar/v3/users/me/calendarList",
+    { headers: { Authorization: `Bearer ${token}` } }
+  )
+  if (!res.ok) throw new Error(`CalendarList HTTP ${res.status}`)
+
+  const data = await res.json()
+  const calendars: CalendarInfo[] = (data.items ?? [])
+    .filter((c: Record<string, unknown>) => c.selected !== false)
+    .map((c: Record<string, unknown>) => ({
+      id: c.id as string,
+      name: (c.summaryOverride ?? c.summary ?? "") as string,
+      backgroundColor: (c.backgroundColor ?? "#4285f4") as string,
+    }))
+
+  try {
+    localStorage.setItem(LS_CALENDAR_LIST, JSON.stringify(calendars))
+    localStorage.setItem(LS_CALENDAR_LIST_TS, String(Date.now()))
+  } catch { /* quota */ }
+
+  return calendars
+}
+
+async function fetchColorMap(token: string): Promise<GoogleColorMap> {
+  try {
+    const cached = localStorage.getItem(LS_COLOR_MAP)
+    if (cached) return JSON.parse(cached) as GoogleColorMap
+  } catch { /* */ }
+
+  const res = await fetch(
+    "https://www.googleapis.com/calendar/v3/colors",
+    { headers: { Authorization: `Bearer ${token}` } }
+  )
+  if (!res.ok) throw new Error(`Colors HTTP ${res.status}`)
+
+  const data = (await res.json()) as GoogleColorMap
+  try {
+    localStorage.setItem(LS_COLOR_MAP, JSON.stringify(data))
+  } catch { /* quota */ }
+
+  return data
+}
+
 export async function disconnect(): Promise<void> {
   const api = getApi()
   if (api?.identity?.removeCachedAuthToken) {
@@ -63,30 +144,58 @@ export async function disconnect(): Promise<void> {
 
   store.local.set("calendarConnected", false)
   try {
-    localStorage.removeItem(LS_CACHED_EVENTS)
     localStorage.removeItem(LS_LAST_FETCH)
+    localStorage.removeItem(LS_CALENDAR_LIST)
+    localStorage.removeItem(LS_CALENDAR_LIST_TS)
+    localStorage.removeItem(LS_COLOR_MAP)
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const key = localStorage.key(i)
+      if (key?.startsWith(EVENTS_PREFIX)) localStorage.removeItem(key)
+    }
   } catch {
     /* */
   }
 }
 
-function getCachedEvents(): CalendarEvent[] | null {
+function getDateRange(): { start: Date; end: Date } {
+  const now = new Date()
+  if (viewMode === "1d") {
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset)
+    const end = new Date(start.getTime() + 86_400_000)
+    return { start, end }
+  }
+  if (viewMode === "1w") {
+    const day = now.getDay()
+    const mondayOffset = day === 0 ? -6 : 1 - day
+    const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + mondayOffset + offset * 7)
+    const sunday = new Date(monday.getTime() + 7 * 86_400_000)
+    return { start: monday, end: sunday }
+  }
+  const start = new Date(now.getFullYear(), now.getMonth() + offset, 1)
+  const end = new Date(now.getFullYear(), now.getMonth() + offset + 1, 1)
+  return { start, end }
+}
+
+function eventsCacheKey(start: Date, end: Date): string {
+  return EVENTS_PREFIX + start.toISOString().slice(0, 10) + "_" + end.toISOString().slice(0, 10)
+}
+
+function getCachedEvents(start: Date, end: Date): CalendarEvent[] | null {
   try {
-    const raw = localStorage.getItem(LS_CACHED_EVENTS)
+    const raw = localStorage.getItem(eventsCacheKey(start, end))
     if (!raw) return null
-    return JSON.parse(raw) as CalendarEvent[]
+    const { ts, events } = JSON.parse(raw) as { ts: number; events: CalendarEvent[] }
+    if (Date.now() - ts > REFRESH_INTERVAL) return null
+    return events
   } catch {
     return null
   }
 }
 
-function setCachedEvents(events: CalendarEvent[]): void {
+function setCachedEvents(start: Date, end: Date, events: CalendarEvent[]): void {
   try {
-    localStorage.setItem(LS_CACHED_EVENTS, JSON.stringify(events))
-    localStorage.setItem(LS_LAST_FETCH, String(Date.now()))
-  } catch {
-    /* quota */
-  }
+    localStorage.setItem(eventsCacheKey(start, end), JSON.stringify({ ts: Date.now(), events }))
+  } catch { /* quota */ }
 }
 
 function isCooldownActive(): boolean {
@@ -99,9 +208,8 @@ function isCooldownActive(): boolean {
   }
 }
 
-async function fetchTodayEvents(): Promise<void> {
+async function fetchEvents(): Promise<void> {
   if (!store.sync.get("calendarEnabled")) return
-
   if (!store.local.get("calendarConnected")) {
     currentState = "not-connected"
     currentEvents = []
@@ -109,8 +217,10 @@ async function fetchTodayEvents(): Promise<void> {
     return
   }
 
+  const { start, end } = getDateRange()
+
   if (isCooldownActive()) {
-    const cached = getCachedEvents()
+    const cached = getCachedEvents(start, end)
     if (cached) {
       currentEvents = cached
       currentState = "loaded"
@@ -119,10 +229,17 @@ async function fetchTodayEvents(): Promise<void> {
     }
   }
 
-  currentState = "loading"
-  renderTrigger()
+  const cached = getCachedEvents(start, end)
+  if (cached) {
+    currentEvents = cached
+    currentState = "loaded"
+    renderTrigger()
+  } else if (currentState !== "loaded") {
+    currentState = "loading"
+    renderTrigger()
+  }
 
-  const token = await getToken(false)
+  let token = await getToken(false)
   if (!token) {
     store.local.set("calendarConnected", false)
     currentState = "not-connected"
@@ -131,68 +248,90 @@ async function fetchTodayEvents(): Promise<void> {
     return
   }
 
-  const now = new Date()
-  const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const endOfDay = new Date(startOfDay.getTime() + 86_400_000)
-
-  const params = new URLSearchParams({
-    timeMin: startOfDay.toISOString(),
-    timeMax: endOfDay.toISOString(),
-    singleEvents: "true",
-    orderBy: "startTime",
-  })
-
   try {
-    let res = await fetch(
-      `https://www.googleapis.com/calendar/v3/calendars/primary/events?${params}`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    )
-
-    if (res.status === 401) {
-      const api = getApi()
-      if (api?.identity?.removeCachedAuthToken) {
-        try {
-          await api.identity.removeCachedAuthToken({ token })
-        } catch {
-          /* */
+    let calendars: CalendarInfo[]
+    let colorMap: GoogleColorMap
+    try {
+      calendars = await fetchCalendarList(token)
+      colorMap = await fetchColorMap(token)
+    } catch (e) {
+      if (e instanceof Error && e.message.includes("401")) {
+        const api = getApi()
+        if (api?.identity?.removeCachedAuthToken) {
+          try { await api.identity.removeCachedAuthToken({ token }) } catch { /* */ }
         }
+        token = await getToken(false)
+        if (!token) {
+          store.local.set("calendarConnected", false)
+          currentState = "not-connected"
+          currentEvents = []
+          renderTrigger()
+          return
+        }
+        calendars = await fetchCalendarList(token)
+        colorMap = await fetchColorMap(token)
+      } else {
+        throw e
       }
-      const freshToken = await getToken(false)
-      if (!freshToken) {
-        store.local.set("calendarConnected", false)
-        currentState = "not-connected"
-        currentEvents = []
-        renderTrigger()
-        return
-      }
-      res = await fetch(
-        `https://www.googleapis.com/calendar/v3/calendars/primary/events?${params}`,
-        { headers: { Authorization: `Bearer ${freshToken}` } }
-      )
     }
 
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const params = new URLSearchParams({
+      timeMin: start.toISOString(),
+      timeMax: end.toISOString(),
+      singleEvents: "true",
+      orderBy: "startTime",
+    })
 
-    const data = await res.json()
-    currentEvents = (data.items ?? [])
-      .filter((e: Record<string, unknown>) => e.status !== "cancelled")
-      .map((e: Record<string, unknown>) => ({
-        id: e.id as string,
-        title: (e.summary as string) ?? "(No title)",
-        startTime: (e.start as Record<string, string>)?.dateTime ?? null,
-        endTime: (e.end as Record<string, string>)?.dateTime ?? null,
-        allDay: !!(e.start as Record<string, string>)?.date,
-        htmlLink: (e.htmlLink as string) ?? "",
-      }))
+    const allEvents: CalendarEvent[] = []
 
+    for (const cal of calendars) {
+      try {
+        const res = await fetch(
+          `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events?${params}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        )
+        if (!res.ok) continue
+
+        const data = await res.json()
+        for (const e of (data.items ?? []) as Record<string, unknown>[]) {
+          if (e.status === "cancelled") continue
+          const colorId = e.colorId as string | undefined
+          const color = colorId && colorMap.event?.[colorId]
+            ? colorMap.event[colorId].background
+            : cal.backgroundColor
+
+          allEvents.push({
+            id: e.id as string,
+            title: (e.summary as string) ?? "(No title)",
+            startTime: (e.start as Record<string, string>)?.dateTime ?? null,
+            endTime: (e.end as Record<string, string>)?.dateTime ?? null,
+            allDay: !!(e.start as Record<string, string>)?.date,
+            allDayDate: (e.start as Record<string, string>)?.date ?? null,
+            htmlLink: (e.htmlLink as string) ?? "",
+            calendarId: cal.id,
+            calendarName: cal.name,
+            color,
+            location: (e.location as string) ?? null,
+          })
+        }
+      } catch {
+        continue
+      }
+    }
+
+    allEvents.sort((a, b) => {
+      if (a.allDay !== b.allDay) return a.allDay ? -1 : 1
+      const aTime = a.startTime ? new Date(a.startTime).getTime() : 0
+      const bTime = b.startTime ? new Date(b.startTime).getTime() : 0
+      return aTime - bTime
+    })
+
+    currentEvents = allEvents
     currentState = "loaded"
-    setCachedEvents(currentEvents)
+    setCachedEvents(start, end, allEvents)
+    try { localStorage.setItem(LS_LAST_FETCH, String(Date.now())) } catch { /* */ }
   } catch {
-    const cached = getCachedEvents()
-    if (cached) {
-      currentEvents = cached
-      currentState = "loaded"
-    } else {
+    if (!cached) {
       currentState = "error"
     }
   }
@@ -201,9 +340,9 @@ async function fetchTodayEvents(): Promise<void> {
 }
 
 function closePopover(): void {
-  if (openPopover) {
-    openPopover.remove()
-    openPopover = null
+  if (calendarPopoverClose) {
+    calendarPopoverClose()
+    calendarPopoverClose = null
   }
 }
 
@@ -220,6 +359,45 @@ function formatTime(isoString: string): string {
   })
 }
 
+const NAV_LIMITS: Record<ViewMode, number> = { "1d": 6, "1w": 3, "1m": 1 }
+
+function ordinal(n: number): string {
+  const s = ["th", "st", "nd", "rd"]
+  const v = n % 100
+  return n + (s[(v - 20) % 10] || s[v] || s[0])
+}
+
+function getNavLabel(): string {
+  const now = new Date()
+
+  if (viewMode === "1d") {
+    if (offset === 0) return "Today"
+    if (offset === -1) return "Yesterday"
+    if (offset === 1) return "Tomorrow"
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset)
+    return d.toLocaleDateString("en-US", { month: "long" }) + " " + ordinal(d.getDate())
+  }
+
+  if (viewMode === "1w") {
+    if (offset === 0) return "This Week"
+    if (offset === -1) return "Last Week"
+    if (offset === 1) return "Next Week"
+    const { start, end } = getDateRange()
+    const lastDay = new Date(end.getTime() - 86_400_000)
+    const fmt = (d: Date) =>
+      d.toLocaleDateString("en-US", { month: "short" }) + " " + ordinal(d.getDate())
+    return fmt(start) + " – " + fmt(lastDay)
+  }
+
+  const d = new Date(now.getFullYear(), now.getMonth() + offset, 1)
+  return d.toLocaleDateString("en-US", { month: "long" })
+}
+
+function formatTimeRange(event: CalendarEvent): string {
+  if (event.allDay) return "All day"
+  if (!event.startTime || !event.endTime) return ""
+  return formatTime(event.startTime) + " – " + formatTime(event.endTime)
+}
 
 function renderTrigger(): void {
   const trigger = document.getElementById(
@@ -303,7 +481,10 @@ function showCalendarPopover(anchor: HTMLElement): void {
   const rect = anchor.getBoundingClientRect()
   popover.style.right = window.innerWidth - rect.right + "px"
   popover.style.top = rect.bottom + 4 + "px"
-  openPopover = popover
+  calendarPopoverClose = () => {
+    popover.remove()
+    document.removeEventListener("click", onClickOutside)
+  }
 
   const onClickOutside = (e: MouseEvent) => {
     if (
@@ -312,7 +493,6 @@ function showCalendarPopover(anchor: HTMLElement): void {
       !anchor.contains(e.target as Node)
     ) {
       closePopover()
-      document.removeEventListener("click", onClickOutside)
     }
   }
   setTimeout(() => document.addEventListener("click", onClickOutside), 0)
@@ -320,7 +500,7 @@ function showCalendarPopover(anchor: HTMLElement): void {
 
 function startRefreshInterval(): void {
   stopRefreshInterval()
-  refreshIntervalId = setInterval(() => fetchTodayEvents(), REFRESH_INTERVAL)
+  refreshIntervalId = setInterval(() => fetchEvents(), REFRESH_INTERVAL)
 }
 
 function stopRefreshInterval(): void {
@@ -338,11 +518,11 @@ export function initCalendar(): void {
   trigger.addEventListener("click", (e) => {
     e.stopPropagation()
     if (currentState === "error") {
-      fetchTodayEvents()
+      fetchEvents()
       return
     }
     if (currentState === "loaded") {
-      if (openPopover) {
+      if (calendarPopoverClose) {
         closePopover()
       } else {
         showCalendarPopover(trigger)
@@ -352,7 +532,7 @@ export function initCalendar(): void {
 
   store.sync.subscribe("calendarEnabled", (val) => {
     if (val && store.local.get("calendarConnected")) {
-      fetchTodayEvents()
+      fetchEvents()
       startRefreshInterval()
     } else {
       trigger.hidden = true
@@ -363,7 +543,7 @@ export function initCalendar(): void {
 
   store.local.subscribe("calendarConnected", (connected) => {
     if (connected && store.sync.get("calendarEnabled")) {
-      fetchTodayEvents()
+      fetchEvents()
       startRefreshInterval()
     } else {
       stopRefreshInterval()
@@ -384,6 +564,6 @@ export function initCalendar(): void {
     return
   }
 
-  fetchTodayEvents()
+  fetchEvents()
   startRefreshInterval()
 }

@@ -72,15 +72,24 @@
         </div>
       </div>
       <div
-        id="dock"
-        class="fixed bottom-0 left-0 right-0 flex items-center gap-2 p-2 bg-page-overlay/30"
+        id="dock-wrapper"
+        class="fixed bottom-4 left-0 right-0 flex flex-col items-center gap-1.5 pointer-events-none"
         hidden
       >
         <div
+          id="dock"
+          class="dock-surface pointer-events-auto relative max-w-[80vw] rounded-2xl"
+        >
+          <div id="dock-scroll" class="flex items-center overflow-x-auto dock-scroll">
+            <div id="dock-suggestions" class="flex items-center gap-1 shrink-0" hidden></div>
+            <div id="dock-divider" class="w-px self-stretch bg-page-foreground/15 mx-1 shrink-0" hidden></div>
+            <div id="dock-items" class="flex items-center gap-1 shrink-0"></div>
+          </div>
+        </div>
+        <div
           id="dock-tabs"
-          class="flex gap-1 border-r border-page-foreground/20 pr-2 mr-2"
+          class="pointer-events-auto flex items-center gap-1"
         ></div>
-        <div id="dock-items" class="flex gap-2 overflow-x-auto"></div>
       </div>
     </div>
 

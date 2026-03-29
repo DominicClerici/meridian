@@ -1,5 +1,5 @@
 import { store } from "./store"
-import type { Tab, TabItem, Folder, Shortcut } from "./shortcuts"
+import type { Tab, TabItem, Folder, Shortcut, ShortcutIcon, FolderIcon } from "./shortcuts"
 import { initDrag } from "./shortcut-drag"
 import {
   addTab,
@@ -16,7 +16,8 @@ import {
   MAX_TABS,
 } from "./shortcuts"
 import { createButton, createInput, createCheckbox, createPopover, createDialog } from "./components"
-import { icon } from "./icons/registry"
+import { icon, getIconSvg } from "./icons/registry"
+import { ACCENT_COLORS } from "./defaults"
 
 let selectedTabId: string | null = null
 let viewingFolderId: string | null = null
@@ -35,6 +36,121 @@ function save(tabs: Tab[]): void {
   store.local.set("shortcuts", tabs)
 }
 
+const SWATCH_BG: Record<string, string> = {
+  rose: "bg-swatch-rose",
+  coral: "bg-swatch-coral",
+  amber: "bg-swatch-amber",
+  teal: "bg-swatch-teal",
+  sky: "bg-swatch-sky",
+  violet: "bg-swatch-violet",
+  slate: "bg-swatch-slate",
+  stone: "bg-swatch-stone",
+  zinc: "bg-swatch-zinc",
+  graphite: "bg-swatch-graphite",
+}
+
+function getFaviconUrl(url: string): string {
+  try {
+    let u = url
+    if (!/^https?:\/\//i.test(u)) u = "https://" + u
+    return `https://www.google.com/s2/favicons?domain=${new URL(u).hostname}&sz=32`
+  } catch {
+    return ""
+  }
+}
+
+function createIconPicker(
+  itemType: "shortcut" | "folder",
+  currentIcon?: ShortcutIcon | FolderIcon
+): { el: HTMLElement; getIcon: () => ShortcutIcon | FolderIcon } {
+  const defaultType = itemType === "shortcut" ? "favicon" : "folder"
+  let selected: ShortcutIcon | FolderIcon = currentIcon ??
+    (itemType === "shortcut" ? { type: "favicon" } : { type: "folder" })
+
+  const container = document.createElement("div")
+  container.className = "flex flex-col gap-1"
+
+  const label = document.createElement("span")
+  label.className = "text-xs text-muted"
+  label.textContent = "Icon"
+  container.appendChild(label)
+
+  const row = document.createElement("div")
+  row.className = "flex gap-2 items-center flex-wrap"
+
+  const defaultBtn = document.createElement("button")
+  defaultBtn.type = "button"
+  defaultBtn.className = "w-6 h-6 rounded-full flex items-center justify-center cursor-pointer transition-all duration-150 border border-input-border/50 text-muted"
+  defaultBtn.innerHTML = getIconSvg(itemType === "shortcut" ? "globe" : "folder")
+  row.appendChild(defaultBtn)
+
+  const colorBtns: HTMLButtonElement[] = []
+  for (const color of ACCENT_COLORS) {
+    const btn = document.createElement("button")
+    btn.type = "button"
+    btn.className = `w-6 h-6 rounded-full ${SWATCH_BG[color]} flex items-center justify-center cursor-pointer transition-all duration-150`
+    btn.dataset.color = color
+    btn.addEventListener("mouseenter", () => {
+      if (!(selected.type === "color" && (selected as any).color === color))
+        btn.style.transform = "scale(1.15)"
+    })
+    btn.addEventListener("mouseleave", () => { btn.style.transform = "" })
+    btn.addEventListener("click", () => {
+      selected = { type: "color", color }
+      updateSelected()
+    })
+    colorBtns.push(btn)
+    row.appendChild(btn)
+  }
+
+  function updateSelected(): void {
+    const isDefault = selected.type === defaultType
+    if (isDefault) {
+      defaultBtn.style.outline = "2px solid var(--accent)"
+      defaultBtn.style.outlineOffset = "2px"
+      defaultBtn.style.borderColor = "var(--accent)"
+      defaultBtn.style.color = "var(--accent)"
+    } else {
+      defaultBtn.style.outline = ""
+      defaultBtn.style.outlineOffset = ""
+      defaultBtn.style.borderColor = ""
+      defaultBtn.style.color = ""
+    }
+    for (const btn of colorBtns) {
+      const c = btn.dataset.color!
+      const active = selected.type === "color" && (selected as any).color === c
+      if (active) {
+        btn.innerHTML = getIconSvg("swatchCheck")
+        btn.style.outline = "2px solid"
+        btn.style.outlineOffset = "2px"
+        btn.style.outlineColor = `var(--swatch-${c})`
+        btn.style.transform = ""
+      } else {
+        btn.innerHTML = ""
+        btn.style.outline = ""
+        btn.style.outlineOffset = ""
+        btn.style.outlineColor = ""
+      }
+    }
+  }
+
+  defaultBtn.addEventListener("click", () => {
+    selected = itemType === "shortcut"
+      ? { type: "favicon" }
+      : { type: "folder" }
+    updateSelected()
+  })
+  defaultBtn.addEventListener("mouseenter", () => {
+    if (selected.type !== defaultType) defaultBtn.style.transform = "scale(1.15)"
+  })
+  defaultBtn.addEventListener("mouseleave", () => { defaultBtn.style.transform = "" })
+
+  container.appendChild(row)
+  updateSelected()
+
+  return { el: container, getIcon: () => selected }
+}
+
 function render(): void {
   renderTabBar()
   renderItemList()
@@ -43,36 +159,65 @@ function render(): void {
 
 function openAddShortcutPopover(anchor: HTMLElement): void {
   const container = document.createElement("div")
-  container.className = "flex flex-col gap-2 min-w-[220px]"
+  container.className = "flex flex-col gap-3 min-w-[220px]"
 
   const title = document.createElement("span")
   title.className = "text-xs font-semibold text-foreground"
   title.textContent = "Add Shortcut"
   container.appendChild(title)
 
+  const nameGroup = document.createElement("div")
+  nameGroup.className = "flex flex-col gap-1"
+  const nameLabel = document.createElement("span")
+  nameLabel.className = "text-xs text-muted"
+  nameLabel.textContent = "Name"
+  nameGroup.appendChild(nameLabel)
   const nameInput = createInput({ placeholder: "Name" })
-  container.appendChild(nameInput)
+  nameGroup.appendChild(nameInput)
+  container.appendChild(nameGroup)
 
+  const urlGroup = document.createElement("div")
+  urlGroup.className = "flex flex-col gap-1"
+  const urlLabel = document.createElement("span")
+  urlLabel.className = "text-xs text-muted"
+  urlLabel.textContent = "URL"
+  urlGroup.appendChild(urlLabel)
   const urlInput = createInput({ placeholder: "https://..." })
-  container.appendChild(urlInput)
+  urlGroup.appendChild(urlInput)
+  container.appendChild(urlGroup)
+
+  const iconPicker = createIconPicker("shortcut")
+  container.appendChild(iconPicker.el)
 
   const btnRow = document.createElement("div")
   btnRow.className = "flex justify-end"
   const saveBtn = createButton("Save", "primary")
+  saveBtn.disabled = true
+  saveBtn.style.opacity = "0.5"
   btnRow.appendChild(saveBtn)
   container.appendChild(btnRow)
 
   const { close } = createPopover(anchor, container, { modal: true })
 
+  function updateSaveState() {
+    const valid = (nameInput as HTMLInputElement).value.trim() !== "" &&
+                  (urlInput as HTMLInputElement).value.trim() !== ""
+    saveBtn.disabled = !valid
+    saveBtn.style.opacity = valid ? "" : "0.5"
+  }
+  nameInput.addEventListener("input", updateSaveState)
+  urlInput.addEventListener("input", updateSaveState)
+
   function submit() {
     const name = (nameInput as HTMLInputElement).value.trim()
     const url = (urlInput as HTMLInputElement).value.trim()
     if (!name || !url) return
+    const iconVal = iconPicker.getIcon() as ShortcutIcon
     let tabs = getTabs()
     if (viewingFolderId) {
-      tabs = addShortcutToFolder(tabs, selectedTabId!, viewingFolderId, name, url)
+      tabs = addShortcutToFolder(tabs, selectedTabId!, viewingFolderId, name, url, iconVal)
     } else {
-      tabs = addShortcut(tabs, selectedTabId!, name, url)
+      tabs = addShortcut(tabs, selectedTabId!, name, url, iconVal)
     }
     save(tabs)
     close()
@@ -92,19 +237,29 @@ function openAddShortcutPopover(anchor: HTMLElement): void {
 
 function openCreateFolderPopover(
   anchor: HTMLElement,
-  onSave: (name: string) => void,
+  onSave: (name: string, icon?: FolderIcon) => void,
   onCancel?: () => void
 ): void {
   const container = document.createElement("div")
-  container.className = "flex flex-col gap-2 min-w-[220px]"
+  container.className = "flex flex-col gap-3 min-w-[220px]"
 
   const title = document.createElement("span")
   title.className = "text-xs font-semibold text-foreground"
   title.textContent = "Create Folder"
   container.appendChild(title)
 
+  const nameGroup = document.createElement("div")
+  nameGroup.className = "flex flex-col gap-1"
+  const nameLabel = document.createElement("span")
+  nameLabel.className = "text-xs text-muted"
+  nameLabel.textContent = "Name"
+  nameGroup.appendChild(nameLabel)
   const nameInput = createInput({ placeholder: "Folder name", value: "New Folder" })
-  container.appendChild(nameInput)
+  nameGroup.appendChild(nameInput)
+  container.appendChild(nameGroup)
+
+  const iconPicker = createIconPicker("folder")
+  container.appendChild(iconPicker.el)
 
   const btnRow = document.createElement("div")
   btnRow.className = "flex justify-end"
@@ -117,10 +272,18 @@ function openCreateFolderPopover(
     onClose: () => onCancel?.(),
   })
 
+  function updateSaveState() {
+    const valid = (nameInput as HTMLInputElement).value.trim() !== ""
+    saveBtn.disabled = !valid
+    saveBtn.style.opacity = valid ? "" : "0.5"
+  }
+  nameInput.addEventListener("input", updateSaveState)
+  updateSaveState()
+
   function submit() {
     const name = (nameInput as HTMLInputElement).value.trim()
     if (!name) return
-    onSave(name)
+    onSave(name, iconPicker.getIcon() as FolderIcon)
     close()
   }
 
@@ -138,8 +301,8 @@ function openCreateFolderPopover(
 }
 
 function openAddFolderPopover(anchor: HTMLElement): void {
-  openCreateFolderPopover(anchor, (name) => {
-    const tabs = addFolder(getTabs(), selectedTabId!, name)
+  openCreateFolderPopover(anchor, (name, folderIcon) => {
+    const tabs = addFolder(getTabs(), selectedTabId!, name, folderIcon)
     save(tabs)
   })
 }
@@ -147,21 +310,41 @@ function openAddFolderPopover(anchor: HTMLElement): void {
 function openEditPopover(anchor: HTMLElement, item: TabItem | Shortcut, inFolder: boolean, folder: Folder | null): void {
   const isShortcut = item.type === "shortcut"
   const container = document.createElement("div")
-  container.className = "flex flex-col gap-2 min-w-[220px]"
+  container.className = "flex flex-col gap-3 min-w-[220px]"
 
   const title = document.createElement("span")
   title.className = "text-xs font-semibold text-foreground"
   title.textContent = isShortcut ? "Edit Shortcut" : "Edit Folder"
   container.appendChild(title)
 
+  const nameGroup = document.createElement("div")
+  nameGroup.className = "flex flex-col gap-1"
+  const nameLabel = document.createElement("span")
+  nameLabel.className = "text-xs text-muted"
+  nameLabel.textContent = "Name"
+  nameGroup.appendChild(nameLabel)
   const nameInput = createInput({ placeholder: "Name", value: item.name })
-  container.appendChild(nameInput)
+  nameGroup.appendChild(nameInput)
+  container.appendChild(nameGroup)
 
   let urlInput: HTMLInputElement | HTMLTextAreaElement | null = null
   if (isShortcut) {
+    const urlGroup = document.createElement("div")
+    urlGroup.className = "flex flex-col gap-1"
+    const urlLabel = document.createElement("span")
+    urlLabel.className = "text-xs text-muted"
+    urlLabel.textContent = "URL"
+    urlGroup.appendChild(urlLabel)
     urlInput = createInput({ placeholder: "https://...", value: (item as Shortcut).url })
-    container.appendChild(urlInput)
+    urlGroup.appendChild(urlInput)
+    container.appendChild(urlGroup)
   }
+
+  const iconPicker = createIconPicker(
+    isShortcut ? "shortcut" : "folder",
+    item.icon
+  )
+  container.appendChild(iconPicker.el)
 
   const btnRow = document.createElement("div")
   btnRow.className = "flex justify-end"
@@ -171,20 +354,32 @@ function openEditPopover(anchor: HTMLElement, item: TabItem | Shortcut, inFolder
 
   const { close } = createPopover(anchor, container, { modal: true })
 
+  function updateSaveState() {
+    const nameVal = (nameInput as HTMLInputElement).value.trim()
+    const urlVal = urlInput ? (urlInput as HTMLInputElement).value.trim() : "ok"
+    const valid = nameVal !== "" && urlVal !== ""
+    saveBtn.disabled = !valid
+    saveBtn.style.opacity = valid ? "" : "0.5"
+  }
+  nameInput.addEventListener("input", updateSaveState)
+  if (urlInput) urlInput.addEventListener("input", updateSaveState)
+  updateSaveState()
+
   function submit() {
     const name = (nameInput as HTMLInputElement).value.trim()
     if (!name) return
+    const iconVal = iconPicker.getIcon()
     let tabs = getTabs()
     if (isShortcut) {
       const url = (urlInput as HTMLInputElement).value.trim()
       if (!url) return
       if (inFolder && folder) {
-        tabs = editShortcutInFolder(tabs, selectedTabId!, folder.id, item.id, name, url)
+        tabs = editShortcutInFolder(tabs, selectedTabId!, folder.id, item.id, name, url, iconVal as ShortcutIcon)
       } else {
-        tabs = editShortcut(tabs, selectedTabId!, item.id, name, url)
+        tabs = editShortcut(tabs, selectedTabId!, item.id, name, url, iconVal as ShortcutIcon)
       }
     } else {
-      tabs = editFolder(tabs, selectedTabId!, item.id, name)
+      tabs = editFolder(tabs, selectedTabId!, item.id, name, iconVal as FolderIcon)
     }
     save(tabs)
     close()
@@ -350,9 +545,27 @@ function createRow(
     })
   }
 
-  const itemIcon = icon(item.type === "folder" ? "folder" : "link", { size: 14 })
-  itemIcon.classList.add("shrink-0", "text-muted")
-  row.appendChild(itemIcon)
+  const iconConfig = item.icon
+  if (iconConfig?.type === "color") {
+    const dot = document.createElement("span")
+    dot.className = `w-3.5 h-3.5 rounded-full shrink-0 ${SWATCH_BG[(iconConfig as any).color] ?? ""}`
+    row.appendChild(dot)
+  } else if (item.type === "shortcut" && (!iconConfig || iconConfig.type === "favicon")) {
+    const img = document.createElement("img")
+    img.src = getFaviconUrl((item as Shortcut).url)
+    img.className = "w-4 h-4 rounded-sm shrink-0"
+    img.alt = ""
+    img.addEventListener("error", () => {
+      const fallback = icon("link", { size: 14 })
+      fallback.classList.add("shrink-0", "text-muted")
+      img.replaceWith(fallback)
+    }, { once: true })
+    row.appendChild(img)
+  } else {
+    const itemIcon = icon("folder", { size: 14 })
+    itemIcon.classList.add("shrink-0", "text-muted")
+    row.appendChild(itemIcon)
+  }
 
   const label = document.createElement("div")
   label.className = "flex-1 min-w-0 truncate"
@@ -423,7 +636,7 @@ function renderItemList(): void {
 
   if (!inFolder) {
     const list = document.createElement("div")
-    list.className = "grid grid-cols-3 gap-1"
+    list.className = "grid grid-cols-3"
     list.dataset.zone = "top-level"
 
     if (tab.items.length === 0) {

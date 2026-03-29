@@ -42,6 +42,7 @@ export type SyncSettings = {
   weatherUnit: "f" | "c";
   spotifyEnabled: boolean;
   recommendationsEnabled: boolean;
+  shortcutsOpenIn: "current" | "new";
   calendarEnabled: boolean;
   bgSource: "color" | "unsplash" | "upload";
   unsplashDaily: boolean;
@@ -82,6 +83,7 @@ export const syncDefaults: SyncSettings = {
   weatherEnabled: true,
   weatherUnit: "f",
   spotifyEnabled: true,
+  shortcutsOpenIn: "current",
   recommendationsEnabled: false,
   calendarEnabled: false,
   bgSource: "color",

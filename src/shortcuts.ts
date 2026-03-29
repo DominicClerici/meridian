@@ -1,8 +1,12 @@
+export type ShortcutIcon = { type: "favicon" } | { type: "color"; color: string }
+export type FolderIcon = { type: "folder" } | { type: "color"; color: string }
+
 export type Shortcut = {
   type: "shortcut"
   id: string
   name: string
   url: string
+  icon?: ShortcutIcon
 }
 
 export type Folder = {
@@ -10,6 +14,7 @@ export type Folder = {
   id: string
   name: string
   children: Shortcut[]
+  icon?: FolderIcon
 }
 
 export type TabItem = Shortcut | Folder
@@ -37,7 +42,8 @@ export function addShortcut(
   tabs: Tab[],
   tabId: string,
   name: string,
-  url: string
+  url: string,
+  icon?: ShortcutIcon
 ): Tab[] {
   return tabs.map((t) => {
     if (t.id !== tabId || t.items.length >= MAX_ITEMS_PER_TAB) return t
@@ -46,12 +52,13 @@ export function addShortcut(
       id: crypto.randomUUID(),
       name,
       url,
+      ...(icon ? { icon } : {}),
     }
     return { ...t, items: [...t.items, sc] }
   })
 }
 
-export function addFolder(tabs: Tab[], tabId: string, name: string): Tab[] {
+export function addFolder(tabs: Tab[], tabId: string, name: string, icon?: FolderIcon): Tab[] {
   return tabs.map((t) => {
     if (t.id !== tabId || t.items.length >= MAX_ITEMS_PER_TAB) return t
     const folder: Folder = {
@@ -59,6 +66,7 @@ export function addFolder(tabs: Tab[], tabId: string, name: string): Tab[] {
       id: crypto.randomUUID(),
       name,
       children: [],
+      ...(icon ? { icon } : {}),
     }
     return { ...t, items: [...t.items, folder] }
   })
@@ -76,14 +84,17 @@ export function editShortcut(
   tabId: string,
   itemId: string,
   name: string,
-  url: string
+  url: string,
+  icon?: ShortcutIcon
 ): Tab[] {
   return tabs.map((t) => {
     if (t.id !== tabId) return t
     return {
       ...t,
       items: t.items.map((i) =>
-        i.id === itemId && i.type === "shortcut" ? { ...i, name, url } : i
+        i.id === itemId && i.type === "shortcut"
+          ? { ...i, name, url, ...(icon !== undefined ? { icon } : {}) }
+          : i
       ),
     }
   })
@@ -93,14 +104,17 @@ export function editFolder(
   tabs: Tab[],
   tabId: string,
   folderId: string,
-  name: string
+  name: string,
+  icon?: FolderIcon
 ): Tab[] {
   return tabs.map((t) => {
     if (t.id !== tabId) return t
     return {
       ...t,
       items: t.items.map((i) =>
-        i.id === folderId && i.type === "folder" ? { ...i, name } : i
+        i.id === folderId && i.type === "folder"
+          ? { ...i, name, ...(icon !== undefined ? { icon } : {}) }
+          : i
       ),
     }
   })
@@ -111,7 +125,8 @@ export function addShortcutToFolder(
   tabId: string,
   folderId: string,
   name: string,
-  url: string
+  url: string,
+  icon?: ShortcutIcon
 ): Tab[] {
   return tabs.map((t) => {
     if (t.id !== tabId) return t
@@ -129,6 +144,7 @@ export function addShortcutToFolder(
           id: crypto.randomUUID(),
           name,
           url,
+          ...(icon ? { icon } : {}),
         }
         return { ...i, children: [...i.children, sc] }
       }),
@@ -160,7 +176,8 @@ export function editShortcutInFolder(
   folderId: string,
   shortcutId: string,
   name: string,
-  url: string
+  url: string,
+  icon?: ShortcutIcon
 ): Tab[] {
   return tabs.map((t) => {
     if (t.id !== tabId) return t
@@ -171,7 +188,9 @@ export function editShortcutInFolder(
         return {
           ...i,
           children: i.children.map((c) =>
-            c.id === shortcutId ? { ...c, name, url } : c
+            c.id === shortcutId
+              ? { ...c, name, url, ...(icon !== undefined ? { icon } : {}) }
+              : c
           ),
         }
       }),
@@ -250,7 +269,8 @@ export function mergeShortcutsIntoNewFolder(
   tabId: string,
   targetId: string,
   draggedId: string,
-  folderName: string
+  folderName: string,
+  folderIcon?: FolderIcon
 ): Tab[] {
   return tabs.map((t) => {
     if (t.id !== tabId) return t
@@ -269,6 +289,7 @@ export function mergeShortcutsIntoNewFolder(
         { ...target, type: "shortcut" },
         { ...dragged, type: "shortcut" },
       ],
+      ...(folderIcon ? { icon: folderIcon } : {}),
     }
     const items = t.items
       .filter((i) => i.id !== draggedId)
