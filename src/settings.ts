@@ -1,12 +1,32 @@
 import { store } from "./store"
 import type { SyncSettings } from "./defaults"
 import { ACCENT_COLORS } from "./defaults"
-import { authenticate as spotifyAuthenticate, clearTokens as spotifyClearTokens } from "./spotify"
-import { authenticate as calendarAuthenticate, disconnect as calendarDisconnect } from "./calendar"
-import { createAccordion, createButton, createCheckbox, createDialog, createInput, createSelect, createTooltip } from "./components"
+import {
+  authenticate as spotifyAuthenticate,
+  clearTokens as spotifyClearTokens,
+} from "./spotify"
+import {
+  authenticate as calendarAuthenticate,
+  disconnect as calendarDisconnect,
+} from "./calendar"
+import {
+  createAccordion,
+  createButton,
+  createCheckbox,
+  createDialog,
+  createInput,
+  createSelect,
+  createTooltip,
+} from "./components"
 import { icon, getIconSvg } from "./icons/registry"
 import { searchPhotos, TOPICS } from "./unsplash"
-import { setUnsplashPhoto, setUploadedPhoto, switchToColor, reapplyUpload, refreshDailyNow } from "./background"
+import {
+  setUnsplashPhoto,
+  setUploadedPhoto,
+  switchToColor,
+  reapplyUpload,
+  refreshDailyNow,
+} from "./background"
 import { idbGet } from "./idb"
 import type { UnsplashPhoto } from "./unsplash"
 
@@ -24,7 +44,8 @@ function settingsRow(
   opts?: { hidden?: boolean }
 ): HTMLElement {
   const row = document.createElement("div")
-  row.className = "flex items-center justify-between py-3 border-b border-input-border/10 last:border-b-0"
+  row.className =
+    "flex items-center justify-between py-3 border-b border-input-border/10 last:border-b-0"
   if (opts?.hidden) row.hidden = true
 
   const labelEl = document.createElement("span")
@@ -43,10 +64,16 @@ function buildGeneralTab(): void {
   const wrapper = document.createElement("div")
   wrapper.className = "flex flex-col"
 
-  const clockEnabled = createCheckbox("", store.sync.get("clockEnabled"), (v) => store.sync.set("clockEnabled", v))
+  const clockEnabled = createCheckbox("", store.sync.get("clockEnabled"), (v) =>
+    store.sync.set("clockEnabled", v)
+  )
   wrapper.appendChild(settingsRow("Show clock", clockEnabled))
 
-  const clockSeconds = createCheckbox("", store.sync.get("clockShowSeconds"), (v) => store.sync.set("clockShowSeconds", v))
+  const clockSeconds = createCheckbox(
+    "",
+    store.sync.get("clockShowSeconds"),
+    (v) => store.sync.set("clockShowSeconds", v)
+  )
   wrapper.appendChild(settingsRow("Show seconds", clockSeconds))
 
   const clock24h = createCheckbox("", store.sync.get("clock24Hour"), (v) => {
@@ -55,8 +82,12 @@ function buildGeneralTab(): void {
   })
   wrapper.appendChild(settingsRow("24-hour format", clock24h))
 
-  const clockAmPm = createCheckbox("", store.sync.get("clockShowAmPm"), (v) => store.sync.set("clockShowAmPm", v))
-  const ampmRow = settingsRow("Show AM/PM", clockAmPm, { hidden: store.sync.get("clock24Hour") })
+  const clockAmPm = createCheckbox("", store.sync.get("clockShowAmPm"), (v) =>
+    store.sync.set("clockShowAmPm", v)
+  )
+  const ampmRow = settingsRow("Show AM/PM", clockAmPm, {
+    hidden: store.sync.get("clock24Hour"),
+  })
   wrapper.appendChild(ampmRow)
 
   const clockDate = createCheckbox("", store.sync.get("clockShowDate"), (v) => {
@@ -74,9 +105,12 @@ function buildGeneralTab(): void {
       { value: "numericShort", label: "01/24" },
     ],
     value: store.sync.get("clockDateFormat"),
-    onChange: (v) => store.sync.set("clockDateFormat", v as SyncSettings["clockDateFormat"]),
+    onChange: (v) =>
+      store.sync.set("clockDateFormat", v as SyncSettings["clockDateFormat"]),
   })
-  const dateFormatRow = settingsRow("Date format", clockDateFormat, { hidden: !store.sync.get("clockShowDate") })
+  const dateFormatRow = settingsRow("Date format", clockDateFormat, {
+    hidden: !store.sync.get("clockShowDate"),
+  })
   wrapper.appendChild(dateFormatRow)
 
   const clockSize = createSelect({
@@ -86,26 +120,37 @@ function buildGeneralTab(): void {
       { value: "large", label: "Large" },
     ],
     value: store.sync.get("clockSize"),
-    onChange: (v) => store.sync.set("clockSize", v as SyncSettings["clockSize"]),
+    onChange: (v) =>
+      store.sync.set("clockSize", v as SyncSettings["clockSize"]),
   })
   wrapper.appendChild(settingsRow("Size", clockSize))
 
   panel.appendChild(wrapper)
 
   const sc = (el: HTMLLabelElement, v: boolean) => (el as any).setChecked(v)
-  store.sync.subscribe("clockEnabled", (v) => { sc(clockEnabled, v) })
-  store.sync.subscribe("clockShowSeconds", (v) => { sc(clockSeconds, v) })
+  store.sync.subscribe("clockEnabled", (v) => {
+    sc(clockEnabled, v)
+  })
+  store.sync.subscribe("clockShowSeconds", (v) => {
+    sc(clockSeconds, v)
+  })
   store.sync.subscribe("clock24Hour", (v) => {
     sc(clock24h, v)
     ampmRow.hidden = v
   })
-  store.sync.subscribe("clockShowAmPm", (v) => { sc(clockAmPm, v) })
+  store.sync.subscribe("clockShowAmPm", (v) => {
+    sc(clockAmPm, v)
+  })
   store.sync.subscribe("clockShowDate", (v) => {
     sc(clockDate, v)
     dateFormatRow.hidden = !v
   })
-  store.sync.subscribe("clockDateFormat", (v) => { clockDateFormat.value = v })
-  store.sync.subscribe("clockSize", (v) => { clockSize.value = v })
+  store.sync.subscribe("clockDateFormat", (v) => {
+    clockDateFormat.value = v
+  })
+  store.sync.subscribe("clockSize", (v) => {
+    clockSize.value = v
+  })
 }
 
 const SWATCH_BG: Record<string, string> = {
@@ -121,9 +166,7 @@ const SWATCH_BG: Record<string, string> = {
   graphite: "bg-swatch-graphite",
 }
 
-function buildSwatchGroup(
-  storeKey: "accentColor" | "bgColor"
-): HTMLElement {
+function buildSwatchGroup(storeKey: "accentColor" | "bgColor"): HTMLElement {
   const isAccent = storeKey === "accentColor"
   const specialValue = isAccent ? "random" : "auto"
 
@@ -133,16 +176,25 @@ function buildSwatchGroup(
   const buttons: HTMLButtonElement[] = []
 
   const specialBtn = document.createElement("button")
-  specialBtn.className = "w-6 h-6 rounded-full flex items-center justify-center cursor-pointer transition-all duration-150 border border-input-border/50 text-muted"
+  specialBtn.className =
+    "w-6 h-6 rounded-full flex items-center justify-center cursor-pointer transition-all duration-150 border border-input-border/50 text-muted"
   specialBtn.dataset.color = specialValue
   specialBtn.innerHTML = getIconSvg(isAccent ? "randomAccent" : "autoBg")
-  specialBtn.addEventListener("click", () => store.sync.set(storeKey, specialValue as any))
+  specialBtn.addEventListener("click", () =>
+    store.sync.set(storeKey, specialValue as any)
+  )
   specialBtn.addEventListener("mouseenter", () => {
-    if (store.sync.get(storeKey) !== specialValue) specialBtn.style.transform = "scale(1.1)"
+    if (store.sync.get(storeKey) !== specialValue)
+      specialBtn.style.transform = "scale(1.1)"
   })
-  specialBtn.addEventListener("mouseleave", () => { specialBtn.style.transform = "" })
+  specialBtn.addEventListener("mouseleave", () => {
+    specialBtn.style.transform = ""
+  })
 
-  createTooltip(specialBtn, isAccent ? "Changes color daily" : "Matches accent color")
+  createTooltip(
+    specialBtn,
+    isAccent ? "Changes color daily" : "Matches accent color"
+  )
 
   buttons.push(specialBtn)
   container.appendChild(specialBtn)
@@ -156,7 +208,9 @@ function buildSwatchGroup(
     btn.addEventListener("mouseenter", () => {
       if (store.sync.get(storeKey) !== color) btn.style.transform = "scale(1.1)"
     })
-    btn.addEventListener("mouseleave", () => { btn.style.transform = "" })
+    btn.addEventListener("mouseleave", () => {
+      btn.style.transform = ""
+    })
 
     buttons.push(btn)
     container.appendChild(btn)
@@ -211,11 +265,17 @@ function buildModeSelector(): HTMLElement {
   const buttons: HTMLButtonElement[] = []
 
   for (const mode of modes) {
-    const modeIconName = mode === "light" ? "modeLight" : mode === "dark" ? "modeDark" : "modeAuto"
-    const btn = createButton(mode.charAt(0).toUpperCase() + mode.slice(1), "override", {
-      icon: icon(modeIconName),
-    })
-    btn.className += " flex-1 justify-center py-2 border rounded-theme transition-colors"
+    const modeIconName =
+      mode === "light" ? "modeLight" : mode === "dark" ? "modeDark" : "modeAuto"
+    const btn = createButton(
+      mode.charAt(0).toUpperCase() + mode.slice(1),
+      "override",
+      {
+        icon: icon(modeIconName),
+      }
+    )
+    btn.className +=
+      " flex-1 justify-center py-2 border rounded-theme transition-colors"
 
     btn.addEventListener("click", () => {
       store.sync.set("mode", mode)
@@ -262,11 +322,19 @@ function buildModeSelector(): HTMLElement {
   return container
 }
 
-function buildColorAccordion(): { container: HTMLElement; content: HTMLElement } {
-  const acc = createAccordion("Color", { variant: "settings", defaultOpen: true })
+function buildColorAccordion(defaultOpen: boolean): {
+  container: HTMLElement
+  content: HTMLElement
+} {
+  const acc = createAccordion("Color", {
+    variant: "settings",
+    defaultOpen,
+  })
   const swatches = buildSwatchGroup("bgColor")
 
-  for (const btn of swatches.querySelectorAll("button") as NodeListOf<HTMLButtonElement>) {
+  for (const btn of swatches.querySelectorAll(
+    "button"
+  ) as NodeListOf<HTMLButtonElement>) {
     btn.addEventListener("click", () => {
       if (store.sync.get("bgSource") !== "color") {
         switchToColor()
@@ -278,8 +346,14 @@ function buildColorAccordion(): { container: HTMLElement; content: HTMLElement }
   return acc
 }
 
-function buildUnsplashAccordion(): { container: HTMLElement; content: HTMLElement } {
-  const acc = createAccordion("Unsplash", { variant: "settings", defaultOpen: false })
+function buildUnsplashAccordion(defaultOpen: boolean): {
+  container: HTMLElement
+  content: HTMLElement
+} {
+  const acc = createAccordion("Unsplash", {
+    variant: "settings",
+    defaultOpen,
+  })
 
   const hasKey = (): boolean => store.sync.get("unsplashApiKey") !== ""
 
@@ -293,18 +367,22 @@ function buildUnsplashAccordion(): { container: HTMLElement; content: HTMLElemen
   const dailyRow = document.createElement("div")
   dailyRow.className = "flex items-center gap-2"
 
-  const dailyCheck = createCheckbox("", store.sync.get("unsplashDaily"), (v) => {
-    store.sync.set("unsplashDaily", v)
-    updateDailyState()
-    if (v) {
-      const meta = store.local.get("bgUnsplashMeta")
-      if (!meta || isStale(meta.cachedAt)) {
-        refreshDailyNow().catch(() => {})
-      } else {
-        store.sync.set("bgSource", "unsplash")
+  const dailyCheck = createCheckbox(
+    "",
+    store.sync.get("unsplashDaily"),
+    (v) => {
+      store.sync.set("unsplashDaily", v)
+      updateDailyState()
+      if (v) {
+        const meta = store.local.get("bgUnsplashMeta")
+        if (!meta || isStale(meta.cachedAt)) {
+          refreshDailyNow().catch(() => {})
+        } else {
+          store.sync.set("bgSource", "unsplash")
+        }
       }
     }
-  })
+  )
   dailyRow.appendChild(dailyCheck)
 
   const dailyLabel = document.createElement("span")
@@ -335,7 +413,9 @@ function buildUnsplashAccordion(): { container: HTMLElement; content: HTMLElemen
   dailyRow.appendChild(spacer)
 
   const refreshBtn = createButton("Refresh", "ghost", {
-    onClick: () => { refreshDailyNow().catch(() => {}) },
+    onClick: () => {
+      refreshDailyNow().catch(() => {})
+    },
   })
   dailyRow.appendChild(refreshBtn)
 
@@ -351,7 +431,8 @@ function buildUnsplashAccordion(): { container: HTMLElement; content: HTMLElemen
   searchRow.appendChild(searchInput)
 
   const clearBtn = document.createElement("button")
-  clearBtn.className = "absolute right-2 top-1/2 -translate-y-1/2 text-muted hover:text-foreground transition-colors cursor-pointer"
+  clearBtn.className =
+    "absolute right-2 top-1/2 -translate-y-1/2 text-muted hover:text-foreground transition-colors cursor-pointer"
   clearBtn.appendChild(icon("close", { size: 14 }))
   clearBtn.hidden = true
   clearBtn.addEventListener("click", () => {
@@ -370,7 +451,7 @@ function buildUnsplashAccordion(): { container: HTMLElement; content: HTMLElemen
   searchArea.appendChild(gridScroll)
 
   const grid = document.createElement("div")
-  grid.className = "grid grid-cols-3 gap-1.5"
+  grid.className = "grid grid-cols-3 gap-1.5 p-1"
   gridScroll.appendChild(grid)
 
   let searchTimeout: number | null = null
@@ -387,7 +468,8 @@ function buildUnsplashAccordion(): { container: HTMLElement; content: HTMLElemen
       wrapper.appendChild(box)
     }
     const overlay = document.createElement("div")
-    overlay.className = "absolute inset-0 flex items-center justify-center text-xs text-muted"
+    overlay.className =
+      "absolute inset-0 flex items-center justify-center text-xs text-muted"
     overlay.textContent = "Search with Unsplash..."
     wrapper.appendChild(overlay)
     grid.appendChild(wrapper)
@@ -399,7 +481,11 @@ function buildUnsplashAccordion(): { container: HTMLElement; content: HTMLElemen
     searchTimeout = window.setTimeout(async () => {
       const query = (searchInput as HTMLInputElement).value.trim()
       clearBtn.hidden = !query
-      if (!query) { hasResults = false; renderEmpty(); return }
+      if (!query) {
+        hasResults = false
+        renderEmpty()
+        return
+      }
       try {
         const photos = await searchPhotos(query)
         renderGrid(photos)
@@ -417,7 +503,8 @@ function buildUnsplashAccordion(): { container: HTMLElement; content: HTMLElemen
     gridScroll.style.overflow = "auto"
     for (const photo of photos) {
       const thumb = document.createElement("button")
-      thumb.className = "aspect-[16/10] rounded overflow-hidden cursor-pointer hover:ring-2 hover:ring-accent transition-all"
+      thumb.className =
+        "aspect-[16/10] rounded overflow-hidden cursor-pointer hover:ring-2 hover:ring-accent transition-all"
       thumb.style.background = `url(${photo.urls.small}) center/cover`
 
       thumb.addEventListener("click", async () => {
@@ -462,10 +549,12 @@ function buildUnsplashAccordion(): { container: HTMLElement; content: HTMLElemen
   updateVisibility()
   store.sync.subscribe("unsplashApiKey", () => updateVisibility())
   store.sync.subscribe("unsplashDaily", (v) => {
-    (dailyCheck as any).setChecked(v)
+    ;(dailyCheck as any).setChecked(v)
     updateDailyState()
   })
-  store.sync.subscribe("unsplashTopic", (v) => { topicSelect.value = v })
+  store.sync.subscribe("unsplashTopic", (v) => {
+    topicSelect.value = v
+  })
 
   acc.content.appendChild(noKeyMsg)
   acc.content.appendChild(controls)
@@ -473,8 +562,14 @@ function buildUnsplashAccordion(): { container: HTMLElement; content: HTMLElemen
   return acc
 }
 
-function buildUploadAccordion(): { container: HTMLElement; content: HTMLElement } {
-  const acc = createAccordion("Upload", { variant: "settings", defaultOpen: false })
+function buildUploadAccordion(defaultOpen: boolean): {
+  container: HTMLElement
+  content: HTMLElement
+} {
+  const acc = createAccordion("Upload", {
+    variant: "settings",
+    defaultOpen,
+  })
 
   const fileInput = document.createElement("input")
   fileInput.type = "file"
@@ -488,14 +583,16 @@ function buildUploadAccordion(): { container: HTMLElement; content: HTMLElement 
   }
 
   const previewBox = document.createElement("button")
-  previewBox.className = "rounded-theme overflow-hidden cursor-pointer transition-all hover:ring-2 hover:ring-accent"
+  previewBox.className =
+    "rounded-theme overflow-hidden cursor-pointer transition-all hover:ring-2 hover:ring-accent"
   previewBox.style.height = "180px"
   previewBox.style.width = `${getPreviewWidth()}px`
   previewBox.style.maxWidth = "100%"
   acc.content.appendChild(previewBox)
 
   const placeholder = document.createElement("div")
-  placeholder.className = "w-full h-full flex items-center justify-center border-2 border-dashed border-input-border/40 rounded-theme text-muted"
+  placeholder.className =
+    "w-full h-full flex items-center justify-center border-2 border-dashed border-input-border/40 rounded-theme text-muted"
   placeholder.appendChild(icon("plus", { size: 24 }))
   previewBox.appendChild(placeholder)
 
@@ -595,7 +692,9 @@ function buildAppearanceTab(): void {
     value: store.sync.get("theme"),
     onChange: (v) => store.sync.set("theme", v as SyncSettings["theme"]),
   })
-  store.sync.subscribe("theme", (v) => { themeSelect.value = v })
+  store.sync.subscribe("theme", (v) => {
+    themeSelect.value = v
+  })
 
   const themeRow = document.createElement("div")
   themeRow.className = "flex items-center justify-between"
@@ -617,9 +716,10 @@ function buildAppearanceTab(): void {
   bgLabel.textContent = "Background"
   bgWrapper.appendChild(bgLabel)
 
-  const colorAcc = buildColorAccordion()
-  const unsplashAcc = buildUnsplashAccordion()
-  const uploadAcc = buildUploadAccordion()
+  const source = store.sync.get("bgSource")
+  const colorAcc = buildColorAccordion(source === "color")
+  const unsplashAcc = buildUnsplashAccordion(source === "unsplash")
+  const uploadAcc = buildUploadAccordion(source === "upload")
 
   bgWrapper.appendChild(colorAcc.container)
   bgWrapper.appendChild(unsplashAcc.container)
@@ -648,14 +748,20 @@ function buildAppearanceTab(): void {
 
 function createSpotifyButton(onClick: () => void): HTMLButtonElement {
   const btn = document.createElement("button")
-  btn.className = "inline-flex items-center gap-2 px-3 py-1.5 rounded-theme text-sm font-medium transition-colors text-white"
+  btn.className =
+    "inline-flex items-center gap-2 px-3 py-1.5 rounded-theme text-sm font-medium transition-colors text-white"
   btn.style.background = "#1DB954"
 
-  btn.addEventListener("mouseenter", () => { btn.style.background = "#1aa34a" })
-  btn.addEventListener("mouseleave", () => { btn.style.background = "#1DB954" })
+  btn.addEventListener("mouseenter", () => {
+    btn.style.background = "#1aa34a"
+  })
+  btn.addEventListener("mouseleave", () => {
+    btn.style.background = "#1DB954"
+  })
 
   const icon = document.createElement("div")
-  icon.style.cssText = "width: 16px; height: 16px; background: #1ed760; border-radius: 2px; flex-shrink: 0;"
+  icon.style.cssText =
+    "width: 16px; height: 16px; background: #1ed760; border-radius: 2px; flex-shrink: 0;"
   btn.appendChild(icon)
 
   const label = document.createElement("span")
@@ -668,14 +774,21 @@ function createSpotifyButton(onClick: () => void): HTMLButtonElement {
 
 function createGoogleButton(onClick: () => void): HTMLButtonElement {
   const btn = document.createElement("button")
-  btn.className = "inline-flex items-center gap-2 px-3 py-1.5 rounded-theme text-sm font-medium transition-colors"
-  btn.style.cssText = "background: #ffffff; color: #3c4043; border: 1px solid #dadce0;"
+  btn.className =
+    "inline-flex items-center gap-2 px-3 py-1.5 rounded-theme text-sm font-medium transition-colors"
+  btn.style.cssText =
+    "background: #ffffff; color: #3c4043; border: 1px solid #dadce0;"
 
-  btn.addEventListener("mouseenter", () => { btn.style.background = "#f8f9fa" })
-  btn.addEventListener("mouseleave", () => { btn.style.background = "#ffffff" })
+  btn.addEventListener("mouseenter", () => {
+    btn.style.background = "#f8f9fa"
+  })
+  btn.addEventListener("mouseleave", () => {
+    btn.style.background = "#ffffff"
+  })
 
   const icon = document.createElement("div")
-  icon.style.cssText = "width: 16px; height: 16px; background: #4285F4; border-radius: 2px; flex-shrink: 0;"
+  icon.style.cssText =
+    "width: 16px; height: 16px; background: #4285F4; border-radius: 2px; flex-shrink: 0;"
   btn.appendChild(icon)
 
   const label = document.createElement("span")
@@ -690,7 +803,10 @@ function buildWidgetsTab(): void {
   const panel = document.querySelector('[data-settings-tab="widgets"]')!
 
   // --- Search ---
-  const searchAcc = createAccordion("Search", { variant: "settings", defaultOpen: false })
+  const searchAcc = createAccordion("Search", {
+    variant: "settings",
+    defaultOpen: false,
+  })
 
   const searchEngine = createSelect({
     options: [
@@ -703,32 +819,55 @@ function buildWidgetsTab(): void {
       { value: "startpage", label: "Startpage" },
     ],
     value: store.sync.get("searchEngine"),
-    onChange: (v) => store.sync.set("searchEngine", v as SyncSettings["searchEngine"]),
+    onChange: (v) =>
+      store.sync.set("searchEngine", v as SyncSettings["searchEngine"]),
   })
   searchAcc.content.appendChild(settingsRow("Search Engine", searchEngine))
-  store.sync.subscribe("searchEngine", (v) => { searchEngine.value = v })
+  store.sync.subscribe("searchEngine", (v) => {
+    searchEngine.value = v
+  })
 
-  const debounce = createCheckbox("", store.sync.get("debounceSearch"), (v) => store.sync.set("debounceSearch", v))
-  searchAcc.content.appendChild(settingsRow("Debounce shortcut search", debounce))
-  store.sync.subscribe("debounceSearch", (v) => { (debounce as any).setChecked(v) })
+  const debounce = createCheckbox("", store.sync.get("debounceSearch"), (v) =>
+    store.sync.set("debounceSearch", v)
+  )
+  searchAcc.content.appendChild(
+    settingsRow("Debounce shortcut search", debounce)
+  )
+  store.sync.subscribe("debounceSearch", (v) => {
+    ;(debounce as any).setChecked(v)
+  })
 
   panel.appendChild(searchAcc.container)
 
   // --- Todo ---
-  const todoAcc = createAccordion("Todo", { variant: "settings", defaultOpen: false })
+  const todoAcc = createAccordion("Todo", {
+    variant: "settings",
+    defaultOpen: false,
+  })
 
-  const todoEnabled = createCheckbox("", store.sync.get("todoEnabled"), (v) => store.sync.set("todoEnabled", v))
+  const todoEnabled = createCheckbox("", store.sync.get("todoEnabled"), (v) =>
+    store.sync.set("todoEnabled", v)
+  )
   todoAcc.content.appendChild(settingsRow("Enable todo widget", todoEnabled))
-  store.sync.subscribe("todoEnabled", (v) => { (todoEnabled as any).setChecked(v) })
+  store.sync.subscribe("todoEnabled", (v) => {
+    ;(todoEnabled as any).setChecked(v)
+  })
 
-  const todoBadges = createCheckbox("", store.sync.get("todoShowBadges"), (v) => store.sync.set("todoShowBadges", v))
+  const todoBadges = createCheckbox("", store.sync.get("todoShowBadges"), (v) =>
+    store.sync.set("todoShowBadges", v)
+  )
   todoAcc.content.appendChild(settingsRow("Show badges", todoBadges))
-  store.sync.subscribe("todoShowBadges", (v) => { (todoBadges as any).setChecked(v) })
+  store.sync.subscribe("todoShowBadges", (v) => {
+    ;(todoBadges as any).setChecked(v)
+  })
 
   const clearRow = document.createElement("div")
   clearRow.className = "flex justify-end"
   const clearBtn = createButton("Clear all todos", "destructive", {
-    onClick: () => { if (confirm("Are you sure you want to clear all todos?")) store.local.set("todos", []) },
+    onClick: () => {
+      if (confirm("Are you sure you want to clear all todos?"))
+        store.local.set("todos", [])
+    },
   })
   clearRow.appendChild(clearBtn)
   todoAcc.content.appendChild(clearRow)
@@ -736,11 +875,20 @@ function buildWidgetsTab(): void {
   panel.appendChild(todoAcc.container)
 
   // --- Weather ---
-  const weatherAcc = createAccordion("Weather", { variant: "settings", defaultOpen: false })
+  const weatherAcc = createAccordion("Weather", {
+    variant: "settings",
+    defaultOpen: false,
+  })
 
-  const weatherEnabled = createCheckbox("", store.sync.get("weatherEnabled"), (v) => store.sync.set("weatherEnabled", v))
+  const weatherEnabled = createCheckbox(
+    "",
+    store.sync.get("weatherEnabled"),
+    (v) => store.sync.set("weatherEnabled", v)
+  )
   weatherAcc.content.appendChild(settingsRow("Enable weather", weatherEnabled))
-  store.sync.subscribe("weatherEnabled", (v) => { (weatherEnabled as any).setChecked(v) })
+  store.sync.subscribe("weatherEnabled", (v) => {
+    ;(weatherEnabled as any).setChecked(v)
+  })
 
   const weatherUnit = createSelect({
     options: [
@@ -748,10 +896,13 @@ function buildWidgetsTab(): void {
       { value: "c", label: "Celsius" },
     ],
     value: store.sync.get("weatherUnit"),
-    onChange: (v) => store.sync.set("weatherUnit", v as SyncSettings["weatherUnit"]),
+    onChange: (v) =>
+      store.sync.set("weatherUnit", v as SyncSettings["weatherUnit"]),
   })
   weatherAcc.content.appendChild(settingsRow("Temperature unit", weatherUnit))
-  store.sync.subscribe("weatherUnit", (v) => { weatherUnit.value = v })
+  store.sync.subscribe("weatherUnit", (v) => {
+    weatherUnit.value = v
+  })
 
   const locationRow = document.createElement("div")
   const grantBtn = createButton("Grant location access", "primary", {
@@ -762,7 +913,9 @@ function buildWidgetsTab(): void {
           store.local.set("weatherLon", pos.coords.longitude)
           locationRow.hidden = true
         },
-        () => { locationHelp.hidden = false },
+        () => {
+          locationHelp.hidden = false
+        },
         { timeout: 10000 }
       )
     },
@@ -771,22 +924,36 @@ function buildWidgetsTab(): void {
 
   const locationHelp = document.createElement("p")
   locationHelp.className = "text-xs text-muted mt-1"
-  locationHelp.textContent = "Location access was denied. Please enable it in your browser settings for this extension."
+  locationHelp.textContent =
+    "Location access was denied. Please enable it in your browser settings for this extension."
   locationHelp.hidden = true
   locationRow.appendChild(locationHelp)
 
   locationRow.hidden = store.local.get("weatherLat") !== null
-  store.local.subscribe("weatherLat", () => { locationRow.hidden = store.local.get("weatherLat") !== null })
+  store.local.subscribe("weatherLat", () => {
+    locationRow.hidden = store.local.get("weatherLat") !== null
+  })
 
   weatherAcc.content.appendChild(locationRow)
   panel.appendChild(weatherAcc.container)
 
   // --- Spotify ---
-  const spotifyAcc = createAccordion("Spotify", { variant: "settings", defaultOpen: false })
+  const spotifyAcc = createAccordion("Spotify", {
+    variant: "settings",
+    defaultOpen: false,
+  })
 
-  const spotifyEnabled = createCheckbox("", store.sync.get("spotifyEnabled"), (v) => store.sync.set("spotifyEnabled", v))
-  spotifyAcc.content.appendChild(settingsRow("Enable Spotify widget", spotifyEnabled))
-  store.sync.subscribe("spotifyEnabled", (v) => { (spotifyEnabled as any).setChecked(v) })
+  const spotifyEnabled = createCheckbox(
+    "",
+    store.sync.get("spotifyEnabled"),
+    (v) => store.sync.set("spotifyEnabled", v)
+  )
+  spotifyAcc.content.appendChild(
+    settingsRow("Enable Spotify widget", spotifyEnabled)
+  )
+  store.sync.subscribe("spotifyEnabled", (v) => {
+    ;(spotifyEnabled as any).setChecked(v)
+  })
 
   const spotifyConnectRow = document.createElement("div")
   const spotifyBtn = createSpotifyButton(async () => {
@@ -801,9 +968,16 @@ function buildWidgetsTab(): void {
 
   const spotifyDisconnectRow = document.createElement("div")
   spotifyDisconnectRow.hidden = true
-  const spotifyDisconnectBtn = createButton("Disconnect", "destructive-outline", {
-    onClick: () => { spotifyClearTokens(); updateSpotifyUI() },
-  })
+  const spotifyDisconnectBtn = createButton(
+    "Disconnect",
+    "destructive-outline",
+    {
+      onClick: () => {
+        spotifyClearTokens()
+        updateSpotifyUI()
+      },
+    }
+  )
   spotifyDisconnectRow.appendChild(spotifyDisconnectBtn)
 
   function updateSpotifyUI(): void {
@@ -819,11 +993,22 @@ function buildWidgetsTab(): void {
   panel.appendChild(spotifyAcc.container)
 
   // --- Google Calendar ---
-  const calendarAcc = createAccordion("Google Calendar", { variant: "settings", defaultOpen: false })
+  const calendarAcc = createAccordion("Google Calendar", {
+    variant: "settings",
+    defaultOpen: false,
+  })
 
-  const calendarEnabled = createCheckbox("", store.sync.get("calendarEnabled"), (v) => store.sync.set("calendarEnabled", v))
-  calendarAcc.content.appendChild(settingsRow("Enable Google Calendar", calendarEnabled))
-  store.sync.subscribe("calendarEnabled", (v) => { (calendarEnabled as any).setChecked(v) })
+  const calendarEnabled = createCheckbox(
+    "",
+    store.sync.get("calendarEnabled"),
+    (v) => store.sync.set("calendarEnabled", v)
+  )
+  calendarAcc.content.appendChild(
+    settingsRow("Enable Google Calendar", calendarEnabled)
+  )
+  store.sync.subscribe("calendarEnabled", (v) => {
+    ;(calendarEnabled as any).setChecked(v)
+  })
 
   const calConnectRow = document.createElement("div")
   const calBtn = createGoogleButton(async () => {
@@ -839,7 +1024,10 @@ function buildWidgetsTab(): void {
   const calDisconnectRow = document.createElement("div")
   calDisconnectRow.hidden = true
   const calDisconnectBtn = createButton("Disconnect", "destructive-outline", {
-    onClick: async () => { await calendarDisconnect(); updateCalendarUI() },
+    onClick: async () => {
+      await calendarDisconnect()
+      updateCalendarUI()
+    },
   })
   calDisconnectRow.appendChild(calDisconnectBtn)
 
@@ -866,7 +1054,9 @@ function buildNav(): { refreshIndicator: () => void } {
   nav.appendChild(indicator)
 
   let activeIndex = 0
-  let activePanel = panels.querySelector('[data-settings-tab="general"]') as HTMLElement
+  let activePanel = panels.querySelector(
+    '[data-settings-tab="general"]'
+  ) as HTMLElement
   let switching = false
 
   const navButtons: HTMLButtonElement[] = []
@@ -880,7 +1070,9 @@ function buildNav(): { refreshIndicator: () => void } {
   TABS.forEach((tab, index) => {
     const btn = document.createElement("button")
     btn.className = `relative w-12 h-12 flex items-center justify-center rounded-theme transition-colors ${
-      index === 0 ? "text-accent" : "text-muted hover:text-foreground hover:bg-surface"
+      index === 0
+        ? "text-accent"
+        : "text-muted hover:text-foreground hover:bg-surface"
     }`
     btn.appendChild(icon(tab.iconName, { size: 22 }))
     btn.setAttribute("aria-label", tab.label)
@@ -917,7 +1109,9 @@ function buildNav(): { refreshIndicator: () => void } {
   function switchTab(tabId: string, index: number): void {
     switching = true
 
-    const newPanel = panels.querySelector(`[data-settings-tab="${tabId}"]`) as HTMLElement
+    const newPanel = panels.querySelector(
+      `[data-settings-tab="${tabId}"]`
+    ) as HTMLElement
     const oldPanel = activePanel
 
     navButtons[activeIndex].className =
@@ -927,18 +1121,20 @@ function buildNav(): { refreshIndicator: () => void } {
       "relative w-12 h-12 flex items-center justify-center rounded-theme transition-colors text-accent"
     navButtons[index].setAttribute("aria-selected", "true")
 
-    const titleFadeOut = title.animate(
-      [{ opacity: 1 }, { opacity: 0 }],
-      { duration: 50, easing: "ease-in", fill: "forwards" }
-    )
+    const titleFadeOut = title.animate([{ opacity: 1 }, { opacity: 0 }], {
+      duration: 50,
+      easing: "ease-in",
+      fill: "forwards",
+    })
 
     setTimeout(() => {
       titleFadeOut.cancel()
       title.textContent = TABS[index].label
-      const titleFadeIn = title.animate(
-        [{ opacity: 0 }, { opacity: 1 }],
-        { duration: 50, easing: "ease-out", fill: "forwards" }
-      )
+      const titleFadeIn = title.animate([{ opacity: 0 }, { opacity: 1 }], {
+        duration: 50,
+        easing: "ease-out",
+        fill: "forwards",
+      })
       titleFadeIn.onfinish = () => {
         titleFadeIn.cancel()
         title.style.opacity = ""
@@ -956,16 +1152,18 @@ function buildNav(): { refreshIndicator: () => void } {
 
     panels.scrollTop = 0
 
-    const fadeOut = oldPanel.animate(
-      [{ opacity: 1 }, { opacity: 0 }],
-      { duration: 50, easing: "ease-in", fill: "forwards" }
-    )
+    const fadeOut = oldPanel.animate([{ opacity: 1 }, { opacity: 0 }], {
+      duration: 50,
+      easing: "ease-in",
+      fill: "forwards",
+    })
 
     setTimeout(() => {
-      const fadeIn = newPanel.animate(
-        [{ opacity: 0 }, { opacity: 1 }],
-        { duration: 50, easing: "ease-out", fill: "forwards" }
-      )
+      const fadeIn = newPanel.animate([{ opacity: 0 }, { opacity: 1 }], {
+        duration: 50,
+        easing: "ease-out",
+        fill: "forwards",
+      })
 
       fadeIn.onfinish = () => {
         oldPanel.setAttribute("hidden", "")
@@ -1004,11 +1202,13 @@ function buildShortcutsPanel(): HTMLDivElement {
 
   const controlBar = document.createElement("div")
   controlBar.id = "sc-control-bar"
-  controlBar.className = "flex items-center justify-between px-6 py-3 shrink-0 border-t border-input-border/15"
+  controlBar.className =
+    "flex items-center justify-between px-6 py-3 shrink-0 border-t border-input-border/15"
   panel.appendChild(controlBar)
 
   const recsRow = document.createElement("div")
-  recsRow.className = "flex items-center gap-2 px-6 pb-4 pt-1 border-t border-input-border/15"
+  recsRow.className =
+    "flex items-center gap-2 px-6 pb-4 pt-1 border-t border-input-border/15"
 
   const recsInput = document.createElement("input")
   recsInput.type = "checkbox"
@@ -1036,16 +1236,25 @@ function buildAdvancedPanel(): HTMLDivElement {
   const wrapper = document.createElement("div")
   wrapper.className = "flex flex-col"
 
-  const keyInput = createInput({ type: "password", placeholder: "Paste your API key" })
+  const keyInput = createInput({
+    type: "password",
+    placeholder: "Paste your API key",
+  })
   keyInput.value = store.sync.get("unsplashApiKey")
   keyInput.style.width = "220px"
   keyInput.addEventListener("change", () => {
-    store.sync.set("unsplashApiKey", (keyInput as HTMLInputElement).value.trim())
+    store.sync.set(
+      "unsplashApiKey",
+      (keyInput as HTMLInputElement).value.trim()
+    )
   })
-  store.sync.subscribe("unsplashApiKey", (v) => { (keyInput as HTMLInputElement).value = v })
+  store.sync.subscribe("unsplashApiKey", (v) => {
+    ;(keyInput as HTMLInputElement).value = v
+  })
 
   const keyRow = document.createElement("div")
-  keyRow.className = "flex items-center justify-between py-3 border-b border-input-border/10"
+  keyRow.className =
+    "flex items-center justify-between py-3 border-b border-input-border/10"
 
   const keyLabel = document.createElement("span")
   keyLabel.className = "text-sm text-foreground"
@@ -1091,7 +1300,8 @@ export function initSettings(): void {
 
   const nav = document.createElement("nav")
   nav.id = "settings-nav"
-  nav.className = "relative flex flex-col items-center w-16 shrink-0 py-3 gap-1 border-r"
+  nav.className =
+    "relative flex flex-col items-center w-16 shrink-0 py-3 gap-1 border-r"
   nav.setAttribute("aria-label", "Settings sections")
   nav.style.background = "color-mix(in srgb, var(--panel) 10%, transparent)"
   body.appendChild(nav)
@@ -1100,7 +1310,8 @@ export function initSettings(): void {
   main.className = "flex-1 flex flex-col min-w-0"
 
   const header = document.createElement("div")
-  header.className = "flex items-center justify-between px-6 h-14 shrink-0 border-b border-input-border/10"
+  header.className =
+    "flex items-center justify-between px-6 h-14 shrink-0 border-b border-input-border/10"
 
   const title = document.createElement("h2")
   title.id = "settings-title"
@@ -1110,7 +1321,8 @@ export function initSettings(): void {
 
   const closeBtn = document.createElement("button")
   closeBtn.id = "settings-close"
-  closeBtn.className = "w-8 h-8 flex items-center justify-center rounded-theme text-muted hover:text-foreground hover:bg-surface transition-colors"
+  closeBtn.className =
+    "w-8 h-8 flex items-center justify-center rounded-theme text-muted hover:text-foreground hover:bg-surface transition-colors"
   closeBtn.setAttribute("aria-label", "Close settings")
   closeBtn.appendChild(icon("close"))
   closeBtn.addEventListener("click", close)
@@ -1157,8 +1369,14 @@ export function initSettings(): void {
   buildAppearanceTab()
   buildWidgetsTab()
 
-  const recsEnabled = document.getElementById("settings-recommendations-enabled") as HTMLInputElement
+  const recsEnabled = document.getElementById(
+    "settings-recommendations-enabled"
+  ) as HTMLInputElement
   recsEnabled.checked = store.sync.get("recommendationsEnabled")
-  recsEnabled.addEventListener("change", () => store.sync.set("recommendationsEnabled", recsEnabled.checked))
-  store.sync.subscribe("recommendationsEnabled", (v) => { recsEnabled.checked = v })
+  recsEnabled.addEventListener("change", () =>
+    store.sync.set("recommendationsEnabled", recsEnabled.checked)
+  )
+  store.sync.subscribe("recommendationsEnabled", (v) => {
+    recsEnabled.checked = v
+  })
 }
