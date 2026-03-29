@@ -43,8 +43,7 @@ export type SyncSettings = {
   spotifyEnabled: boolean;
   recommendationsEnabled: boolean;
   calendarEnabled: boolean;
-  bgType: "color" | "image";
-  bgImageSource: "unsplash" | "upload";
+  bgSource: "color" | "unsplash" | "upload";
   unsplashDaily: boolean;
   unsplashTopic: string;
   unsplashApiKey: string;
@@ -60,7 +59,8 @@ export type LocalSettings = {
   spotifyTokenExpiry: number | null
   recommendationData: RecommendationData | null
   calendarConnected: boolean
-  bgImageMeta: BgImageMeta | null
+  bgUnsplashMeta: BgImageMeta | null
+  bgUploadMeta: BgImageMeta | null
 }
 
 export const syncDefaults: SyncSettings = {
@@ -84,8 +84,7 @@ export const syncDefaults: SyncSettings = {
   spotifyEnabled: true,
   recommendationsEnabled: false,
   calendarEnabled: false,
-  bgType: "color",
-  bgImageSource: "unsplash",
+  bgSource: "color",
   unsplashDaily: false,
   unsplashTopic: "wallpapers",
   unsplashApiKey: "",
@@ -101,5 +100,6 @@ export const localDefaults: LocalSettings = {
   spotifyTokenExpiry: null,
   recommendationData: null,
   calendarConnected: false,
-  bgImageMeta: null,
+  bgUnsplashMeta: null,
+  bgUploadMeta: null,
 }
