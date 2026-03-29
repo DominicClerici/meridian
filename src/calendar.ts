@@ -1,5 +1,6 @@
 import { store } from "./store"
 import { icon } from "./icons/registry"
+import { createPopover } from "./components"
 
 type CalendarEvent = {
   id: string
@@ -397,6 +398,241 @@ function formatTimeRange(event: CalendarEvent): string {
   if (event.allDay) return "All day"
   if (!event.startTime || !event.endTime) return ""
   return formatTime(event.startTime) + " – " + formatTime(event.endTime)
+}
+
+function renderControls(onUpdate: () => void): HTMLElement {
+  const wrapper = document.createElement("div")
+  wrapper.className = "flex flex-col gap-2"
+
+  const viewRow = document.createElement("div")
+  viewRow.className = "flex"
+  const segmented = document.createElement("div")
+  segmented.className = "flex gap-0.5 bg-popover-foreground/5 rounded-theme p-0.5"
+
+  for (const mode of ["1d", "1w", "1m"] as ViewMode[]) {
+    const btn = document.createElement("button")
+    btn.textContent = mode.toUpperCase()
+    btn.className = mode === viewMode
+      ? "px-3 py-1 rounded-theme text-xs font-semibold bg-accent text-accent-foreground transition-colors"
+      : "px-3 py-1 rounded-theme text-xs font-medium text-muted hover:bg-surface transition-colors"
+    btn.addEventListener("click", () => {
+      viewMode = mode
+      offset = 0
+      onUpdate()
+    })
+    segmented.appendChild(btn)
+  }
+  viewRow.appendChild(segmented)
+  wrapper.appendChild(viewRow)
+
+  const navRow = document.createElement("div")
+  navRow.className = "flex items-center justify-between"
+
+  const limit = NAV_LIMITS[viewMode]
+
+  const prevBtn = document.createElement("button")
+  prevBtn.className = "w-7 h-7 flex items-center justify-center rounded-theme text-muted hover:bg-surface transition-colors"
+  prevBtn.appendChild(icon("chevronLeft", { size: 14 }))
+  if (offset <= -limit) {
+    prevBtn.classList.add("opacity-30", "pointer-events-none")
+  }
+  prevBtn.addEventListener("click", () => {
+    if (offset > -limit) {
+      offset--
+      onUpdate()
+    }
+  })
+
+  const label = document.createElement("span")
+  label.className = "text-sm font-semibold text-foreground"
+  label.textContent = getNavLabel()
+
+  const nextBtn = document.createElement("button")
+  nextBtn.className = "w-7 h-7 flex items-center justify-center rounded-theme text-muted hover:bg-surface transition-colors"
+  nextBtn.appendChild(icon("chevronRight", { size: 14 }))
+  if (offset >= limit) {
+    nextBtn.classList.add("opacity-30", "pointer-events-none")
+  }
+  nextBtn.addEventListener("click", () => {
+    if (offset < limit) {
+      offset++
+      onUpdate()
+    }
+  })
+
+  navRow.appendChild(prevBtn)
+  navRow.appendChild(label)
+  navRow.appendChild(nextBtn)
+  wrapper.appendChild(navRow)
+
+  const sep = document.createElement("div")
+  sep.className = "h-px bg-input-border/20 -mx-3"
+  wrapper.appendChild(sep)
+
+  return wrapper
+}
+
+function showEventDetail(anchor: HTMLElement, event: CalendarEvent, opts?: { backLabel?: string; onBack?: () => void }): void {
+  const content = document.createElement("div")
+  content.className = "flex flex-col gap-3 min-w-[240px] max-w-[300px]"
+
+  if (opts?.backLabel) {
+    const back = document.createElement("button")
+    back.className = "flex items-center gap-1 text-muted text-xs hover:text-foreground transition-colors self-start"
+    back.innerHTML = "&#8249; "
+    const backText = document.createElement("span")
+    backText.textContent = opts.backLabel
+    back.appendChild(backText)
+    back.addEventListener("click", () => {
+      detailPopover.close()
+      opts.onBack?.()
+    })
+    content.appendChild(back)
+  }
+
+  const header = document.createElement("div")
+  header.className = "flex items-center gap-2"
+  const dot = document.createElement("div")
+  dot.className = "w-2.5 h-2.5 rounded-full shrink-0"
+  dot.style.backgroundColor = event.color
+  header.appendChild(dot)
+  const title = document.createElement("div")
+  title.className = "text-[15px] font-semibold text-popover-foreground"
+  title.textContent = event.title
+  header.appendChild(title)
+  content.appendChild(header)
+
+  const fields = document.createElement("div")
+  fields.className = "flex flex-col gap-2"
+
+  const timeStr = formatTimeRange(event)
+  if (timeStr) {
+    fields.appendChild(detailRow("Time", timeStr))
+  }
+  if (event.location) {
+    fields.appendChild(detailRow("Where", event.location))
+  }
+  fields.appendChild(detailRow("Calendar", event.calendarName))
+  content.appendChild(fields)
+
+  if (event.htmlLink) {
+    const link = document.createElement("a")
+    link.href = event.htmlLink
+    link.target = "_blank"
+    link.rel = "noopener"
+    link.className = "flex items-center justify-center gap-1.5 px-4 py-2 bg-accent text-accent-foreground rounded-theme text-xs font-medium hover:bg-accent-hover transition-colors no-underline"
+    link.textContent = "Open in Google Calendar ↗"
+    content.appendChild(link)
+  }
+
+  const detailPopover = createPopover(anchor, content)
+}
+
+function detailRow(label: string, value: string): HTMLElement {
+  const row = document.createElement("div")
+  row.className = "flex items-center gap-2"
+  const lbl = document.createElement("div")
+  lbl.className = "text-xs text-muted min-w-[50px]"
+  lbl.textContent = label
+  const val = document.createElement("div")
+  val.className = "text-xs text-popover-foreground/70"
+  val.textContent = value
+  row.appendChild(lbl)
+  row.appendChild(val)
+  return row
+}
+
+function renderDayView(events: CalendarEvent[]): HTMLElement {
+  const container = document.createElement("div")
+  container.className = "flex flex-col gap-1 overflow-y-auto"
+  container.style.maxHeight = "380px"
+
+  if (events.length === 0) {
+    const empty = document.createElement("div")
+    empty.className = "text-sm text-muted text-center py-8"
+    empty.textContent = "No events"
+    container.appendChild(empty)
+    return container
+  }
+
+  const allDay = events.filter(e => e.allDay)
+  const timed = events.filter(e => !e.allDay)
+
+  if (allDay.length > 0) {
+    const label = document.createElement("div")
+    label.className = "text-[10px] uppercase tracking-wider text-muted mb-1"
+    label.textContent = "All Day"
+    container.appendChild(label)
+
+    for (const event of allDay) {
+      container.appendChild(dayEventCard(event, true))
+    }
+
+    if (timed.length > 0) {
+      const sep = document.createElement("div")
+      sep.className = "h-px bg-input-border/20 my-1"
+      container.appendChild(sep)
+    }
+  }
+
+  for (const event of timed) {
+    container.appendChild(dayEventCard(event, false))
+  }
+
+  return container
+}
+
+function dayEventCard(event: CalendarEvent, allDay: boolean): HTMLElement {
+  const card = document.createElement("div")
+  card.className = "flex items-start gap-2.5 p-2.5 bg-popover-foreground/5 rounded-theme cursor-pointer hover:bg-popover-foreground/10 transition-colors"
+  card.style.borderLeft = `3px solid ${event.color}`
+
+  if (!allDay && event.startTime) {
+    const timeCol = document.createElement("div")
+    timeCol.className = "min-w-[70px]"
+    const startEl = document.createElement("div")
+    startEl.className = "text-xs text-popover-foreground/70"
+    startEl.textContent = formatTime(event.startTime)
+    timeCol.appendChild(startEl)
+    if (event.endTime) {
+      const endEl = document.createElement("div")
+      endEl.className = "text-[11px] text-muted"
+      endEl.textContent = formatTime(event.endTime)
+      timeCol.appendChild(endEl)
+    }
+    card.appendChild(timeCol)
+  }
+
+  const info = document.createElement("div")
+  info.className = "flex-1 min-w-0"
+  const titleEl = document.createElement("div")
+  titleEl.className = "text-xs font-medium text-popover-foreground truncate"
+  titleEl.textContent = event.title
+  info.appendChild(titleEl)
+  if (event.location) {
+    const loc = document.createElement("div")
+    loc.className = "text-[11px] text-muted mt-0.5 truncate"
+    loc.textContent = event.location
+    info.appendChild(loc)
+  }
+  card.appendChild(info)
+
+  if (event.htmlLink) {
+    const linkIcon = document.createElement("a")
+    linkIcon.href = event.htmlLink
+    linkIcon.target = "_blank"
+    linkIcon.rel = "noopener"
+    linkIcon.className = "text-muted text-[11px] no-underline shrink-0 hover:text-foreground transition-colors"
+    linkIcon.textContent = "↗"
+    linkIcon.addEventListener("click", (e) => e.stopPropagation())
+    card.appendChild(linkIcon)
+  }
+
+  card.addEventListener("click", () => {
+    showEventDetail(card, event)
+  })
+
+  return card
 }
 
 function renderTrigger(): void {
