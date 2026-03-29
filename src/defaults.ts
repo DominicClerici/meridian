@@ -29,6 +29,7 @@ export type SyncSettings = {
   mode: "light" | "dark" | "auto";
   searchEngine: "google" | "bing" | "yahoo" | "duckduckgo" | "ecosia" | "qwant" | "startpage";
   debounceSearch: boolean;
+  searchOpenInNewTab: boolean;
   clockEnabled: boolean;
   clockShowSeconds: boolean;
   clock24Hour: boolean;
@@ -71,6 +72,7 @@ export const syncDefaults: SyncSettings = {
   mode: "auto",
   searchEngine: "google",
   debounceSearch: false,
+  searchOpenInNewTab: false,
   clockEnabled: true,
   clockShowSeconds: false,
   clock24Hour: false,
