@@ -2,7 +2,7 @@ import { store } from "./store"
 import type { BgImageMeta } from "./defaults"
 import type { UnsplashPhoto } from "./unsplash"
 import { getRandomPhoto, triggerDownload } from "./unsplash"
-import { idbGet, idbSet, idbDelete } from "./idb"
+import { idbGet, idbSet } from "./idb"
 
 const root = document.documentElement
 let attributionEl: HTMLElement | null = null
@@ -65,29 +65,29 @@ function removeAttribution(): void {
 }
 
 function isStale(cachedAt: number): boolean {
-  const cached = new Date(cachedAt).toDateString()
-  const today = new Date().toDateString()
-  return cached !== today
+  return new Date(cachedAt).toDateString() !== new Date().toDateString()
 }
 
-async function loadAndApply(): Promise<void> {
-  const meta = store.local.get("bgImageMeta")
+async function loadFromSlot(slot: "unsplash" | "upload"): Promise<void> {
+  const metaKey = slot === "unsplash" ? "bgUnsplashMeta" : "bgUploadMeta"
+  const meta = store.local.get(metaKey)
   if (!meta) return
 
-  const blob = await idbGet("current")
+  const blob = await idbGet(slot)
   if (!blob) return
 
   revokeCurrentUrl()
   currentObjectUrl = URL.createObjectURL(blob)
   applyImageStyle(currentObjectUrl)
-  renderAttribution(meta)
+  if (slot === "unsplash") renderAttribution(meta)
+  else removeAttribution()
 }
 
 async function refreshDaily(): Promise<void> {
   if (!store.sync.get("unsplashDaily")) return
   if (!store.sync.get("unsplashApiKey")) return
 
-  const meta = store.local.get("bgImageMeta")
+  const meta = store.local.get("bgUnsplashMeta")
   if (meta && !isStale(meta.cachedAt)) return
 
   try {
@@ -100,16 +100,20 @@ async function refreshDaily(): Promise<void> {
 }
 
 export function applyBackground(): void {
-  if (store.sync.get("bgType") !== "image") return
+  const source = store.sync.get("bgSource")
+  if (source === "color") return
 
-  const meta = store.local.get("bgImageMeta")
-  if (!meta) return
-
-  loadAndApply().then(() => {
-    if (store.sync.get("unsplashDaily") && isStale(meta.cachedAt)) {
-      refreshDaily()
-    }
-  })
+  if (source === "unsplash") {
+    const meta = store.local.get("bgUnsplashMeta")
+    if (!meta) return
+    loadFromSlot("unsplash").then(() => {
+      if (store.sync.get("unsplashDaily") && isStale(meta.cachedAt)) {
+        refreshDaily()
+      }
+    })
+  } else if (source === "upload") {
+    loadFromSlot("upload")
+  }
 }
 
 export async function setUnsplashPhoto(photo: UnsplashPhoto): Promise<void> {
@@ -122,7 +126,7 @@ export async function setUnsplashPhoto(photo: UnsplashPhoto): Promise<void> {
   if (!res.ok) throw new Error(`Failed to fetch image: ${res.status}`)
   const blob = await res.blob()
 
-  await idbSet("current", blob)
+  await idbSet("unsplash", blob)
 
   const meta: BgImageMeta = {
     id: photo.id,
@@ -132,8 +136,8 @@ export async function setUnsplashPhoto(photo: UnsplashPhoto): Promise<void> {
     downloadUrl: photo.downloadUrl,
     cachedAt: Date.now(),
   }
-  store.local.set("bgImageMeta", meta)
-  store.sync.set("bgImageSource", "unsplash")
+  store.local.set("bgUnsplashMeta", meta)
+  store.sync.set("bgSource", "unsplash")
 
   triggerDownload(photo.downloadUrl)
 
@@ -144,7 +148,7 @@ export async function setUnsplashPhoto(photo: UnsplashPhoto): Promise<void> {
 }
 
 export async function setUploadedPhoto(file: File): Promise<void> {
-  await idbSet("current", file)
+  await idbSet("upload", file)
 
   const meta: BgImageMeta = {
     id: "upload",
@@ -154,8 +158,8 @@ export async function setUploadedPhoto(file: File): Promise<void> {
     downloadUrl: "",
     cachedAt: Date.now(),
   }
-  store.local.set("bgImageMeta", meta)
-  store.sync.set("bgImageSource", "upload")
+  store.local.set("bgUploadMeta", meta)
+  store.sync.set("bgSource", "upload")
 
   revokeCurrentUrl()
   currentObjectUrl = URL.createObjectURL(file)
@@ -163,22 +167,35 @@ export async function setUploadedPhoto(file: File): Promise<void> {
   removeAttribution()
 }
 
-export function clearBackground(): void {
+export function switchToColor(): void {
   revokeCurrentUrl()
   removeImageStyle()
   removeAttribution()
-  idbDelete("current").catch(() => {})
-  store.local.set("bgImageMeta", null)
+  store.sync.set("bgSource", "color")
+}
+
+export async function reapplyUpload(): Promise<void> {
+  store.sync.set("bgSource", "upload")
+  await loadFromSlot("upload")
+}
+
+export async function refreshDailyNow(): Promise<void> {
+  if (!store.sync.get("unsplashApiKey")) return
+  const topic = store.sync.get("unsplashTopic")
+  const photo = await getRandomPhoto(topic)
+  await setUnsplashPhoto(photo)
 }
 
 export function subscribeBackground(): void {
-  store.sync.subscribe("bgType", (val) => {
+  store.sync.subscribe("bgSource", (val) => {
     if (val === "color") {
       revokeCurrentUrl()
       removeImageStyle()
       removeAttribution()
-    } else {
-      loadAndApply()
+    } else if (val === "unsplash") {
+      loadFromSlot("unsplash")
+    } else if (val === "upload") {
+      loadFromSlot("upload")
     }
   })
 }
