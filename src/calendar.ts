@@ -635,6 +635,259 @@ function dayEventCard(event: CalendarEvent, allDay: boolean): HTMLElement {
   return card
 }
 
+function renderWeekView(events: CalendarEvent[]): HTMLElement {
+  const container = document.createElement("div")
+
+  const { start } = getDateRange()
+  const today = new Date()
+  const todayStr = today.toISOString().slice(0, 10)
+  const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+  const headerGrid = document.createElement("div")
+  headerGrid.className = "grid grid-cols-7 px-0 pt-2 pb-1"
+
+  for (let i = 0; i < 7; i++) {
+    const date = new Date(start.getTime() + i * 86_400_000)
+    const dateStr = date.toISOString().slice(0, 10)
+    const isToday = dateStr === todayStr
+    const col = document.createElement("div")
+    col.className = "text-center"
+
+    const dayLabel = document.createElement("div")
+    dayLabel.className = isToday
+      ? "text-[10px] uppercase tracking-wider font-semibold text-accent"
+      : "text-[10px] uppercase tracking-wider text-muted"
+    dayLabel.textContent = isToday ? "Today" : days[i]
+    col.appendChild(dayLabel)
+
+    const dateNum = document.createElement("div")
+    dateNum.className = isToday
+      ? "text-xs font-semibold text-accent mt-0.5"
+      : "text-xs text-muted mt-0.5"
+    dateNum.textContent = String(date.getDate())
+    col.appendChild(dateNum)
+
+    headerGrid.appendChild(col)
+  }
+  container.appendChild(headerGrid)
+
+  const colGrid = document.createElement("div")
+  colGrid.className = "grid grid-cols-7 pb-1"
+  colGrid.style.minHeight = "200px"
+  colGrid.style.alignItems = "start"
+
+  for (let i = 0; i < 7; i++) {
+    const date = new Date(start.getTime() + i * 86_400_000)
+    const dateStr = date.toISOString().slice(0, 10)
+    const isToday = dateStr === todayStr
+
+    const col = document.createElement("div")
+    col.className = "flex flex-col gap-0.5 px-0.5 py-1"
+    if (isToday) {
+      col.classList.add("bg-accent/5", "rounded-theme")
+    }
+
+    const dayEvents = events.filter(e => {
+      if (e.allDay) {
+        return e.allDayDate === dateStr
+      }
+      if (!e.startTime) return false
+      return e.startTime.slice(0, 10) === dateStr
+    })
+
+    for (const event of dayEvents) {
+      const bar = document.createElement("div")
+      bar.className = "rounded-sm cursor-pointer opacity-85 hover:opacity-100 transition-opacity"
+      bar.style.backgroundColor = event.color
+
+      if (event.allDay) {
+        bar.style.height = "12px"
+      } else if (event.startTime && event.endTime) {
+        const duration = (new Date(event.endTime).getTime() - new Date(event.startTime).getTime()) / 60_000
+        const height = Math.max(16, Math.min(48, Math.round(duration / 60 * 28)))
+        bar.style.height = height + "px"
+      } else {
+        bar.style.height = "16px"
+      }
+
+      bar.title = event.title + (event.startTime && event.endTime
+        ? " · " + formatTime(event.startTime) + "–" + formatTime(event.endTime)
+        : event.allDay ? " · All day" : "")
+
+      bar.addEventListener("click", () => {
+        showEventDetail(bar, event)
+      })
+
+      col.appendChild(bar)
+    }
+
+    colGrid.appendChild(col)
+  }
+
+  container.appendChild(colGrid)
+  return container
+}
+
+function renderMonthView(events: CalendarEvent[]): HTMLElement {
+  const container = document.createElement("div")
+  const { start, end } = getDateRange()
+  const today = new Date()
+  const todayStr = today.toISOString().slice(0, 10)
+  const year = start.getFullYear()
+  const month = start.getMonth()
+
+  const eventsByDate = new Map<string, CalendarEvent[]>()
+  for (const e of events) {
+    let dateStr: string
+    if (e.allDay && e.allDayDate) {
+      dateStr = e.allDayDate
+    } else if (e.startTime) {
+      dateStr = e.startTime.slice(0, 10)
+    } else {
+      continue
+    }
+    if (!eventsByDate.has(dateStr)) eventsByDate.set(dateStr, [])
+    eventsByDate.get(dateStr)!.push(e)
+  }
+
+  const headerGrid = document.createElement("div")
+  headerGrid.className = "grid grid-cols-7 pt-2 pb-1"
+  for (const day of ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]) {
+    const h = document.createElement("div")
+    h.className = "text-center text-[10px] uppercase tracking-wider text-muted"
+    h.textContent = day
+    headerGrid.appendChild(h)
+  }
+  container.appendChild(headerGrid)
+
+  const grid = document.createElement("div")
+  grid.className = "grid grid-cols-7"
+
+  const firstDayOfWeek = start.getDay()
+  const blanksBefore = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1
+  const daysInMonth = Math.round((end.getTime() - start.getTime()) / 86_400_000)
+
+  for (let i = 0; i < blanksBefore; i++) {
+    const blank = document.createElement("div")
+    blank.className = "p-1 min-h-[48px]"
+    grid.appendChild(blank)
+  }
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const cellDate = new Date(year, month, d)
+    const dateStr = cellDate.toISOString().slice(0, 10)
+    const isToday = dateStr === todayStr
+    const dayEvents = eventsByDate.get(dateStr) ?? []
+
+    const cell = document.createElement("div")
+    cell.className = "p-1 min-h-[48px] text-center rounded-theme"
+
+    if (isToday) {
+      cell.classList.add("bg-accent/10")
+    }
+
+    const dateNum = document.createElement("div")
+    dateNum.className = isToday
+      ? "text-xs font-semibold text-accent"
+      : "text-xs text-muted"
+    dateNum.textContent = String(d)
+    cell.appendChild(dateNum)
+
+    if (dayEvents.length > 0) {
+      const dotsRow = document.createElement("div")
+      dotsRow.className = "flex gap-0.5 justify-center mt-1 flex-wrap"
+      for (const e of dayEvents.slice(0, 5)) {
+        const dot = document.createElement("div")
+        dot.className = "w-1.5 h-1.5 rounded-full"
+        dot.style.backgroundColor = e.color
+        dotsRow.appendChild(dot)
+      }
+      cell.appendChild(dotsRow)
+
+      cell.classList.add("cursor-pointer", "hover:bg-surface/50", "transition-colors")
+      cell.addEventListener("click", () => {
+        if (dayEvents.length === 1) {
+          showEventDetail(cell, dayEvents[0])
+        } else {
+          showDayEventList(cell, cellDate, dayEvents)
+        }
+      })
+    }
+
+    grid.appendChild(cell)
+  }
+
+  const totalCells = blanksBefore + daysInMonth
+  const remainder = totalCells % 7
+  if (remainder > 0) {
+    for (let i = 0; i < 7 - remainder; i++) {
+      const blank = document.createElement("div")
+      blank.className = "p-1 min-h-[48px]"
+      grid.appendChild(blank)
+    }
+  }
+
+  container.appendChild(grid)
+  return container
+}
+
+function showDayEventList(anchor: HTMLElement, date: Date, events: CalendarEvent[]): void {
+  const content = document.createElement("div")
+  content.className = "flex flex-col min-w-[240px] max-w-[300px]"
+
+  const dateLabel = date.toLocaleDateString("en-US", { month: "long" }) + " " + ordinal(date.getDate())
+
+  const header = document.createElement("div")
+  header.className = "pb-2 mb-1 border-b border-input-border/20"
+  const headerTitle = document.createElement("div")
+  headerTitle.className = "text-sm font-semibold text-popover-foreground"
+  headerTitle.textContent = dateLabel
+  const headerSub = document.createElement("div")
+  headerSub.className = "text-[11px] text-muted"
+  headerSub.textContent = events.length + " event" + (events.length !== 1 ? "s" : "")
+  header.appendChild(headerTitle)
+  header.appendChild(headerSub)
+  content.appendChild(header)
+
+  const list = document.createElement("div")
+  list.className = "flex flex-col gap-0.5"
+
+  for (const event of events) {
+    const item = document.createElement("div")
+    item.className = "flex items-center gap-2 p-2 rounded-theme cursor-pointer hover:bg-popover-foreground/5 transition-colors"
+
+    const dot = document.createElement("div")
+    dot.className = "w-2 h-2 rounded-full shrink-0"
+    dot.style.backgroundColor = event.color
+    item.appendChild(dot)
+
+    const info = document.createElement("div")
+    info.className = "flex-1 min-w-0"
+    const title = document.createElement("div")
+    title.className = "text-xs text-popover-foreground truncate"
+    title.textContent = event.title
+    info.appendChild(title)
+    const time = document.createElement("div")
+    time.className = "text-[11px] text-muted"
+    time.textContent = formatTimeRange(event)
+    info.appendChild(time)
+    item.appendChild(info)
+
+    item.addEventListener("click", () => {
+      listPopover.close()
+      showEventDetail(anchor, event, {
+        backLabel: dateLabel,
+        onBack: () => showDayEventList(anchor, date, events),
+      })
+    })
+
+    list.appendChild(item)
+  }
+
+  content.appendChild(list)
+  const listPopover = createPopover(anchor, content)
+}
+
 function renderTrigger(): void {
   const trigger = document.getElementById(
     "calendar-trigger"
