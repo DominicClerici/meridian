@@ -833,8 +833,24 @@ function buildWidgetsTab(): void {
   searchAcc.content.appendChild(
     settingsRow("Debounce shortcut search", debounce)
   )
+  const debounceHint = document.createElement("span")
+  debounceHint.className = "text-muted text-xs -mt-2 mb-1 block px-1"
+  debounceHint.textContent = "Enable this if the search lags when you type"
+  searchAcc.content.appendChild(debounceHint)
   store.sync.subscribe("debounceSearch", (v) => {
     ;(debounce as any).setChecked(v)
+  })
+
+  const openNewTab = createCheckbox(
+    "",
+    store.sync.get("searchOpenInNewTab"),
+    (v) => store.sync.set("searchOpenInNewTab", v)
+  )
+  searchAcc.content.appendChild(
+    settingsRow("Open results in new tab", openNewTab)
+  )
+  store.sync.subscribe("searchOpenInNewTab", (v) => {
+    ;(openNewTab as any).setChecked(v)
   })
 
   panel.appendChild(searchAcc.container)
