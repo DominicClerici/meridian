@@ -39,10 +39,16 @@ const CALENDAR_LIST_TTL = 3_600_000
 type State = "not-connected" | "loading" | "loaded" | "error"
 type ViewMode = "1d" | "1w" | "1m"
 
+function localDateStr(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+}
+
 let currentState: State = "loading"
 let currentEvents: CalendarEvent[] = []
+let todayEventCount = 0
 let refreshIntervalId: ReturnType<typeof setInterval> | null = null
 let calendarPopoverClose: (() => void) | null = null
+let popoverRebuild: (() => void) | null = null
 let viewMode: ViewMode = "1d"
 let offset = 0
 
@@ -247,6 +253,9 @@ async function fetchEvents(): Promise<void> {
       colorMap = await fetchColorMap(token)
     } catch (e) {
       if (e instanceof Error && e.message.includes("401")) {
+        localStorage.removeItem(LS_CALENDAR_LIST)
+        localStorage.removeItem(LS_CALENDAR_LIST_TS)
+        localStorage.removeItem(LS_COLOR_MAP)
         const api = getApi()
         if (api?.identity?.removeCachedAuthToken) {
           try { await api.identity.removeCachedAuthToken({ token }) } catch { /* */ }
@@ -319,6 +328,7 @@ async function fetchEvents(): Promise<void> {
 
     currentEvents = allEvents
     currentState = "loaded"
+    if (viewMode === "1d" && offset === 0) todayEventCount = currentEvents.length
     setCachedEvents(start, end, allEvents)
     try { localStorage.setItem(LS_LAST_FETCH, String(Date.now())) } catch { /* */ }
   } catch {
@@ -328,6 +338,7 @@ async function fetchEvents(): Promise<void> {
   }
 
   renderTrigger()
+  popoverRebuild?.()
 }
 
 function closeCalendarPopover(): void {
@@ -624,7 +635,7 @@ function renderWeekView(events: CalendarEvent[]): HTMLElement {
 
   const { start } = getDateRange()
   const today = new Date()
-  const todayStr = today.toISOString().slice(0, 10)
+  const todayStr = localDateStr(today)
   const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
   const headerGrid = document.createElement("div")
@@ -632,7 +643,7 @@ function renderWeekView(events: CalendarEvent[]): HTMLElement {
 
   for (let i = 0; i < 7; i++) {
     const date = new Date(start.getTime() + i * 86_400_000)
-    const dateStr = date.toISOString().slice(0, 10)
+    const dateStr = localDateStr(date)
     const isToday = dateStr === todayStr
     const col = document.createElement("div")
     col.className = "text-center"
@@ -662,13 +673,13 @@ function renderWeekView(events: CalendarEvent[]): HTMLElement {
 
   for (let i = 0; i < 7; i++) {
     const date = new Date(start.getTime() + i * 86_400_000)
-    const dateStr = date.toISOString().slice(0, 10)
+    const dateStr = localDateStr(date)
     const isToday = dateStr === todayStr
 
     const col = document.createElement("div")
     col.className = "flex flex-col gap-0.5 px-0.5 py-1"
     if (isToday) {
-      col.classList.add("bg-accent/5", "rounded-theme")
+      col.classList.add("bg-accent/10", "rounded-theme")
     }
 
     const dayEvents = events.filter(e => {
@@ -716,7 +727,7 @@ function renderMonthView(events: CalendarEvent[]): HTMLElement {
   const container = document.createElement("div")
   const { start, end } = getDateRange()
   const today = new Date()
-  const todayStr = today.toISOString().slice(0, 10)
+  const todayStr = localDateStr(today)
   const year = start.getFullYear()
   const month = start.getMonth()
 
@@ -759,7 +770,7 @@ function renderMonthView(events: CalendarEvent[]): HTMLElement {
 
   for (let d = 1; d <= daysInMonth; d++) {
     const cellDate = new Date(year, month, d)
-    const dateStr = cellDate.toISOString().slice(0, 10)
+    const dateStr = localDateStr(cellDate)
     const isToday = dateStr === todayStr
     const dayEvents = eventsByDate.get(dateStr) ?? []
 
@@ -903,7 +914,7 @@ function renderTrigger(): void {
     return
   }
 
-  const count = currentEvents.length
+  const count = todayEventCount
   const label = count === 1 ? "1 event today" : `${count} events today`
   trigger.innerHTML = ""
   trigger.appendChild(icon("calendar", { size: 24 }))
@@ -942,10 +953,12 @@ function showCalendarPopover(anchor: HTMLElement): void {
   }
 
   rebuild()
+  popoverRebuild = rebuild
 
   const { close } = createPopover(anchor, content, {
     onClose: () => {
       calendarPopoverClose = null
+      popoverRebuild = null
     },
   })
   calendarPopoverClose = close
