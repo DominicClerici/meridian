@@ -159,6 +159,7 @@ export async function setUploadedPhoto(file: File): Promise<void> {
     cachedAt: Date.now(),
   }
   store.local.set("bgUploadMeta", meta)
+  store.sync.set("unsplashDaily", false)
   store.sync.set("bgSource", "upload")
 
   revokeCurrentUrl()
@@ -171,6 +172,7 @@ export function switchToColor(): void {
   revokeCurrentUrl()
   removeImageStyle()
   removeAttribution()
+  store.sync.set("unsplashDaily", false)
   store.sync.set("bgSource", "color")
 }
 

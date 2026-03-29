@@ -378,6 +378,7 @@ function buildUnsplashAccordion(): { container: HTMLElement; content: HTMLElemen
         thumb.style.opacity = "0.5"
         thumb.style.pointerEvents = "none"
         try {
+          store.sync.set("unsplashDaily", false)
           await setUnsplashPhoto(photo)
         } catch {
           // restore on failure
