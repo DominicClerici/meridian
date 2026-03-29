@@ -134,28 +134,18 @@ export async function disconnect(): Promise<void> {
     if (token) {
       try {
         await api.identity.removeCachedAuthToken({ token })
-        await fetch(
-          `https://accounts.google.com/o/oauth2/revoke?token=${token}`
-        )
-      } catch {
-        /* */
-      }
+        await fetch(`https://accounts.google.com/o/oauth2/revoke?token=${token}`)
+      } catch { /* */ }
     }
   }
 
   store.local.set("calendarConnected", false)
   try {
-    localStorage.removeItem(LS_LAST_FETCH)
-    localStorage.removeItem(LS_CALENDAR_LIST)
-    localStorage.removeItem(LS_CALENDAR_LIST_TS)
-    localStorage.removeItem(LS_COLOR_MAP)
-    for (let i = localStorage.length - 1; i >= 0; i--) {
-      const key = localStorage.key(i)
-      if (key?.startsWith(EVENTS_PREFIX)) localStorage.removeItem(key)
+    const keys = Object.keys(localStorage)
+    for (const key of keys) {
+      if (key.startsWith("sp:calendar:")) localStorage.removeItem(key)
     }
-  } catch {
-    /* */
-  }
+  } catch { /* */ }
 }
 
 function getDateRange(): { start: Date; end: Date } {
@@ -340,17 +330,11 @@ async function fetchEvents(): Promise<void> {
   renderTrigger()
 }
 
-function closePopover(): void {
+function closeCalendarPopover(): void {
   if (calendarPopoverClose) {
     calendarPopoverClose()
     calendarPopoverClose = null
   }
-}
-
-function escapeHtml(str: string): string {
-  const div = document.createElement("div")
-  div.textContent = str
-  return div.innerHTML
 }
 
 function formatTime(isoString: string): string {
@@ -889,12 +873,10 @@ function showDayEventList(anchor: HTMLElement, date: Date, events: CalendarEvent
 }
 
 function renderTrigger(): void {
-  const trigger = document.getElementById(
-    "calendar-trigger"
-  ) as HTMLButtonElement
+  const trigger = document.getElementById("calendar-trigger") as HTMLButtonElement
   if (!store.sync.get("calendarEnabled")) {
     trigger.hidden = true
-    closePopover()
+    closeCalendarPopover()
     return
   }
 
@@ -932,59 +914,41 @@ function renderTrigger(): void {
 }
 
 function showCalendarPopover(anchor: HTMLElement): void {
-  closePopover()
-  const popover = document.createElement("div")
-  popover.className =
-    "fixed bg-popover text-popover-foreground rounded-lg shadow-lg p-3 min-w-[280px] max-w-[340px] max-h-[400px] overflow-y-auto"
+  closeCalendarPopover()
+  viewMode = "1d"
+  offset = 0
 
-  let html = `<div class="text-sm font-medium mb-2">Today's Events</div>`
+  const content = document.createElement("div")
+  content.className = "flex flex-col gap-0"
+  content.style.width = "660px"
 
-  if (currentEvents.length === 0) {
-    html += `<div class="text-sm text-popover-foreground/60">No events scheduled</div>`
-  } else {
-    html += `<div class="flex flex-col gap-1">`
-    for (const event of currentEvents) {
-      const timeStr = event.allDay
-        ? "All day"
-        : event.startTime && event.endTime
-        ? `${formatTime(event.startTime)} \u2013 ${formatTime(event.endTime)}`
-        : ""
-      const linkOpen = event.htmlLink
-        ? `<a href="${escapeHtml(
-            event.htmlLink
-          )}" target="_blank" rel="noopener" class="block p-2 rounded bg-popover-foreground/10 hover:bg-popover-foreground/20 transition-colors">`
-        : `<div class="p-2 rounded bg-popover-foreground/10">`
-      const linkClose = event.htmlLink ? "</a>" : "</div>"
-      html += `${linkOpen}<div class="text-xs text-popover-foreground/60">${escapeHtml(
-        timeStr
-      )}</div><div class="text-sm truncate">${escapeHtml(
-        event.title
-      )}</div>${linkClose}`
+  function rebuild() {
+    content.innerHTML = ""
+
+    const controls = renderControls(() => {
+      fetchEvents().then(rebuild)
+    })
+    content.appendChild(controls)
+
+    let view: HTMLElement
+    if (viewMode === "1d") {
+      view = renderDayView(currentEvents)
+    } else if (viewMode === "1w") {
+      view = renderWeekView(currentEvents)
+    } else {
+      view = renderMonthView(currentEvents)
     }
-    html += `</div>`
+    content.appendChild(view)
   }
 
-  popover.innerHTML = html
-  document.body.appendChild(popover)
+  rebuild()
 
-  const rect = anchor.getBoundingClientRect()
-  popover.style.right = window.innerWidth - rect.right + "px"
-  popover.style.top = rect.bottom + 4 + "px"
-  calendarPopoverClose = () => {
-    popover.remove()
-    document.removeEventListener("click", onClickOutside)
-  }
-
-  const onClickOutside = (e: MouseEvent) => {
-    if (
-      !popover.contains(e.target as Node) &&
-      e.target !== anchor &&
-      !anchor.contains(e.target as Node)
-    ) {
-      closePopover()
-    }
-  }
-  setTimeout(() => document.addEventListener("click", onClickOutside), 0)
+  const { close } = createPopover(anchor, content, {
+    onClose: () => {
+      calendarPopoverClose = null
+    },
+  })
+  calendarPopoverClose = close
 }
 
 function startRefreshInterval(): void {
@@ -1000,9 +964,7 @@ function stopRefreshInterval(): void {
 }
 
 export function initCalendar(): void {
-  const trigger = document.getElementById(
-    "calendar-trigger"
-  ) as HTMLButtonElement
+  const trigger = document.getElementById("calendar-trigger") as HTMLButtonElement
 
   trigger.addEventListener("click", (e) => {
     e.stopPropagation()
@@ -1012,7 +974,7 @@ export function initCalendar(): void {
     }
     if (currentState === "loaded") {
       if (calendarPopoverClose) {
-        closePopover()
+        closeCalendarPopover()
       } else {
         showCalendarPopover(trigger)
       }
@@ -1025,7 +987,7 @@ export function initCalendar(): void {
       startRefreshInterval()
     } else {
       trigger.hidden = true
-      closePopover()
+      closeCalendarPopover()
       stopRefreshInterval()
     }
   })
