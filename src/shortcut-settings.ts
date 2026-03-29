@@ -325,18 +325,12 @@ function createRow(
   compact: boolean
 ): HTMLElement {
   const row = document.createElement("div")
-  row.className = `flex items-center gap-2 px-2 py-1.5 rounded-theme text-sm group transition-colors hover:bg-surface ${
-    compact ? "text-xs" : ""
+  row.className = `flex items-center gap-2 px-2 py-1.5 rounded-theme text-sm group transition-colors hover:bg-surface${
+    selectionMode ? "" : " cursor-grab"
   }`
   row.dataset.index = String(index)
   row.dataset.id = item.id
   row.dataset.type = item.type
-
-  const handle = document.createElement("span")
-  handle.dataset.dragHandle = ""
-  handle.className = "cursor-grab text-muted shrink-0"
-  handle.appendChild(icon("dragHandle", { size: 10 }))
-  row.appendChild(handle)
 
   if (selectionMode) {
     const cb = createCheckbox("", selectedIds.has(item.id), (checked) => {
@@ -356,7 +350,7 @@ function createRow(
     })
   }
 
-  const itemIcon = icon(item.type === "folder" ? "folder" : "link", { size: compact ? 12 : 14 })
+  const itemIcon = icon(item.type === "folder" ? "folder" : "link", { size: 14 })
   itemIcon.classList.add("shrink-0", "text-muted")
   row.appendChild(itemIcon)
 
@@ -445,7 +439,6 @@ function renderItemList(): void {
       row.className += " col-span-3"
 
       if (item.type === "folder" && !selectionMode) {
-        row.style.cursor = "pointer"
         row.addEventListener("click", (e) => {
           if ((e.target as HTMLElement).closest("button")) return
           viewingFolderId = item.id
@@ -470,11 +463,10 @@ function renderItemList(): void {
       const row = createRow(item, i, false, null, true)
 
       if (item.id === viewingFolderId) {
-        row.className += " border-l-2 border-accent bg-accent/10"
+        row.className += " ring-2 ring-accent bg-accent/10"
       }
 
       if (item.type === "folder" && !selectionMode) {
-        row.style.cursor = "pointer"
         row.addEventListener("click", (e) => {
           if ((e.target as HTMLElement).closest("button")) return
           if (item.id === viewingFolderId) {

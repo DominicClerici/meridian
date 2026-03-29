@@ -50,6 +50,8 @@ interface ItemDragCtx {
   snapshot: Tab[]
   hoverTimer: number | null
   hoverTarget: { type: "tab" | "folder" | "shortcut"; id: string } | null
+  hoverPhase2Timer: number | null
+  hoverAnimEl: HTMLElement | null
   mergeReady: boolean
 }
 
@@ -71,11 +73,12 @@ let pendingStart: { x: number; y: number } | null = null
 let cb: DragCallbacks
 let tabBarEl: HTMLElement
 let itemListEl: HTMLElement
+let dialogEl: HTMLElement
 let indicator: HTMLElement
 let tabIndicator: HTMLElement
 
 const DRAG_THRESHOLD = 3
-const HOVER_DELAY = 300
+const HOVER_DELAY = 1000
 const AUTO_SCROLL_THRESHOLD = 40
 const AUTO_SCROLL_SPEED = 8
 
@@ -87,16 +90,17 @@ export function initDrag(
   tabBarEl = _tabBarEl
   itemListEl = _itemListEl
   cb = callbacks
+  dialogEl = itemListEl.closest("dialog") ?? document.body
 
   indicator = document.createElement("div")
   indicator.className = "fixed h-0.5 bg-accent rounded-full pointer-events-none z-[9999]"
   indicator.style.display = "none"
-  document.body.appendChild(indicator)
+  dialogEl.appendChild(indicator)
 
   tabIndicator = document.createElement("div")
   tabIndicator.className = "fixed w-0.5 bg-accent rounded-full pointer-events-none z-[9999]"
   tabIndicator.style.display = "none"
-  document.body.appendChild(tabIndicator)
+  dialogEl.appendChild(tabIndicator)
 
   itemListEl.addEventListener("pointerdown", onItemPointerDown)
   tabBarEl.addEventListener("pointerdown", onTabPointerDown)
@@ -104,9 +108,9 @@ export function initDrag(
 
 function onItemPointerDown(e: PointerEvent): void {
   if (e.button !== 0) return
-  const handle = (e.target as HTMLElement).closest("[data-drag-handle]") as HTMLElement | null
-  if (!handle) return
-  const row = handle.closest("[data-id]") as HTMLElement | null
+  const target = e.target as HTMLElement
+  if (target.closest("button") || target.closest("input") || target.closest("label")) return
+  const row = target.closest("[data-id]") as HTMLElement | null
   if (!row) return
 
   const itemId = row.dataset.id!
@@ -144,6 +148,8 @@ function onItemPointerDown(e: PointerEvent): void {
     snapshot: tabs,
     hoverTimer: null,
     hoverTarget: null,
+    hoverPhase2Timer: null,
+    hoverAnimEl: null,
     mergeReady: false,
   }
 
@@ -224,8 +230,9 @@ function onKeyDown(e: KeyboardEvent): void {
 
 function cleanup(): void {
   if (ctx) {
-    if (ctx.mode === "item" && ctx.hoverTimer !== null) {
-      clearTimeout(ctx.hoverTimer)
+    if (ctx.mode === "item") {
+      if (ctx.hoverTimer !== null) clearTimeout(ctx.hoverTimer)
+      clearHoverAnimation()
     }
     ctx.clone?.remove()
   }
@@ -245,13 +252,22 @@ function clearVisualFeedback(): void {
     el.classList.remove("bg-accent/20", "bg-accent/10", "bg-warning/20", "bg-danger/30", "opacity-50")
   })
   tabBarEl.querySelectorAll("[data-tab-id]").forEach((el) => {
-    el.classList.remove("ring-2", "ring-accent/50")
+    el.classList.remove("ring-2", "ring-accent/50", "bg-accent/10")
+  })
+  itemListEl.querySelectorAll("[data-zone]").forEach((el) => {
+    el.classList.remove("ring-2", "ring-accent/50", "bg-accent/5")
   })
 }
 
+function dialogOffset(): { x: number; y: number } {
+  const r = dialogEl.getBoundingClientRect()
+  return { x: r.left, y: r.top }
+}
+
 function positionClone(clone: HTMLElement, clientX: number, clientY: number, offsetX: number, offsetY: number): void {
-  clone.style.left = `${clientX - offsetX}px`
-  clone.style.top = `${clientY - offsetY}px`
+  const d = dialogOffset()
+  clone.style.left = `${clientX - offsetX - d.x}px`
+  clone.style.top = `${clientY - offsetY - d.y}px`
 }
 
 function autoScroll(clientY: number): void {
@@ -285,7 +301,7 @@ function createClone(sourceEl: HTMLElement, isSelection: boolean, count: number)
     clone.appendChild(badge)
   }
 
-  document.body.appendChild(clone)
+  dialogEl.appendChild(clone)
   return clone
 }
 
@@ -461,6 +477,7 @@ function updateHoverTimer(zone: DropZone): void {
     clearTimeout(ctx.hoverTimer)
     ctx.hoverTimer = null
   }
+  clearHoverAnimation()
   ctx.hoverTarget = newTarget
   ctx.mergeReady = false
 
@@ -468,11 +485,66 @@ function updateHoverTimer(zone: DropZone): void {
 
   if (newTarget.type === "tab" && ctx.isSelectionDrag) return
 
+  startHoverAnimation(newTarget)
+
   ctx.hoverTimer = window.setTimeout(() => {
     if (!ctx || ctx.mode !== "item") return
     ctx.hoverTimer = null
     onHoverTimerFire(newTarget!)
   }, HOVER_DELAY)
+}
+
+function clearHoverAnimation(): void {
+  if (!ctx || ctx.mode !== "item") return
+  if (ctx.hoverPhase2Timer !== null) {
+    clearTimeout(ctx.hoverPhase2Timer)
+    ctx.hoverPhase2Timer = null
+  }
+  if (ctx.hoverAnimEl) {
+    ctx.hoverAnimEl.style.transition = ""
+    ctx.hoverAnimEl.style.backgroundColor = ""
+    ctx.hoverAnimEl.style.color = ""
+    ctx.hoverAnimEl.style.boxShadow = ""
+    const input = ctx.hoverAnimEl.querySelector("input") as HTMLElement | null
+    if (input) {
+      input.style.transition = ""
+      input.style.color = ""
+    }
+    ctx.hoverAnimEl = null
+  }
+}
+
+function startHoverAnimation(target: NonNullable<ItemDragCtx["hoverTarget"]>): void {
+  if (!ctx || ctx.mode !== "item") return
+
+  if (target.type === "tab") {
+    if (target.id === cb.getSelectedTabId()) return
+    const pill = tabBarEl.querySelector(`[data-tab-id="${target.id}"]`) as HTMLElement | null
+    if (!pill) return
+    ctx.hoverAnimEl = pill
+    pill.style.backgroundColor = "color-mix(in srgb, var(--accent) 10%, transparent)"
+    ctx.hoverPhase2Timer = window.setTimeout(() => {
+      if (!ctx || ctx.mode !== "item") return
+      pill.style.transition = "background-color 750ms ease, color 750ms ease"
+      pill.style.backgroundColor = "var(--accent)"
+      pill.style.color = "var(--accent-foreground)"
+      const input = pill.querySelector("input") as HTMLElement | null
+      if (input) {
+        input.style.transition = "color 750ms ease"
+        input.style.color = "var(--accent-foreground)"
+      }
+    }, 250)
+  } else if (target.type === "folder") {
+    const row = itemListEl.querySelector(`[data-id="${target.id}"]`) as HTMLElement | null
+    if (!row) return
+    ctx.hoverAnimEl = row
+    row.style.boxShadow = "0 0 0 0px var(--accent)"
+    ctx.hoverPhase2Timer = window.setTimeout(() => {
+      if (!ctx || ctx.mode !== "item") return
+      row.style.transition = "box-shadow 750ms ease"
+      row.style.boxShadow = "0 0 0 2px var(--accent)"
+    }, 250)
+  }
 }
 
 function onHoverTimerFire(target: NonNullable<ItemDragCtx["hoverTarget"]>): void {
@@ -523,9 +595,15 @@ function applyVisualFeedback(zone: DropZone): void {
   ctx.clone.style.transform = (shrinkZone || shrinkTab) ? "scale(0.9)" : "scale(0.97)"
 
   switch (zone.type) {
-    case "reorder":
+    case "reorder": {
       showReorderIndicator(zone)
+      const zoneSelector = zone.location === "folder" ? "[data-zone='folder']" : "[data-zone='top-level']"
+      const zoneEl = itemListEl.querySelector(zoneSelector)
+      if (zoneEl && !zoneEl.querySelector("[data-id]")) {
+        zoneEl.classList.add("ring-2", "ring-accent/50", "bg-accent/5")
+      }
       break
+    }
     case "into-folder":
       showFolderHighlight(zone)
       break
@@ -549,17 +627,18 @@ function showReorderIndicator(zone: Extract<DropZone, { type: "reorder" }>): voi
     targetRow = rows[zone.index]
   }
 
+  const d = dialogOffset()
   if (targetRow) {
     const rect = targetRow.getBoundingClientRect()
     indicator.style.display = ""
-    indicator.style.top = `${rect.top - 1}px`
-    indicator.style.left = `${rect.left}px`
+    indicator.style.top = `${rect.top - 1 - d.y}px`
+    indicator.style.left = `${rect.left - d.x}px`
     indicator.style.width = `${rect.width}px`
   } else if (rows.length > 0) {
     const lastRect = rows[rows.length - 1].getBoundingClientRect()
     indicator.style.display = ""
-    indicator.style.top = `${lastRect.bottom - 1}px`
-    indicator.style.left = `${lastRect.left}px`
+    indicator.style.top = `${lastRect.bottom - 1 - d.y}px`
+    indicator.style.left = `${lastRect.left - d.x}px`
     indicator.style.width = `${lastRect.width}px`
   }
 }
@@ -586,7 +665,7 @@ function showMergeHighlight(targetId: string): void {
 function showTabHighlight(tabId: string): void {
   const pill = tabBarEl.querySelector(`[data-tab-id="${tabId}"]`) as HTMLElement | null
   if (!pill) return
-  pill.classList.add("ring-2", "ring-accent/50")
+  pill.classList.add("ring-2", "ring-accent/50", "bg-accent/10")
 }
 
 function updateTabDrag(e: PointerEvent): void {
@@ -607,9 +686,10 @@ function updateTabDrag(e: PointerEvent): void {
   const midX = rect.left + rect.width / 2
   const insertLeft = e.clientX < midX
 
+  const d = dialogOffset()
   tabIndicator.style.display = ""
-  tabIndicator.style.left = `${insertLeft ? rect.left - 1 : rect.right - 1}px`
-  tabIndicator.style.top = `${rect.top}px`
+  tabIndicator.style.left = `${(insertLeft ? rect.left - 1 : rect.right - 1) - d.x}px`
+  tabIndicator.style.top = `${rect.top - d.y}px`
   tabIndicator.style.height = `${rect.height}px`
 }
 
