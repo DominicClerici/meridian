@@ -6,7 +6,8 @@ export type SearchResult = {
   label: string
   description?: string
   action: () => void
-  icon?: string
+  icon?: HTMLElement
+  group?: string
 }
 
 export type SearchProvider = {
