@@ -363,17 +363,22 @@ function buildUnsplashAccordion(): { container: HTMLElement; content: HTMLElemen
   searchRow.appendChild(clearBtn)
   searchArea.appendChild(searchRow)
 
+  const gridScroll = document.createElement("div")
+  gridScroll.className = "rounded-theme"
+  gridScroll.style.height = `calc((100cqi - 12px) / 3 * 10 / 16 * 2 + 6px)`
+  gridScroll.style.overflow = "hidden"
+  searchArea.appendChild(gridScroll)
+
   const grid = document.createElement("div")
-  grid.className = "grid grid-cols-3 gap-1.5 rounded-theme"
-  grid.style.height = `calc((100cqi - 12px) / 3 * 10 / 16 * 2 + 6px)`
-  searchArea.appendChild(grid)
+  grid.className = "grid grid-cols-3 gap-1.5"
+  gridScroll.appendChild(grid)
 
   let searchTimeout: number | null = null
   let hasResults = false
 
   function renderEmpty(): void {
     grid.innerHTML = ""
-    grid.style.overflow = "hidden"
+    gridScroll.style.overflow = "hidden"
     const wrapper = document.createElement("div")
     wrapper.className = "col-span-3 relative grid grid-cols-3 gap-1.5"
     for (let i = 0; i < 6; i++) {
@@ -409,7 +414,7 @@ function buildUnsplashAccordion(): { container: HTMLElement; content: HTMLElemen
   function renderGrid(photos: UnsplashPhoto[]): void {
     grid.innerHTML = ""
     hasResults = true
-    grid.style.overflow = "auto"
+    gridScroll.style.overflow = "auto"
     for (const photo of photos) {
       const thumb = document.createElement("button")
       thumb.className = "aspect-[16/10] rounded overflow-hidden cursor-pointer hover:ring-2 hover:ring-accent transition-all"
