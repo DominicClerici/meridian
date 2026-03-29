@@ -343,32 +343,73 @@ function buildUnsplashAccordion(): { container: HTMLElement; content: HTMLElemen
 
   const searchArea = document.createElement("div")
   searchArea.className = "flex flex-col gap-2 transition-opacity"
+  searchArea.style.containerType = "inline-size"
 
+  const searchRow = document.createElement("div")
+  searchRow.className = "relative"
   const searchInput = createInput({ placeholder: "Search photos..." })
-  searchArea.appendChild(searchInput)
+  searchRow.appendChild(searchInput)
+
+  const clearBtn = document.createElement("button")
+  clearBtn.className = "absolute right-2 top-1/2 -translate-y-1/2 text-muted hover:text-foreground transition-colors cursor-pointer"
+  clearBtn.appendChild(icon("close", { size: 14 }))
+  clearBtn.hidden = true
+  clearBtn.addEventListener("click", () => {
+    ;(searchInput as HTMLInputElement).value = ""
+    clearBtn.hidden = true
+    hasResults = false
+    renderEmpty()
+  })
+  searchRow.appendChild(clearBtn)
+  searchArea.appendChild(searchRow)
 
   const grid = document.createElement("div")
-  grid.className = "grid grid-cols-3 gap-1.5 max-h-[200px] overflow-y-auto rounded-theme"
+  grid.className = "grid grid-cols-3 gap-1.5 rounded-theme"
+  grid.style.height = `calc((100cqi - 12px) / 3 * 10 / 16 * 2 + 6px)`
   searchArea.appendChild(grid)
 
   let searchTimeout: number | null = null
+  let hasResults = false
 
-  searchInput.addEventListener("input", () => {
+  function renderEmpty(): void {
+    grid.innerHTML = ""
+    grid.style.overflow = "hidden"
+    const wrapper = document.createElement("div")
+    wrapper.className = "col-span-3 relative grid grid-cols-3 gap-1.5"
+    for (let i = 0; i < 6; i++) {
+      const box = document.createElement("div")
+      box.className = "aspect-[16/10] rounded bg-input-border/15"
+      wrapper.appendChild(box)
+    }
+    const overlay = document.createElement("div")
+    overlay.className = "absolute inset-0 flex items-center justify-center text-xs text-muted"
+    overlay.textContent = "Search with Unsplash..."
+    wrapper.appendChild(overlay)
+    grid.appendChild(wrapper)
+  }
+  renderEmpty()
+
+  function doSearch(): void {
     if (searchTimeout) clearTimeout(searchTimeout)
     searchTimeout = window.setTimeout(async () => {
       const query = (searchInput as HTMLInputElement).value.trim()
-      if (!query) { grid.innerHTML = ""; return }
+      clearBtn.hidden = !query
+      if (!query) { hasResults = false; renderEmpty(); return }
       try {
         const photos = await searchPhotos(query)
         renderGrid(photos)
       } catch {
-        grid.innerHTML = `<p class="text-xs text-danger col-span-3">Search failed. Check your API key.</p>`
+        grid.innerHTML = `<p class="text-xs text-danger col-span-3 flex items-center justify-center">Search failed. Check your API key.</p>`
       }
     }, 500)
-  })
+  }
+
+  searchInput.addEventListener("input", doSearch)
 
   function renderGrid(photos: UnsplashPhoto[]): void {
     grid.innerHTML = ""
+    hasResults = true
+    grid.style.overflow = "auto"
     for (const photo of photos) {
       const thumb = document.createElement("button")
       thumb.className = "aspect-[16/10] rounded overflow-hidden cursor-pointer hover:ring-2 hover:ring-accent transition-all"
@@ -430,56 +471,99 @@ function buildUnsplashAccordion(): { container: HTMLElement; content: HTMLElemen
 function buildUploadAccordion(): { container: HTMLElement; content: HTMLElement } {
   const acc = createAccordion("Upload", { variant: "settings", defaultOpen: false })
 
-  const fileBtn = createButton("Choose image", "outline", {
-    icon: icon("bgUpload"),
-  })
-
   const fileInput = document.createElement("input")
   fileInput.type = "file"
   fileInput.accept = "image/*"
   fileInput.hidden = true
+  acc.content.appendChild(fileInput)
 
-  fileBtn.addEventListener("click", () => fileInput.click())
+  function getPreviewWidth(): number {
+    const ratio = window.innerWidth / window.innerHeight
+    return Math.min(Math.round(180 * ratio), 550)
+  }
+
+  const previewBox = document.createElement("button")
+  previewBox.className = "rounded-theme overflow-hidden cursor-pointer transition-all hover:ring-2 hover:ring-accent"
+  previewBox.style.height = "180px"
+  previewBox.style.width = `${getPreviewWidth()}px`
+  previewBox.style.maxWidth = "100%"
+  acc.content.appendChild(previewBox)
+
+  const placeholder = document.createElement("div")
+  placeholder.className = "w-full h-full flex items-center justify-center border-2 border-dashed border-input-border/40 rounded-theme text-muted"
+  placeholder.appendChild(icon("plus", { size: 24 }))
+  previewBox.appendChild(placeholder)
+
+  let hasImage = false
+  let previewUrl: string | null = null
+
+  previewBox.addEventListener("click", () => {
+    if (hasImage) {
+      reapplyUpload()
+    } else {
+      fileInput.click()
+    }
+  })
+
+  const updateBtn = createButton("Update image", "outline", {
+    icon: icon("bgUpload"),
+    onClick: () => fileInput.click(),
+  })
+  updateBtn.className += " mt-2"
+  updateBtn.hidden = true
+  acc.content.appendChild(updateBtn)
 
   fileInput.addEventListener("change", async () => {
     const file = fileInput.files?.[0]
     if (!file) return
-    fileBtn.querySelector("span:last-child")!.textContent = "Uploading..."
-    fileBtn.disabled = true
+    updateBtn.disabled = true
     try {
       await setUploadedPhoto(file)
       loadPreview()
     } catch {
       // silently fail
     }
-    fileBtn.disabled = false
-    fileBtn.querySelector("span:last-child")!.textContent = "Choose image"
+    updateBtn.disabled = false
     fileInput.value = ""
   })
 
-  acc.content.appendChild(fileBtn)
-  acc.content.appendChild(fileInput)
-
-  const preview = document.createElement("button")
-  preview.className = "w-20 aspect-[16/10] rounded overflow-hidden cursor-pointer hover:ring-2 hover:ring-accent transition-all mt-2"
-  preview.hidden = true
-  preview.addEventListener("click", () => { reapplyUpload() })
-  acc.content.appendChild(preview)
-
   function loadPreview(): void {
     const meta = store.local.get("bgUploadMeta")
-    if (!meta) { preview.hidden = true; return }
+    if (!meta) {
+      hasImage = false
+      placeholder.hidden = false
+      previewBox.style.backgroundImage = ""
+      updateBtn.hidden = true
+      return
+    }
     idbGet("upload").then((blob) => {
-      if (!blob) { preview.hidden = true; return }
-      const url = URL.createObjectURL(blob)
-      preview.style.background = `url(${url}) center/cover`
-      preview.hidden = false
+      if (!blob) {
+        hasImage = false
+        placeholder.hidden = false
+        previewBox.style.backgroundImage = ""
+        updateBtn.hidden = true
+        return
+      }
+      if (previewUrl) URL.revokeObjectURL(previewUrl)
+      previewUrl = URL.createObjectURL(blob)
+      previewBox.style.background = `url(${previewUrl}) center/cover`
+      placeholder.hidden = true
+      hasImage = true
+      updateBtn.hidden = false
     })
   }
   loadPreview()
 
+  let resizeTimer: number | null = null
+  window.addEventListener("resize", () => {
+    if (resizeTimer) clearTimeout(resizeTimer)
+    resizeTimer = window.setTimeout(() => {
+      previewBox.style.width = `${getPreviewWidth()}px`
+    }, 300)
+  })
+
   const note = document.createElement("p")
-  note.className = "text-xs text-muted mt-1"
+  note.className = "text-xs text-muted mt-2"
   note.textContent = "Local images do not sync across devices."
   acc.content.appendChild(note)
 
