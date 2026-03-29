@@ -30,9 +30,13 @@ Only 4 short strings are stored in `browser.storage.sync`:
 | Store Key | Type | Default | HTML Attribute |
 |-----------|------|---------|----------------|
 | `theme` | `"modern"` | `"modern"` | `data-theme` |
-| `accentColor` | `"red" \| "green" \| "blue"` | `"blue"` | `data-accent` |
-| `bgColor` | `"red" \| "green" \| "blue"` | `"blue"` | `data-bg` |
+| `accentColor` | `AccentColor \| "random"` | `"sky"` | `data-accent` |
+| `bgColor` | `AccentColor \| "auto"` | `"auto"` | `data-bg` |
 | `mode` | `"light" \| "dark" \| "auto"` | `"auto"` | `data-mode` |
+
+**AccentColor** = `"rose" | "coral" | "amber" | "teal" | "sky" | "violet" | "slate" | "stone" | "zinc" | "graphite"` (6 colorful + 4 neutral).
+
+**Special modes:** `accentColor: "random"` rotates daily (tracked via localStorage). `bgColor: "auto"` follows the resolved accent color.
 
 Add new options by extending the union type in `src/defaults.ts` and adding corresponding CSS selectors.
 
@@ -97,7 +101,13 @@ const btn = createButton("Delete", "primary", {
 | `outline` | Accent border, transparent background |
 | `ghost` | No border/background, shows surface on hover |
 
-The `icon` option accepts a raw SVG string rendered into a child `<span>`.
+The `icon` option accepts an `HTMLElement` (from the icon system) or a raw SVG string:
+
+```ts
+import { icon } from "./icons/registry"
+
+const btn = createButton("Edit", "ghost", { icon: icon("edit") })
+```
 
 ### createInput
 
@@ -155,14 +165,97 @@ const { el, close } = createPopover(anchorButton, content)
 // Programmatic close
 close()
 
-// Nested popover (stays open when parent is clicked)
+// Nested popover — automatically managed via internal stack
 const nested = createPopover(childAnchor, childContent, {
-  parentPopover: el,
   onClose: () => console.log("nested closed"),
 })
 ```
 
-Popovers auto-position below the anchor (or above if no space), right-aligned. Click outside dismisses. Nested popovers have higher z-index and scoped click-outside handling.
+Popovers auto-position below the anchor (or above if no space), right-aligned. Nesting is automatic — each `createPopover` call pushes onto an internal stack. Click outside the topmost popover closes only that level; if a parent remains, the click is blocked. Clicking inside a parent popover closes the child and lets the click through. Focus is trapped within the topmost popover and its trigger.
+
+## Icon System
+
+All icons are centralized in `src/icons/` and swap automatically when the theme changes. Each theme provides its own set of SVGs for every icon name.
+
+### Using Icons
+
+```ts
+import { icon, getIconSvg } from "./icons/registry"
+
+// Returns a <span> element with the SVG inside — auto-updates on theme change
+const el = icon("settings")
+
+// With size override (sets width/height on the SVG)
+const el = icon("settings", { size: 24 })
+
+// With extra Tailwind classes
+const el = icon("close", { class: "text-muted" })
+
+// Raw SVG string for innerHTML patterns (does NOT auto-update)
+const svg = getIconSvg("check")
+```
+
+The `icon()` factory returns a `<span data-icon="name">` that:
+- Renders the current theme's SVG synchronously (no flash)
+- Subscribes to theme changes and swaps its content automatically
+- Cleans up its subscription when removed from the DOM (via a shared MutationObserver)
+
+Use `getIconSvg()` only when you need a raw string for `innerHTML` patterns (e.g., toggling check marks in select options).
+
+### Available Icons
+
+All icon names are defined in each theme module. The modern theme (`src/icons/modern.ts`) includes:
+
+| Category | Icon Names |
+|----------|-----------|
+| **App chrome** | `settings`, `close` |
+| **Settings tabs** | `tabGeneral`, `tabShortcuts`, `tabAppearance`, `tabWidgets`, `tabAdvanced` |
+| **Mode selector** | `modeLight`, `modeDark`, `modeAuto` |
+| **Components** | `check`, `chevronDown`, `swatchCheck` |
+| **Todo** | `todoList`, `todoEmpty`, `plus`, `edit`, `trash`, `externalLink`, `dragHandle` |
+| **Media** | `play`, `pause`, `skipBack`, `skipForward`, `spinner` |
+| **Widgets** | `calendar`, `refresh`, `locationOff` |
+
+### Animated Icons
+
+The icon system supports animated icons via factory functions. An animated icon factory receives the container span and populates it with programmatic SVG elements and methods:
+
+```ts
+import type { AnimatedIconFactory } from "./icons/registry"
+
+const animatedCheckbox: AnimatedIconFactory = (span, opts) => {
+  // Build SVG with createElementNS
+  // Attach methods: (span as any).setState = (checked: boolean) => { ... }
+}
+```
+
+Register animated icons in the theme map alongside static SVG strings. The registry distinguishes them by type at runtime.
+
+### Theme Icon Modules
+
+Each theme exports a flat map of icon names to SVG strings (or animated factories):
+
+```ts
+// src/icons/modern.ts
+import { registerTheme } from "./registry"
+
+const icons = {
+  settings: `<svg ...>...</svg>`,
+  close: `<svg ...>...</svg>`,
+  // ... all icon names
+}
+
+registerTheme("modern", icons)
+```
+
+The module is imported as a side-effect in `src/index.ts` (`import "./icons/modern"`), which registers the theme at module load time — before any `icon()` calls.
+
+### Adding a New Icon
+
+1. Add the SVG string to every theme module (`src/icons/modern.ts`, etc.) under the same key name
+2. Use it anywhere: `icon("myIcon")` or `getIconSvg("myIcon")`
+
+No other changes needed.
 
 ## Adding a New Theme
 
@@ -221,7 +314,27 @@ theme: "modern" | "terminal";
 <option value="terminal">Terminal</option>
 ```
 
-No JS changes needed — the theme boot system reads the stored key and sets `data-theme`, and CSS handles the rest.
+4. Create an icon theme module `src/icons/terminal.ts`:
+
+```ts
+import { registerTheme } from "./registry"
+
+const icons = {
+  settings: `<svg ...>...</svg>`,  // terminal-style gear
+  close: `<svg ...>...</svg>`,
+  // ... every icon name from the modern theme
+}
+
+registerTheme("terminal", icons)
+```
+
+5. Import it in `src/index.ts`:
+
+```ts
+import "./icons/terminal"
+```
+
+The theme boot system reads the stored key, sets `data-theme`, CSS handles the visual tokens, and the icon registry handles SVG swaps — no other JS changes needed.
 
 ## Adding a New Accent or Background Color
 
@@ -306,6 +419,8 @@ font-mono           → monospace/numbers font
 | `src/components.ts` | Reusable UI component factories |
 | `src/settings.ts` | Settings dialog wiring for theme/accent/mode/bg controls |
 | `src/index.ts` | Calls `applyTheme()` + `subscribeTheme()` before first paint |
+| `src/icons/registry.ts` | Icon factory (`icon()`, `getIconSvg()`), theme registration, cleanup |
+| `src/icons/modern.ts` | Modern theme icon map (all SVG strings) |
 
 ## Fallback Behavior
 

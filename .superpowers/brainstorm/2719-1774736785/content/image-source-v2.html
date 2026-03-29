@@ -1,0 +1,63 @@
+<h2>Unsplash Accordion — Inner Layout</h2>
+<p class="subtitle">How should search results display when the user searches for a background?</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Thumbnail Grid</h3>
+      <p>Search input + a grid of landscape thumbnails below. Click a thumbnail to set it as background. Compact, browsable. Shows ~6-8 results in view with scroll for more.</p>
+      <div style="margin-top:12px;padding:16px;border-radius:8px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);font-family:monospace;font-size:12px;line-height:1.6">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+          <span style="color:#60a5fa;font-size:11px">☑ Refresh daily</span>
+          <span style="padding:2px 8px;border:1px solid rgba(255,255,255,0.2);border-radius:3px;color:#ccc;font-size:10px">Nature ▾</span>
+        </div>
+        <div style="opacity:0.4;pointer-events:none">
+          <div style="padding:6px 10px;border:1px solid rgba(255,255,255,0.15);border-radius:4px;margin:8px 0;color:#666;font-size:11px">🔍 Search photos...</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px">
+            <div style="aspect-ratio:16/10;border-radius:4px;background:linear-gradient(135deg,#2d4a2d,#1a3a1a)"></div>
+            <div style="aspect-ratio:16/10;border-radius:4px;background:linear-gradient(135deg,#2d3a4a,#1a2a3a)"></div>
+            <div style="aspect-ratio:16/10;border-radius:4px;background:linear-gradient(135deg,#4a3a2d,#3a2a1a)"></div>
+            <div style="aspect-ratio:16/10;border-radius:4px;background:linear-gradient(135deg,#3a2d4a,#2a1a3a)"></div>
+            <div style="aspect-ratio:16/10;border-radius:4px;background:linear-gradient(135deg,#4a4a2d,#3a3a1a)"></div>
+            <div style="aspect-ratio:16/10;border-radius:4px;background:linear-gradient(135deg,#2d4a4a,#1a3a3a)"></div>
+          </div>
+        </div>
+        <div style="margin-top:8px;opacity:1">
+          <div style="font-size:10px;color:#666">— daily mode: search disabled —</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>List with Preview</h3>
+      <p>Search input + a vertical list of results, each showing a small thumbnail on the left with photographer name on the right. Click to select. More info visible per result, but fewer results in view.</p>
+      <div style="margin-top:12px;padding:16px;border-radius:8px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);font-family:monospace;font-size:12px;line-height:1.6">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+          <span style="color:#60a5fa;font-size:11px">☑ Refresh daily</span>
+          <span style="padding:2px 8px;border:1px solid rgba(255,255,255,0.2);border-radius:3px;color:#ccc;font-size:10px">Nature ▾</span>
+        </div>
+        <div style="opacity:0.4;pointer-events:none">
+          <div style="padding:6px 10px;border:1px solid rgba(255,255,255,0.15);border-radius:4px;margin:8px 0;color:#666;font-size:11px">🔍 Search photos...</div>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <div style="display:flex;gap:8px;align-items:center;padding:4px;border-radius:4px;background:rgba(255,255,255,0.03)">
+              <div style="width:60px;height:36px;border-radius:3px;background:linear-gradient(135deg,#2d4a2d,#1a3a1a);flex-shrink:0"></div>
+              <div><div style="color:#ccc;font-size:11px">Mountain Lake</div><div style="color:#666;font-size:9px">by John Doe</div></div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;padding:4px;border-radius:4px;background:rgba(255,255,255,0.03)">
+              <div style="width:60px;height:36px;border-radius:3px;background:linear-gradient(135deg,#2d3a4a,#1a2a3a);flex-shrink:0"></div>
+              <div><div style="color:#ccc;font-size:11px">Ocean Sunset</div><div style="color:#666;font-size:9px">by Jane Smith</div></div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;padding:4px;border-radius:4px;background:rgba(255,255,255,0.03)">
+              <div style="width:60px;height:36px;border-radius:3px;background:linear-gradient(135deg,#4a3a2d,#3a2a1a);flex-shrink:0"></div>
+              <div><div style="color:#ccc;font-size:11px">Desert Dunes</div><div style="color:#666;font-size:9px">by Alex Chen</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

@@ -595,28 +595,124 @@ export function createDialog(opts?: {
 
 let popoverZIndex = 100
 
+interface PopoverEntry {
+  el: HTMLElement
+  anchor: HTMLElement
+  close: () => void
+  modal: boolean
+}
+
+const popoverStack: PopoverEntry[] = []
+let trapCleanup: (() => void) | null = null
+
+const FOCUSABLE_SELECTOR =
+  'a[href],button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled),[tabindex]:not([tabindex="-1"])'
+
+function getPopoverFocusable(container: HTMLElement, anchor: HTMLElement): HTMLElement[] {
+  return [anchor, ...container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)]
+    .filter(el => el.offsetParent !== null)
+}
+
+function installFocusTrap() {
+  trapCleanup?.()
+  trapCleanup = null
+  if (popoverStack.length === 0) return
+
+  const top = popoverStack[popoverStack.length - 1]
+
+  function onKeydown(e: KeyboardEvent) {
+    if (e.key !== "Tab") return
+    const focusable = getPopoverFocusable(top.el, top.anchor)
+    if (focusable.length === 0) return
+    const idx = focusable.indexOf(document.activeElement as HTMLElement)
+    let next: number
+    if (e.shiftKey) {
+      next = idx <= 0 ? focusable.length - 1 : idx - 1
+    } else {
+      next = idx === -1 || idx >= focusable.length - 1 ? 0 : idx + 1
+    }
+    e.preventDefault()
+    focusable[next].focus()
+  }
+
+  function onFocusin(e: FocusEvent) {
+    const target = e.target as HTMLElement
+    if (top.el.contains(target) || target === top.anchor || top.anchor.contains(target)) return
+    const focusable = getPopoverFocusable(top.el, top.anchor)
+    if (focusable.length > 0) focusable[0].focus()
+  }
+
+  document.addEventListener("keydown", onKeydown)
+  document.addEventListener("focusin", onFocusin)
+  trapCleanup = () => {
+    document.removeEventListener("keydown", onKeydown)
+    document.removeEventListener("focusin", onFocusin)
+  }
+}
+
+document.addEventListener("mousedown", (e: MouseEvent) => {
+  if (popoverStack.length === 0) return
+  const top = popoverStack[popoverStack.length - 1]
+  const target = e.target as Node
+  if (top.el.contains(target)) return
+  if (top.modal) { e.preventDefault(); return }
+  if (popoverStack.length < 2) return
+  if (top.anchor.contains(target) || target === top.anchor) return
+  const insideParent = popoverStack.slice(0, -1).some(p => p.el.contains(target))
+  if (!insideParent) e.preventDefault()
+}, true)
+
+document.addEventListener("click", (e: MouseEvent) => {
+  if (popoverStack.length === 0) return
+  const top = popoverStack[popoverStack.length - 1]
+  const target = e.target as Node
+  if (top.el.contains(target)) return
+  if (!top.modal && (top.anchor.contains(target) || target === top.anchor)) return
+  const insideParent = popoverStack.slice(0, -1).some(p => p.el.contains(target))
+  const isModal = top.modal
+  top.close()
+  if (isModal || (!insideParent && popoverStack.length > 0)) {
+    e.stopPropagation()
+    e.preventDefault()
+  }
+}, true)
+
 export function createPopover(
   anchor: HTMLElement,
   content: HTMLElement,
-  opts?: { onClose?: () => void; parentPopover?: HTMLElement }
+  opts?: { onClose?: () => void; modal?: boolean }
 ): { el: HTMLDivElement; close: () => void } {
   const popover = document.createElement("div")
   popover.className = "fixed bg-popover text-popover-foreground rounded-theme p-3 flex flex-col gap-2 border border-white/[0.08] glass-surface popover-enter"
   popover.style.zIndex = String(popoverZIndex++)
   popover.appendChild(content)
 
-  document.body.appendChild(popover)
+  const dialogHost = anchor.closest("dialog") as HTMLDialogElement | null
+  const container = dialogHost ?? document.body
+  container.appendChild(popover)
 
   const rect = anchor.getBoundingClientRect()
   const popoverRect = popover.getBoundingClientRect()
 
-  let top = rect.bottom + 4
-  let left = rect.right - popoverRect.width
+  let ox = 0, oy = 0
+  if (dialogHost) {
+    popover.style.top = "0px"
+    popover.style.left = "0px"
+    const m = popover.getBoundingClientRect()
+    ox = m.left
+    oy = m.top
+  }
+
+  const availW = dialogHost ? dialogHost.clientWidth : window.innerWidth
+  const availH = dialogHost ? dialogHost.clientHeight : window.innerHeight
+
+  let top = rect.bottom + 4 - oy
+  let left = rect.right - popoverRect.width - ox
 
   if (left < 8) left = 8
-  if (left + popoverRect.width > window.innerWidth - 8) left = window.innerWidth - popoverRect.width - 8
-  if (top + popoverRect.height > window.innerHeight - 8) {
-    top = rect.top - popoverRect.height - 4
+  if (left + popoverRect.width > availW - 8) left = availW - popoverRect.width - 8
+  if (top + popoverRect.height > availH - 8) {
+    top = (rect.top - oy) - popoverRect.height - 4
   }
 
   popover.style.top = `${top}px`
@@ -627,20 +723,45 @@ export function createPopover(
   function close() {
     if (closed) return
     closed = true
+    const idx = popoverStack.findIndex(entry => entry.el === popover)
+    if (idx !== -1) {
+      while (popoverStack.length > idx + 1) {
+        popoverStack[popoverStack.length - 1].close()
+      }
+      popoverStack.splice(idx, 1)
+    }
+    installFocusTrap()
     popover.remove()
-    document.removeEventListener("click", onClickOutside)
     opts?.onClose?.()
   }
 
-  function onClickOutside(e: MouseEvent) {
-    const target = e.target as Node
-    if (popover.contains(target)) return
-    if (anchor.contains(target) || target === anchor) return
-    if (opts?.parentPopover?.contains(target)) return
-    close()
-  }
-
-  setTimeout(() => document.addEventListener("click", onClickOutside), 0)
+  popoverStack.push({ el: popover, anchor, close, modal: opts?.modal ?? false })
+  installFocusTrap()
 
   return { el: popover, close }
+}
+
+export function createTooltip(
+  anchor: HTMLElement,
+  text: string,
+  opts?: { delay?: number }
+): HTMLSpanElement {
+  const tip = document.createElement("span")
+  tip.className = "tooltip-below"
+  tip.textContent = text
+  anchor.style.position = "relative"
+  anchor.appendChild(tip)
+
+  const delay = opts?.delay ?? 300
+  let timer: number | null = null
+
+  anchor.addEventListener("mouseenter", () => {
+    timer = window.setTimeout(() => tip.classList.add("visible"), delay)
+  })
+  anchor.addEventListener("mouseleave", () => {
+    if (timer !== null) { clearTimeout(timer); timer = null }
+    tip.classList.remove("visible")
+  })
+
+  return tip
 }

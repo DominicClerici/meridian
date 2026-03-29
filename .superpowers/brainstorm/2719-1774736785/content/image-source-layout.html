@@ -1,0 +1,68 @@
+<h2>Image Source Selection</h2>
+<p class="subtitle">How should the three image source options appear in the Appearance tab?</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Tabbed Sub-Panel</h3>
+      <p>Three small tabs (Search · Daily · Upload) below the Color/Image toggle. Selecting a tab reveals its controls — search shows an input + results grid, daily shows a topic/keyword field, upload shows a file picker. Only one sub-panel visible at a time.</p>
+      <div style="margin-top:12px;padding:16px;border-radius:8px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);font-family:monospace;font-size:12px;line-height:1.8">
+        <div style="color:#888">Background</div>
+        <div style="display:flex;gap:8px;margin:8px 0">
+          <span style="padding:4px 12px;border-radius:4px;background:rgba(255,255,255,0.15);color:#fff">Color</span>
+          <span style="padding:4px 12px;border-radius:4px;background:rgba(96,165,250,0.3);color:#60a5fa;border:1px solid rgba(96,165,250,0.5)">Image</span>
+        </div>
+        <div style="display:flex;gap:4px;margin:12px 0 8px">
+          <span style="padding:2px 10px;border-radius:3px;background:rgba(96,165,250,0.2);color:#60a5fa;font-size:11px;border-bottom:2px solid #60a5fa">Search</span>
+          <span style="padding:2px 10px;border-radius:3px;color:#888;font-size:11px">Daily</span>
+          <span style="padding:2px 10px;border-radius:3px;color:#888;font-size:11px">Upload</span>
+        </div>
+        <div style="padding:8px;border:1px dashed rgba(255,255,255,0.15);border-radius:4px;color:#666;font-size:11px">
+          [ Search input + thumbnail grid here ]
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Dropdown Source Selector</h3>
+      <p>A select dropdown labeled "Source" with options: Unsplash Search, Daily Random, Custom Upload. The controls below the dropdown change based on selection. Compact, familiar pattern — matches the existing select components in settings.</p>
+      <div style="margin-top:12px;padding:16px;border-radius:8px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);font-family:monospace;font-size:12px;line-height:1.8">
+        <div style="color:#888">Background</div>
+        <div style="display:flex;gap:8px;margin:8px 0">
+          <span style="padding:4px 12px;border-radius:4px;color:#888">Color</span>
+          <span style="padding:4px 12px;border-radius:4px;background:rgba(96,165,250,0.3);color:#60a5fa;border:1px solid rgba(96,165,250,0.5)">Image</span>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin:12px 0 8px">
+          <span style="color:#aaa;font-size:11px">Source</span>
+          <span style="padding:4px 12px;border-radius:4px;border:1px solid rgba(255,255,255,0.2);color:#ccc;font-size:11px">Unsplash Search ▾</span>
+        </div>
+        <div style="padding:8px;border:1px dashed rgba(255,255,255,0.15);border-radius:4px;color:#666;font-size:11px">
+          [ Controls for selected source here ]
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Stacked Accordion Sections</h3>
+      <p>Three collapsible accordion sections (like the Widgets tab). Each section has its own controls. The active/selected source gets a visual indicator. User can expand any to browse, but only one source is "active" at a time.</p>
+      <div style="margin-top:12px;padding:16px;border-radius:8px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);font-family:monospace;font-size:12px;line-height:1.8">
+        <div style="color:#888">Background</div>
+        <div style="display:flex;gap:8px;margin:8px 0">
+          <span style="padding:4px 12px;border-radius:4px;color:#888">Color</span>
+          <span style="padding:4px 12px;border-radius:4px;background:rgba(96,165,250,0.3);color:#60a5fa;border:1px solid rgba(96,165,250,0.5)">Image</span>
+        </div>
+        <div style="margin:12px 0 4px;padding:6px 10px;border-radius:4px;background:rgba(96,165,250,0.1);border-left:3px solid #60a5fa;color:#60a5fa;font-size:11px">▼ Unsplash Search — <span style="color:#888">active</span></div>
+        <div style="padding:4px 10px;color:#666;font-size:11px;margin-bottom:4px">  [ search controls ]</div>
+        <div style="padding:6px 10px;border-radius:4px;color:#888;font-size:11px">▶ Daily Random</div>
+        <div style="padding:6px 10px;border-radius:4px;color:#888;font-size:11px">▶ Upload Custom</div>
+      </div>
+    </div>
+  </div>
+</div>

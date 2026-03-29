@@ -62,7 +62,7 @@ function openAddShortcutPopover(anchor: HTMLElement): void {
   btnRow.appendChild(saveBtn)
   container.appendChild(btnRow)
 
-  const { close } = createPopover(anchor, container)
+  const { close } = createPopover(anchor, container, { modal: true })
 
   function submit() {
     const name = (nameInput as HTMLInputElement).value.trim()
@@ -113,6 +113,7 @@ function openCreateFolderPopover(
   container.appendChild(btnRow)
 
   const { close } = createPopover(anchor, container, {
+    modal: true,
     onClose: () => onCancel?.(),
   })
 
@@ -168,7 +169,7 @@ function openEditPopover(anchor: HTMLElement, item: TabItem | Shortcut, inFolder
   btnRow.appendChild(saveBtn)
   container.appendChild(btnRow)
 
-  const { close } = createPopover(anchor, container)
+  const { close } = createPopover(anchor, container, { modal: true })
 
   function submit() {
     const name = (nameInput as HTMLInputElement).value.trim()

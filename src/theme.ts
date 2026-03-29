@@ -1,16 +1,14 @@
 import { store } from "./store"
 import type { SyncSettings } from "./defaults"
+import { ACCENT_COLORS } from "./defaults"
 
 const root = document.documentElement
 
-const ATTR_MAP: Record<string, string> = {
-  theme: "data-theme",
-  accentColor: "data-accent",
-  bgColor: "data-bg",
-}
-
 let mql: MediaQueryList | null = null
 let mqlHandler: (() => void) | null = null
+
+const RANDOM_DATE_KEY = "sp:local:randomAccentDate"
+const RANDOM_COLOR_KEY = "sp:local:randomAccentColor"
 
 function resolveMode(mode: SyncSettings["mode"]): "light" | "dark" {
   if (mode === "auto") {
@@ -35,18 +33,54 @@ function applyMode(mode: SyncSettings["mode"]): void {
   }
 }
 
-export function applyTheme(): void {
-  for (const [storeKey, attr] of Object.entries(ATTR_MAP)) {
-    root.setAttribute(attr, store.sync.get(storeKey as keyof SyncSettings) as string)
+function getRandomAccent(): string {
+  const today = new Date().toDateString()
+  const storedDate = localStorage.getItem(RANDOM_DATE_KEY)
+  const storedColor = localStorage.getItem(RANDOM_COLOR_KEY)
+
+  if (storedDate === today && storedColor && (ACCENT_COLORS as readonly string[]).includes(storedColor)) {
+    return storedColor
   }
+
+  const color = ACCENT_COLORS[Math.floor(Math.random() * ACCENT_COLORS.length)]
+  localStorage.setItem(RANDOM_DATE_KEY, today)
+  localStorage.setItem(RANDOM_COLOR_KEY, color)
+  return color
+}
+
+function resolveAccent(val: string): string {
+  return val === "random" ? getRandomAccent() : val
+}
+
+function resolveBg(val: string): string {
+  if (val === "auto") return resolveAccent(store.sync.get("accentColor"))
+  return val
+}
+
+export function applyTheme(): void {
+  root.setAttribute("data-theme", store.sync.get("theme"))
+  const resolved = resolveAccent(store.sync.get("accentColor"))
+  root.setAttribute("data-accent", resolved)
+  root.setAttribute("data-bg", store.sync.get("bgColor") === "auto" ? resolved : store.sync.get("bgColor"))
   applyMode(store.sync.get("mode"))
 }
 
 export function subscribeTheme(): void {
-  for (const [storeKey, attr] of Object.entries(ATTR_MAP)) {
-    store.sync.subscribe(storeKey as keyof SyncSettings, (val) => {
-      root.setAttribute(attr, val as string)
-    })
-  }
+  store.sync.subscribe("theme", (val) => {
+    root.setAttribute("data-theme", val)
+  })
+
+  store.sync.subscribe("accentColor", (val) => {
+    const resolved = resolveAccent(val)
+    root.setAttribute("data-accent", resolved)
+    if (store.sync.get("bgColor") === "auto") {
+      root.setAttribute("data-bg", resolved)
+    }
+  })
+
+  store.sync.subscribe("bgColor", (val) => {
+    root.setAttribute("data-bg", resolveBg(val))
+  })
+
   store.sync.subscribe("mode", applyMode)
 }

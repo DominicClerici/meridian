@@ -237,6 +237,8 @@ export function initHistoryImport(): void {
   const dialog = document.getElementById("history-import-dialog") as HTMLDialogElement
   const closeBtn = document.getElementById("history-import-close") as HTMLButtonElement
 
+  if (!importBtn) return
+
   importBtn.addEventListener("click", () => openImportDialog())
   closeBtn.addEventListener("click", () => dialog.close())
 }

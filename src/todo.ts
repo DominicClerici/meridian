@@ -20,7 +20,7 @@ import {
   createInput,
 } from "./components"
 
-let openPopover: HTMLElement | null = null
+let openPopoverClose: (() => void) | null = null
 
 function getTodos(): Todo[] {
   return store.local.get("todos")
@@ -58,7 +58,6 @@ function updateBadges(): void {
 
 function todoFormPopover(
   anchor: HTMLElement,
-  parentPopover: HTMLElement,
   title: string,
   prefill?: {
     title?: string
@@ -149,7 +148,6 @@ function todoFormPopover(
     form.appendChild(btnRow)
 
     const popover = createPopover(anchor, form, {
-      parentPopover,
       onClose: () => {
         if (!resolved) resolve(null)
       },
@@ -160,11 +158,7 @@ function todoFormPopover(
 }
 
 function closePopover(): void {
-  if (openPopover) {
-    openPopover.remove()
-    openPopover = null
-  }
-  updateBadges()
+  openPopoverClose?.()
 }
 
 function renderTodoItem(
@@ -219,7 +213,7 @@ function renderTodoItem(
   const editBtn = createButton("", "ghost", {
     icon: icon("edit"),
     onClick: async () => {
-      const result = await todoFormPopover(editBtn, openPopover!, "Edit Todo", {
+      const result = await todoFormPopover(editBtn, "Edit Todo", {
         title: todo.title,
         description: todo.description,
         url: todo.url,
@@ -342,7 +336,7 @@ function showPopover(anchor: HTMLElement): void {
   const addBtn = createButton("", "ghost", {
     icon: icon("plus"),
     onClick: async () => {
-      const result = await todoFormPopover(addBtn, openPopover!, "New Todo")
+      const result = await todoFormPopover(addBtn, "New Todo")
       if (!result) return
       save(addTodo(getTodos(), result))
       rebuildSections()
@@ -424,13 +418,13 @@ function showPopover(anchor: HTMLElement): void {
 
   rebuildSections()
 
-  const { el: popoverEl } = createPopover(anchor, content, {
+  const { close } = createPopover(anchor, content, {
     onClose: () => {
-      openPopover = null
+      openPopoverClose = null
       updateBadges()
     },
   })
-  openPopover = popoverEl
+  openPopoverClose = close
 }
 
 export function initTodo(): void {
@@ -445,7 +439,7 @@ export function initTodo(): void {
 
   trigger.addEventListener("click", (e) => {
     e.stopPropagation()
-    if (openPopover) {
+    if (openPopoverClose) {
       closePopover()
     } else {
       showPopover(trigger)
