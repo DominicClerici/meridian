@@ -6,7 +6,7 @@ import { authenticate as calendarAuthenticate, disconnect as calendarDisconnect 
 import { createAccordion, createButton, createCheckbox, createDialog, createInput, createSelect, createTooltip } from "./components"
 import { icon, getIconSvg } from "./icons/registry"
 import { searchPhotos, TOPICS } from "./unsplash"
-import { setUnsplashPhoto, setUploadedPhoto, clearBackground } from "./background"
+import { setUnsplashPhoto, setUploadedPhoto } from "./background"
 import type { UnsplashPhoto } from "./unsplash"
 
 const TABS = [
@@ -369,7 +369,6 @@ function buildUnsplashAccordion(): { container: HTMLElement; content: HTMLElemen
         try {
           await setUnsplashPhoto(photo)
           store.sync.set("bgType", "image")
-          store.sync.set("bgImageSource", "unsplash")
         } catch {
           // restore on failure
         }
@@ -433,7 +432,6 @@ function buildUploadAccordion(): { container: HTMLElement; content: HTMLElement 
     try {
       await setUploadedPhoto(file)
       store.sync.set("bgType", "image")
-      store.sync.set("bgImageSource", "upload")
     } catch {
       // silently fail
     }

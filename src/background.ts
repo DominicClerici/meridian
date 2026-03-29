@@ -36,7 +36,22 @@ function renderAttribution(meta: BgImageMeta): void {
   el.style.cssText = "position:fixed;bottom:8px;right:8px;font-size:11px;z-index:10;opacity:0.6"
   el.className = "text-page-foreground"
 
-  el.innerHTML = `Photo by <a href="${meta.authorUrl}?utm_source=startpage&utm_medium=referral" target="_blank" rel="noopener" style="text-decoration:underline">${meta.authorName}</a> on <a href="https://unsplash.com/?utm_source=startpage&utm_medium=referral" target="_blank" rel="noopener" style="text-decoration:underline">Unsplash</a>`
+  el.append("Photo by ")
+  const authorLink = document.createElement("a")
+  authorLink.href = `${meta.authorUrl}?utm_source=startpage&utm_medium=referral`
+  authorLink.target = "_blank"
+  authorLink.rel = "noopener"
+  authorLink.style.textDecoration = "underline"
+  authorLink.textContent = meta.authorName
+  el.appendChild(authorLink)
+  el.append(" on ")
+  const unsplashLink = document.createElement("a")
+  unsplashLink.href = "https://unsplash.com/?utm_source=startpage&utm_medium=referral"
+  unsplashLink.target = "_blank"
+  unsplashLink.rel = "noopener"
+  unsplashLink.style.textDecoration = "underline"
+  unsplashLink.textContent = "Unsplash"
+  el.appendChild(unsplashLink)
 
   document.body.appendChild(el)
   attributionEl = el
@@ -90,17 +105,18 @@ export function applyBackground(): void {
   const meta = store.local.get("bgImageMeta")
   if (!meta) return
 
-  loadAndApply()
-
-  if (store.sync.get("unsplashDaily") && isStale(meta.cachedAt)) {
-    refreshDaily()
-  }
+  loadAndApply().then(() => {
+    if (store.sync.get("unsplashDaily") && isStale(meta.cachedAt)) {
+      refreshDaily()
+    }
+  })
 }
 
 export async function setUnsplashPhoto(photo: UnsplashPhoto): Promise<void> {
   const w = window.screen.width
   const h = window.screen.height
-  const imgUrl = `${photo.urls.raw}&w=${w}&h=${h}&fit=crop&auto=format&q=80`
+  const sep = photo.urls.raw.includes("?") ? "&" : "?"
+  const imgUrl = `${photo.urls.raw}${sep}w=${w}&h=${h}&fit=crop&auto=format&q=80`
 
   const res = await fetch(imgUrl)
   if (!res.ok) throw new Error(`Failed to fetch image: ${res.status}`)
