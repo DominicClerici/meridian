@@ -6,7 +6,8 @@ import { authenticate as calendarAuthenticate, disconnect as calendarDisconnect 
 import { createAccordion, createButton, createCheckbox, createDialog, createInput, createSelect, createTooltip } from "./components"
 import { icon, getIconSvg } from "./icons/registry"
 import { searchPhotos, TOPICS } from "./unsplash"
-import { setUnsplashPhoto, setUploadedPhoto } from "./background"
+import { setUnsplashPhoto, setUploadedPhoto, switchToColor, reapplyUpload, refreshDailyNow } from "./background"
+import { idbGet } from "./idb"
 import type { UnsplashPhoto } from "./unsplash"
 
 const TABS = [
@@ -261,44 +262,24 @@ function buildModeSelector(): HTMLElement {
   return container
 }
 
-function buildBgTypeSelector(): HTMLElement {
-  const container = document.createElement("div")
-  container.className = "flex gap-2"
+function buildColorAccordion(): { container: HTMLElement; content: HTMLElement } {
+  const acc = createAccordion("Color", { variant: "settings", defaultOpen: true })
+  const swatches = buildSwatchGroup("bgColor")
 
-  const types: ["color", "image"] = ["color", "image"]
-  const buttons: HTMLButtonElement[] = []
-
-  for (const type of types) {
-    const btn = createButton(type.charAt(0).toUpperCase() + type.slice(1), "override", {
-      icon: type === "image" ? icon("bgImage") : undefined,
-    })
-    btn.className += " flex-1 justify-center py-2 border rounded-theme transition-colors"
-
+  for (const btn of swatches.querySelectorAll("button") as NodeListOf<HTMLButtonElement>) {
     btn.addEventListener("click", () => {
-      store.sync.set("bgType", type)
+      if (store.sync.get("bgSource") !== "color") {
+        switchToColor()
+      }
     })
-
-    buttons.push(btn)
-    container.appendChild(btn)
   }
 
-  function updateSelected(val: string): void {
-    for (let i = 0; i < types.length; i++) {
-      const isSelected = types[i] === val
-      buttons[i].style.background = isSelected ? "var(--accent)" : "transparent"
-      buttons[i].style.color = isSelected ? "var(--accent-foreground)" : "var(--accent)"
-      buttons[i].style.borderColor = "var(--accent)"
-    }
-  }
-
-  updateSelected(store.sync.get("bgType"))
-  store.sync.subscribe("bgType", updateSelected)
-
-  return container
+  acc.content.appendChild(swatches)
+  return acc
 }
 
 function buildUnsplashAccordion(): { container: HTMLElement; content: HTMLElement } {
-  const acc = createAccordion("Unsplash", { variant: "settings", defaultOpen: true })
+  const acc = createAccordion("Unsplash", { variant: "settings", defaultOpen: false })
 
   const hasKey = (): boolean => store.sync.get("unsplashApiKey") !== ""
 
@@ -309,27 +290,57 @@ function buildUnsplashAccordion(): { container: HTMLElement; content: HTMLElemen
   const controls = document.createElement("div")
   controls.className = "flex flex-col gap-3"
 
-  // --- Daily row ---
   const dailyRow = document.createElement("div")
-  dailyRow.className = "flex items-center justify-between"
+  dailyRow.className = "flex items-center gap-2"
 
-  const dailyCheck = createCheckbox("Refresh daily", store.sync.get("unsplashDaily"), (v) => {
+  const dailyCheck = createCheckbox("", store.sync.get("unsplashDaily"), (v) => {
     store.sync.set("unsplashDaily", v)
-    updateSearchDisabled()
+    updateDailyState()
+    if (v) {
+      const meta = store.local.get("bgUnsplashMeta")
+      if (!meta || isStale(meta.cachedAt)) {
+        refreshDailyNow().catch(() => {})
+      } else {
+        store.sync.set("bgSource", "unsplash")
+      }
+    }
   })
   dailyRow.appendChild(dailyCheck)
+
+  const dailyLabel = document.createElement("span")
+  dailyLabel.className = "text-sm font-medium text-foreground"
+  dailyLabel.textContent = "Refresh daily"
+  dailyRow.appendChild(dailyLabel)
+
+  const fromLabel = document.createElement("span")
+  fromLabel.className = "text-xs text-accent"
+  fromLabel.textContent = "from"
+  dailyRow.appendChild(fromLabel)
 
   const topicSelect = createSelect({
     options: TOPICS.map((t) => ({ value: t.slug, label: t.label })),
     value: store.sync.get("unsplashTopic"),
-    onChange: (v) => store.sync.set("unsplashTopic", v),
-    width: "140px",
+    onChange: (v) => {
+      store.sync.set("unsplashTopic", v)
+      if (store.sync.get("unsplashDaily")) {
+        refreshDailyNow().catch(() => {})
+      }
+    },
+    width: "120px",
   })
   dailyRow.appendChild(topicSelect)
 
+  const spacer = document.createElement("div")
+  spacer.className = "flex-1"
+  dailyRow.appendChild(spacer)
+
+  const refreshBtn = createButton("Refresh", "ghost", {
+    onClick: () => { refreshDailyNow().catch(() => {}) },
+  })
+  dailyRow.appendChild(refreshBtn)
+
   controls.appendChild(dailyRow)
 
-  // --- Search area ---
   const searchArea = document.createElement("div")
   searchArea.className = "flex flex-col gap-2 transition-opacity"
 
@@ -368,7 +379,6 @@ function buildUnsplashAccordion(): { container: HTMLElement; content: HTMLElemen
         thumb.style.pointerEvents = "none"
         try {
           await setUnsplashPhoto(photo)
-          store.sync.set("bgType", "image")
         } catch {
           // restore on failure
         }
@@ -382,14 +392,20 @@ function buildUnsplashAccordion(): { container: HTMLElement; content: HTMLElemen
 
   controls.appendChild(searchArea)
 
-  function updateSearchDisabled(): void {
+  function isStale(cachedAt: number): boolean {
+    return new Date(cachedAt).toDateString() !== new Date().toDateString()
+  }
+
+  function updateDailyState(): void {
     const daily = store.sync.get("unsplashDaily")
     searchArea.style.opacity = daily ? "0.4" : ""
     searchArea.style.pointerEvents = daily ? "none" : ""
     topicSelect.style.opacity = daily ? "" : "0.4"
     topicSelect.style.pointerEvents = daily ? "" : "none"
+    refreshBtn.style.opacity = daily ? "" : "0.4"
+    refreshBtn.style.pointerEvents = daily ? "" : "none"
   }
-  updateSearchDisabled()
+  updateDailyState()
 
   function updateVisibility(): void {
     const key = hasKey()
@@ -400,7 +416,7 @@ function buildUnsplashAccordion(): { container: HTMLElement; content: HTMLElemen
   store.sync.subscribe("unsplashApiKey", () => updateVisibility())
   store.sync.subscribe("unsplashDaily", (v) => {
     (dailyCheck as any).setChecked(v)
-    updateSearchDisabled()
+    updateDailyState()
   })
   store.sync.subscribe("unsplashTopic", (v) => { topicSelect.value = v })
 
@@ -431,7 +447,7 @@ function buildUploadAccordion(): { container: HTMLElement; content: HTMLElement 
     fileBtn.disabled = true
     try {
       await setUploadedPhoto(file)
-      store.sync.set("bgType", "image")
+      loadPreview()
     } catch {
       // silently fail
     }
@@ -442,6 +458,24 @@ function buildUploadAccordion(): { container: HTMLElement; content: HTMLElement 
 
   acc.content.appendChild(fileBtn)
   acc.content.appendChild(fileInput)
+
+  const preview = document.createElement("button")
+  preview.className = "w-20 aspect-[16/10] rounded overflow-hidden cursor-pointer hover:ring-2 hover:ring-accent transition-all mt-2"
+  preview.hidden = true
+  preview.addEventListener("click", () => { reapplyUpload() })
+  acc.content.appendChild(preview)
+
+  function loadPreview(): void {
+    const meta = store.local.get("bgUploadMeta")
+    if (!meta) { preview.hidden = true; return }
+    idbGet("upload").then((blob) => {
+      if (!blob) { preview.hidden = true; return }
+      const url = URL.createObjectURL(blob)
+      preview.style.background = `url(${url}) center/cover`
+      preview.hidden = false
+    })
+  }
+  loadPreview()
 
   const note = document.createElement("p")
   note.className = "text-xs text-muted mt-1"
@@ -483,60 +517,43 @@ function buildAppearanceTab(): void {
   panel.appendChild(themeRow)
 
   panel.appendChild(section("Accent Color", buildSwatchGroup("accentColor")))
+  panel.appendChild(section("Mode", buildModeSelector()))
 
-  // --- Background section ---
   const bgWrapper = document.createElement("div")
-  bgWrapper.className = "flex flex-col gap-3"
+  bgWrapper.className = "flex flex-col gap-0"
 
   const bgLabel = document.createElement("span")
-  bgLabel.className = "text-muted text-xs font-medium"
+  bgLabel.className = "text-muted text-xs font-medium mb-3"
   bgLabel.textContent = "Background"
   bgWrapper.appendChild(bgLabel)
 
-  bgWrapper.appendChild(buildBgTypeSelector())
-
-  // Color swatches (shown when bgType is "color")
-  const colorSection = document.createElement("div")
-  colorSection.appendChild(buildSwatchGroup("bgColor"))
-
-  // Image controls (shown when bgType is "image")
-  const imageSection = document.createElement("div")
-  imageSection.className = "flex flex-col gap-0"
-
+  const colorAcc = buildColorAccordion()
   const unsplashAcc = buildUnsplashAccordion()
   const uploadAcc = buildUploadAccordion()
 
+  bgWrapper.appendChild(colorAcc.container)
+  bgWrapper.appendChild(unsplashAcc.container)
+  bgWrapper.appendChild(uploadAcc.container)
+
   function updateActiveIndicator(): void {
-    const source = store.sync.get("bgImageSource")
-    const unsplashTrigger = unsplashAcc.container.querySelector("button") as HTMLElement
-    const uploadTrigger = uploadAcc.container.querySelector("button") as HTMLElement
-    if (unsplashTrigger) {
-      unsplashTrigger.style.borderLeft = source === "unsplash" ? "3px solid var(--accent)" : ""
-      unsplashTrigger.style.paddingLeft = source === "unsplash" ? "21px" : ""
-    }
-    if (uploadTrigger) {
-      uploadTrigger.style.borderLeft = source === "upload" ? "3px solid var(--accent)" : ""
-      uploadTrigger.style.paddingLeft = source === "upload" ? "21px" : ""
+    const source = store.sync.get("bgSource")
+    const accMap: [string, { container: HTMLElement }][] = [
+      ["color", colorAcc],
+      ["unsplash", unsplashAcc],
+      ["upload", uploadAcc],
+    ]
+    for (const [key, acc] of accMap) {
+      const trigger = acc.container.querySelector("button") as HTMLElement
+      if (!trigger) continue
+      trigger.style.borderLeft = source === key ? "3px solid var(--accent)" : ""
+      trigger.style.paddingLeft = source === key ? "21px" : ""
     }
   }
 
-  imageSection.appendChild(unsplashAcc.container)
-  imageSection.appendChild(uploadAcc.container)
   updateActiveIndicator()
-  store.sync.subscribe("bgImageSource", () => updateActiveIndicator())
-
-  bgWrapper.appendChild(colorSection)
-  bgWrapper.appendChild(imageSection)
-
-  function updateBgType(val: string): void {
-    colorSection.hidden = val !== "color"
-    imageSection.hidden = val !== "image"
-  }
-  updateBgType(store.sync.get("bgType"))
-  store.sync.subscribe("bgType", updateBgType)
+  store.sync.subscribe("bgSource", () => updateActiveIndicator())
 
   panel.appendChild(bgWrapper)
-  panel.appendChild(section("Mode", buildModeSelector()))
 }
 
 function createSpotifyButton(onClick: () => void): HTMLButtonElement {
