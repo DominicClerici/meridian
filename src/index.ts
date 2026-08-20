@@ -3,6 +3,7 @@ import { store } from "./store"
 import { icon } from "./icons/registry"
 import { applyTheme, subscribeTheme } from "./theme"
 import { applyBackground, subscribeBackground } from "./background"
+import { applyLayout, subscribeLayout } from "./layout"
 import { initSettings } from "./settings"
 import { initDock } from "./dock"
 import { initShortcutSettings } from "./shortcut-settings"
@@ -19,6 +20,8 @@ applyTheme()
 subscribeTheme()
 applyBackground()
 subscribeBackground()
+applyLayout()
+subscribeLayout()
 
 document.getElementById("settings-open")!.prepend(icon("settings", { size: 24 }))
 document.getElementById("todo-trigger")!.prepend(icon("todoList", { size: 24 }))

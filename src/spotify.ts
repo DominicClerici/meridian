@@ -1,4 +1,5 @@
 import { store } from "./store"
+import { getLayout, refreshCard, refreshCards, registerCard } from "./layout"
 import { getIconSvg } from "./icons/registry"
 
 const CLIENT_ID = "acd29601607e4e1c8896ab4c1ab534d7"
@@ -310,6 +311,7 @@ function setupVisibilityHandler(): void {
 }
 
 let cardEl: HTMLElement | null = null
+let cardVisible = false
 let controlsDisabled = false
 let loadingAction: string | null = null
 
@@ -331,22 +333,17 @@ function btnIcon(action: string, isPlaying: boolean): string {
   }
 }
 
-function renderCard(): void {
-  if (!store.sync.get("spotifyEnabled") || !currentPlayerState) {
-    if (cardEl) {
-      cardEl.remove()
-      cardEl = null
-    }
-    return
-  }
+/**
+ * The now-playing row (art, track, controls). Shared by the floating card in the
+ * immersive layout and the grid card in the others.
+ */
+export function buildSpotifyBody(): HTMLElement {
+  const body = document.createElement("div")
+  body.className = "flex gap-3 items-center min-w-0"
 
-  const isNew = !cardEl
-  if (isNew) {
-    cardEl = document.createElement("div")
-    cardEl.className =
-      "fixed bottom-4 right-4 w-[320px] z-50 bg-page-overlay/70 backdrop-blur-sm text-page-foreground rounded-xl p-3 flex gap-3 items-center shadow-lg"
-    cardEl.addEventListener("click", handleControlClick)
-    document.body.appendChild(cardEl)
+  if (!currentPlayerState) {
+    body.innerHTML = `<div class="text-sm opacity-60">Nothing playing</div>`
+    return body
   }
 
   const { track, isPlaying } = currentPlayerState
@@ -373,17 +370,65 @@ function renderCard(): void {
       </div>`
     : ""
 
-  cardEl!.innerHTML = `
+  body.innerHTML = `
     ${albumHtml}
     <div class="min-w-0 flex-1">
       <div class="text-sm font-medium truncate">${escapeHtml(track.name)}</div>
-      <div class="text-xs text-page-foreground/70 truncate">${escapeHtml(
-        track.artists
-      )}</div>
+      <div class="text-xs opacity-70 truncate">${escapeHtml(track.artists)}</div>
       ${controlsHtml}
     </div>
   `
+  body.addEventListener("click", handleControlClick)
+  return body
 }
+
+function removeFloatingCard(): void {
+  if (cardEl) {
+    cardEl.remove()
+    cardEl = null
+  }
+}
+
+function renderCard(): void {
+  const shouldShow =
+    store.sync.get("spotifyEnabled") && currentPlayerState !== null
+
+  if (getLayout() !== "immersive") {
+    removeFloatingCard()
+    if (shouldShow !== cardVisible) {
+      cardVisible = shouldShow
+      refreshCards()
+    } else {
+      refreshCard("spotify")
+    }
+    return
+  }
+
+  cardVisible = shouldShow
+  if (!shouldShow) {
+    removeFloatingCard()
+    return
+  }
+
+  if (!cardEl) {
+    cardEl = document.createElement("div")
+    cardEl.className =
+      "fixed bottom-4 right-4 w-[320px] z-50 bg-page-overlay/70 backdrop-blur-sm text-page-foreground rounded-xl p-3 shadow-lg"
+    document.body.appendChild(cardEl)
+  }
+
+  cardEl.replaceChildren(buildSpotifyBody())
+}
+
+registerCard({
+  id: "spotify",
+  title: "Now Playing",
+  order: 50,
+  regions: { default: "grid", dashboard: "side" },
+  enabledKey: "spotifyEnabled",
+  isEnabled: () => currentPlayerState !== null,
+  render: buildSpotifyBody,
+})
 
 async function handleControlClick(e: MouseEvent): Promise<void> {
   const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(
@@ -424,6 +469,8 @@ async function handleControlClick(e: MouseEvent): Promise<void> {
 
 export function initSpotify(): void {
   setupVisibilityHandler()
+
+  store.sync.subscribe("layout", () => renderCard())
 
   store.sync.subscribe("spotifyEnabled", (enabled) => {
     if (enabled && store.local.get("spotifyAccessToken")) {

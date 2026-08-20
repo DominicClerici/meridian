@@ -13,12 +13,16 @@ Everything happens in `src/index.ts:1`. `dist/index.js` is loaded by a `<script>
 3. `subscribeTheme()` — re-applies those attributes when the settings change.
 4. `applyBackground()` — applies the background image (Unsplash or upload) from IndexedDB, or starts the animated mesh gradient for the `color` source. See [backgrounds.md](backgrounds.md).
 5. `subscribeBackground()`.
-6. Two icons are prepended into the static shell: `#settings-open` gets `settings`, `#todo-trigger` gets `todoList`.
+6. `applyLayout()` — reads `layout` from the store, stamps `data-layout` onto `<html>`, builds that mode's frame into `#layout-stage`, moves the shared singletons (search, clock, dock, widget triggers) into their slots, and mounts the widget cards. Runs here, before first paint, so the layout doesn't flash. See [layouts.md](layouts.md).
+7. `subscribeLayout()` — runs the fade-out / pause / fade-in switch when `layout` changes.
+8. Two icons are prepended into the static shell: `#settings-open` gets `settings`, `#todo-trigger` gets `todoList`.
+
+Card registration happens even earlier: `registerCard()` runs in the module bodies of `clock.ts`, `weather.ts`, `todo.ts`, `spotify.ts`, and `calendar.ts`, which ES module evaluation runs before `index.ts`'s own body — so the registry is complete by the time `applyLayout()` builds the first frame.
 
 **Phase 2 — `DOMContentLoaded`, async**
 
-7. `await store.init()` — reconciles the in-memory cache against `browser.storage` and registers the cross-tab listener. Everything after this point sees authoritative values. See [storage.md](storage.md).
-8. The `initX()` calls, **in this order**:
+9. `await store.init()` — reconciles the in-memory cache against `browser.storage` and registers the cross-tab listener. Everything after this point sees authoritative values. See [storage.md](storage.md).
+10. The `initX()` calls, **in this order**:
 
    ```
    initSettings()          creates the settings dialog + all its panels
@@ -64,10 +68,12 @@ There is no teardown path and no re-init. Modules keep their state in module-lev
         ┌──────────┬──────────┼───────────┬────────────┬─────────────┐
         │          │          │           │            │             │
      theme.ts  icons/     components.ts  search.ts  background.ts  feature
-               registry.ts     │            │        + unsplash.ts  modules
-                    ▲          │            │        + idb.ts
-                    │          │            │        + mesh-bg.ts → color.ts
-                    └──────────┘            │
+               registry.ts     │  ▲         │        + unsplash.ts  modules
+                    ▲          │  │         │        + idb.ts          │
+                    │          │  │         │        + mesh-bg.ts → color.ts
+                    └──────────┘  │         │                          │
+                              layout.ts ◄───┼──────────────────────────┘
+                                            │       (widgets register cards)
                                    ┌────────┴────────┐
                           provider-engine    provider-shortcuts
 ```
@@ -84,6 +90,7 @@ Feature modules and what they pull in beyond `store`:
 | `todo.ts` | `components`, `icons/registry`, `todos` |
 | `weather.ts`, `calendar.ts`, `spotify.ts` | `components`, `icons/registry` |
 | `history-import.ts` | `shortcuts` |
+| `layout.ts` | `components` only — it knows nothing about any widget; widgets register themselves |
 | `background.ts` | `unsplash`, `idb`, `mesh-bg`, `defaults` |
 | `mesh-bg.ts` | `color` only — no store; it reads the resolved `--page-bg` off `<html>` |
 
@@ -95,20 +102,23 @@ Notable shapes:
 
 ## DOM ownership
 
-`src/index.html` is a thin static shell (128 lines). Most of the UI — the entire settings dialog, every popover, every dock item — is constructed in JavaScript at runtime.
+`src/index.html` is a thin static shell. Most of the UI — the entire settings dialog, every popover, every dock item, and all three layout frames — is constructed in JavaScript at runtime.
+
+The shell holds **no positioning**. Every element that a layout places lives inside `#layout-parking` with only its intrinsic classes; `layout.ts` moves it into the current frame and applies the positional classes. `#layout-stage` is the fixed, full-viewport container the frames are built into, and the thing that fades during a switch. See [layouts.md](layouts.md).
 
 ### Static shell → owning module
 
 | Element | Created in | Owned by |
 |---|---|---|
-| `#settings-open` | `index.html` | icon by `index.ts`, click handler by `settings.ts:1400` |
+| `#layout-stage`, `#layout-parking` | `index.html` | `layout.ts` |
+| `#settings-open` | `index.html` | icon by `index.ts`, click handler by `settings.ts` — fixed chrome, outside the stage so it never fades |
 | `#widgets` | `index.html` | container only; children owned individually |
 | `#calendar-trigger` | `index.html` | `calendar.ts` |
 | `#weather-trigger` | `index.html` | `weather.ts` |
 | `#todo-trigger`, `#todo-badge-count`, `#todo-badge-overdue` | `index.html` | icon by `index.ts`, rest by `todo.ts` |
-| `#search-wrapper`, `#search-input`, `#search-results` | `index.html` | `search.ts` |
-| `#clock` | `index.html` | `clock.ts` |
-| `#dock-wrapper`, `#dock`, `#dock-scroll`, `#dock-suggestions`, `#dock-divider`, `#dock-items`, `#dock-tabs` | `index.html` | `dock.ts` |
+| `#search-wrapper`, `#search-input`, `#search-results` | `index.html` | `search.ts`; positioned by `layout.ts` |
+| `#clock` | `index.html` | `clock.ts`; positioned by `layout.ts`, adopted into a card in Dashboard |
+| `#dock-wrapper`, `#dock`, `#dock-scroll`, `#dock-suggestions`, `#dock-divider`, `#dock-items`, `#dock-tabs` | `index.html` | `dock.ts`; positioned by `layout.ts` |
 | `#history-import-dialog` and children | `index.html` | `history-import.ts` — **currently unreachable** |
 
 ### Runtime-created
@@ -116,6 +126,8 @@ Notable shapes:
 | Element | Created in | Consumed by |
 |---|---|---|
 | `#mesh-bg` | `mesh-bg.ts` `startMesh()` — inserted as `<body>`'s first child | `mesh-bg.ts` only |
+| Layout frames and their `[data-region]` containers | `layout.ts` frame builders | `layout.ts` |
+| `[data-card]` widget cards | `layout.ts` `mountCards()` via `createCard()` | body from the widget's `render()` |
 | `#bg-attribution` | `background.ts` `renderAttribution()` | `background.ts` only |
 | `#settings-dialog` | `settings.ts:1333` via `createDialog()` | `settings.ts` |
 | `#settings-nav`, `#settings-title`, `#settings-panels` | `settings.ts:1339`–`1372` | `settings.ts` |
@@ -180,8 +192,6 @@ No background service worker and no content scripts — the commented-out `cp sr
 
 - **`initHistoryImport()` is dead.** It looks up `#sc-import-history` (`history-import.ts:236`) and early-returns when absent — and nothing creates that button; `renderControlBar()` in `shortcut-settings.ts:723` has no import control. `#sc-tab-select` (`history-import.ts:123`) is likewise gone. So `#history-import-dialog` in `index.html:96` is orphaned markup and the entire 244-line module is unreachable. Either restore the entry point or delete the feature.
 - **`squircle.ts` has no call sites.** 159 lines of correct, carefully documented geometry that nothing imports. Either use it where `corner-shape` can't reach (SVG, canvas, masks) or drop it.
-- **`index.html:16` is a self-closing `<div style="height: 100vh; width: 100vw" />`.** HTML has no self-closing divs — the parser treats it as an open tag, so `#app` and everything after it nests *inside* it. It works by accident. Delete it or close it properly.
-- **Fonts are loaded twice.** `index.html:10` pulls Red Hat Mono from Google Fonts over the network on every new tab, while `styles.css:715` already declares `@font-face` rules for the same family from bundled `.ttf` files. Drop the remote `<link>`.
 - **Cross-module DOM handoff by ID string.** `settings.ts` builds `#sc-*` containers that `shortcut-settings.ts` queries with `!`. Nothing catches a rename. Passing the elements as arguments to `initShortcutSettings(tabBar, itemList, controlBar)` would make the dependency explicit and typed.
-- **No teardown.** Every `subscribe()` returns an unsubscribe function; none of the feature modules keep it. Fine for a page that never unmounts, but it means no module can be re-initialized.
+- **No teardown.** Every `subscribe()` returns an unsubscribe function; none of the feature modules keep it. Layout switching is built around that fact — it moves existing elements rather than rebuilding them — but it still means no module can be re-initialized.
 - **`settings.ts` reaches into five subsystems.** At 1420 lines it mixes dialog chrome, tab layout, and per-feature control logic. Splitting each `buildXTab()` into the feature module it configures would cut most of the import graph's coupling.

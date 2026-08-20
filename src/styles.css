@@ -274,6 +274,87 @@
   white-space: nowrap;
 }
 
+/* Layout stage + widget cards */
+
+.layout-stage {
+  opacity: 1;
+  transition: opacity 250ms ease;
+}
+
+.layout-stage.is-fading {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .layout-stage {
+    transition: none;
+  }
+}
+
+/* Cards are the popover surface in card form: the popover palette is dark in
+   both modes, so widget bodies extracted from popovers render identically in a
+   card without restyling. */
+[data-theme="modern"] .widget-card {
+  background: var(--popover);
+  color: var(--popover-foreground);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  backdrop-filter: blur(16px) saturate(180%);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.12),
+    0 2px 8px rgba(0, 0, 0, 0.06),
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.08);
+}
+
+[data-theme="modern"] .widget-card ::-webkit-scrollbar {
+  width: 4px;
+}
+
+[data-theme="modern"] .widget-card ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+[data-theme="modern"] .widget-card ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 2px;
+}
+
+/* Layout picker previews (settings > appearance) */
+
+.layout-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  height: 34px;
+  padding: 3px;
+  border-radius: calc(var(--radius-xs) * 1.2);
+  background: color-mix(in srgb, currentColor 8%, transparent);
+}
+
+.layout-preview span {
+  display: block;
+  border-radius: 1px;
+  background: currentColor;
+  opacity: 0.55;
+}
+
+.layout-preview .lp-row {
+  display: flex;
+  gap: 2px;
+  flex: 1;
+}
+
+.layout-preview .lp-bar {
+  height: 5px;
+  flex: 0 0 auto;
+  opacity: 0.9;
+}
+
+.layout-preview .lp-fill {
+  flex: 1;
+}
+
 @keyframes popover-in {
   from {
     opacity: 0;

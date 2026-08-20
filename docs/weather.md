@@ -63,14 +63,14 @@ Colors come from `var(--accent)` inside SVG attributes, so the chart follows the
 
 `formatHour()` respects the **clock's** `clock24Hour` setting rather than having its own.
 
-The popover shows the chart when hourly data exists, and falls back to a single line of text (`⛅ 72°F · Partly cloudy`) when it doesn't.
+`buildWeatherBody()` shows the chart when hourly data exists, and falls back to a single line of text (`⛅ 72°F · Partly cloudy`) when it doesn't; before either it renders the current state (a settings link for `no-permission`, a retry button for `error`). The immersive popover wraps it at 280px, and the card in the other layouts hosts the same builder — `renderTrigger()` calls `refreshCard("weather")`, so both stay current. See [layouts.md](layouts.md).
 
 ## Refactor candidates
 
 - **Weather codes map to emoji.** `WEATHER_MAP` renders ☀️ 🌤️ ⛅ ☁️ straight into `innerHTML`, so the widget's visual identity is whatever the OS emoji font decides — inconsistent across platforms and unstylable. Every other icon in the app goes through the theme-aware registry ([design-system.md](design-system.md#icons)).
 - **The trigger is built with `innerHTML` string concatenation** (`weather.ts:481`) interpolating live API values. `condition` is from a fixed local map so it's not injectable today, but it's the one place in this file that writes unescaped data into markup.
 - **Error state is a dead end.** `renderTrigger` shows a refresh icon, but the click handler only acts on `loaded` and `no-permission` — clicking the refresh icon does nothing. Calendar handles the same state by retrying.
-- **The gradient uses a fixed `id="wg"`.** Two charts on the page would collide; harmless today because only one popover is ever open.
+- **The gradient uses a fixed `id="wg"`.** Two charts on the page would collide; harmless today because only one weather body — popover or card — exists at a time.
 - **Cooldown and interval logic is duplicated from `calendar.ts`** almost line for line — see [widgets.md](widgets.md#refactor-candidates).
 - **The refresh interval runs in hidden tabs.** Every open new tab polls Open-Meteo every 5 minutes forever.
 - **Hourly data is fetched for a fixed 25-hour window** with `currentIndex` hard-coded to 12, so any change to `past_hours` silently breaks the marker.

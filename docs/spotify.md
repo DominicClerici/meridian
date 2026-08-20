@@ -2,7 +2,7 @@
 
 **File:** `src/spotify.ts` (462 lines). **API:** Spotify Web API. **Auth:** OAuth 2.0 with PKCE, entirely in the browser — no backend.
 
-The one widget with no trigger button: when something is playing it renders a fixed card in the bottom-right corner, and when nothing is it renders nothing at all.
+The one widget with no trigger button: when something is playing it renders a card — floating bottom-right in the Immersive layout, in the grid elsewhere — and when nothing is playing it renders nothing at all.
 
 ## Auth
 
@@ -39,7 +39,9 @@ Every step returns `false` on failure and swallows the error, so the connect but
 
 ## The card
 
-Created lazily on the first render with content, removed entirely when there's nothing playing or the widget is disabled. Fixed bottom-right, 320px, `bg-page-overlay/70` with a backdrop blur: 80px album art, track name, artists, and — for premium — previous / play-pause / next.
+`buildSpotifyBody()` renders the row itself: 80px album art, track name, artists, and — for premium — previous / play-pause / next.
+
+Where that row goes depends on the [layout](layouts.md). In **Immersive** it goes in the floating card `renderCard()` creates lazily on the first render with content and removes when there's nothing playing or the widget is disabled — fixed bottom-right, 320px, `bg-page-overlay/70` with a backdrop blur. In the other layouts there is no floating card; the same body is mounted as a registered card, gated on `currentPlayerState !== null`. `renderCard()` branches on `getLayout()` and `initSpotify()` subscribes to `layout`, so a switch moves the player without a reload.
 
 Rendered by assigning a template string to `innerHTML`. Track name and artists are run through `escapeHtml()` (`spotify.ts:316`) first, using the textContent-then-read-innerHTML trick. The album art URL is **not** escaped, and is interpolated straight into a `src` attribute.
 
@@ -50,11 +52,11 @@ Rendered by assigning a template string to `innerHTML`. Track name and artists a
 ## Refactor candidates
 
 - **Album art is interpolated into `src` unescaped** (`spotify.ts:356`) while the adjacent text fields are escaped. The URL comes from the Spotify API so it isn't an attack path in practice, but the inconsistency is exactly the kind that survives a refactor and stops being true.
-- **The whole card is `innerHTML` string templating.** Every other widget builds DOM with `createElement`. Rebuilding the entire card every 5 seconds also destroys and recreates the `<img>`, which is why album art can flicker.
+- **The whole body is `innerHTML` string templating.** Every other widget builds DOM with `createElement`. Rebuilding the entire card every 5 seconds also destroys and recreates the `<img>`, which is why album art can flicker.
 - **`isPremium` defaults to `true`.** If `/me` fails, a free account sees transport buttons that silently do nothing.
 - **`checkPremium()` runs once per connect** and is never rechecked, so upgrading or downgrading an account needs a reconnect.
 - **Polling only — no push.** Five seconds of latency on every state change, and a request every five seconds even when nothing is playing.
-- **The card can't be dismissed or moved.** It's fixed bottom-right with `z-50`, on top of whatever is there.
+- **The floating card can't be dismissed or moved.** In Immersive it's fixed bottom-right with `z-50`, on top of whatever is there.
 - **Failures are entirely silent.** `authenticate()` has five separate `return false` paths and none of them distinguishes "user cancelled" from "network down" from "token exchange rejected"; the settings button just reverts to "Connect Spotify".
 - **`retryAfterUntil` gates `fetchPlayerState` but not the control calls**, so pressing next during a rate-limit window still fires a request.
 - **No error state in the UI.** Weather and calendar both have one; here a failure is indistinguishable from nothing playing.

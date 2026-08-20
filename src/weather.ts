@@ -1,6 +1,7 @@
 import { store } from "./store"
 import { icon } from "./icons/registry"
-import { createPopover } from "./components"
+import { createButton, createPopover } from "./components"
+import { refreshCard, registerCard } from "./layout"
 
 type WeatherData = {
   temperature: number
@@ -416,11 +417,48 @@ function closePopover(): void {
   }
 }
 
-function showWeatherPopover(anchor: HTMLElement): void {
-  closePopover()
-
+/**
+ * The widget's content, independent of where it is shown: the hourly chart when
+ * hourly data is cached, otherwise a one-line summary or the current state.
+ * Shared by the immersive popover and the card in the other layouts.
+ */
+export function buildWeatherBody(): HTMLElement {
   const content = document.createElement("div")
-  content.className = "flex flex-col w-[280px]"
+  content.className = "flex flex-col gap-2 text-popover-foreground"
+
+  if (currentState === "no-permission") {
+    const p = document.createElement("p")
+    p.className = "text-sm text-popover-foreground/70"
+    p.textContent = "Location access is off."
+    content.appendChild(p)
+    const btn = createButton("Open settings", "outline", {
+      onClick: () => {
+        const dialog = document.getElementById("settings-dialog") as HTMLDialogElement | null
+        dialog?.showModal()
+      },
+    })
+    btn.className += " self-start"
+    content.appendChild(btn)
+    return content
+  }
+
+  if (currentState === "loading" && !currentData) {
+    const p = document.createElement("p")
+    p.className = "text-sm text-popover-foreground/60"
+    p.textContent = "Loading\u2026"
+    content.appendChild(p)
+    return content
+  }
+
+  if (currentState === "error" && !currentData) {
+    const btn = createButton("Retry", "outline", {
+      icon: icon("refresh"),
+      onClick: () => fetchWeather(),
+    })
+    btn.className += " self-start"
+    content.appendChild(btn)
+    return content
+  }
 
   const cached = hourlyCache ?? getCachedHourly()
   if (cached) {
@@ -435,6 +473,16 @@ function showWeatherPopover(anchor: HTMLElement): void {
     content.appendChild(p)
   }
 
+  return content
+}
+
+function showWeatherPopover(anchor: HTMLElement): void {
+  closePopover()
+
+  const content = document.createElement("div")
+  content.className = "flex flex-col w-[280px]"
+  content.appendChild(buildWeatherBody())
+
   const { close } = createPopover(anchor, content, {
     onClose: () => {
       openPopoverClose = null
@@ -444,6 +492,7 @@ function showWeatherPopover(anchor: HTMLElement): void {
 }
 
 function renderTrigger(): void {
+  refreshCard("weather")
   const trigger = document.getElementById(
     "weather-trigger"
   ) as HTMLButtonElement
@@ -546,3 +595,12 @@ function stopRefreshInterval(): void {
     refreshIntervalId = null
   }
 }
+
+registerCard({
+  id: "weather",
+  title: "Weather",
+  order: 20,
+  regions: { default: "grid", dashboard: "top" },
+  enabledKey: "weatherEnabled",
+  render: buildWeatherBody,
+})

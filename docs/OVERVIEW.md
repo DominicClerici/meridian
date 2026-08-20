@@ -4,7 +4,7 @@ The documentation map for this project. Start here, then follow the link to the 
 
 ## What this is
 
-A Chrome extension (Manifest V3) that replaces the new tab page with a custom startpage: a shortcut dock, a search bar, and a set of widgets (clock, todo, weather, Spotify, Google Calendar). Vanilla TypeScript, no frameworks, no runtime dependencies, no `node_modules` — the build is two standalone binaries in `bin/` driven by `build.sh`.
+A Chrome extension (Manifest V3) that replaces the new tab page with a custom startpage: a shortcut dock, a search bar, and a set of widgets (clock, todo, weather, Spotify, Google Calendar), arranged by one of three view modes. Vanilla TypeScript, no frameworks, no runtime dependencies, no `node_modules` — the build is two standalone binaries in `bin/` driven by `build.sh`.
 
 Everything renders into one page (`src/index.html`) from one bundle (`dist/index.js`). Modules are wired together by `src/index.ts`, which calls each subsystem's `initX()` once on `DOMContentLoaded`.
 
@@ -14,6 +14,7 @@ Everything renders into one page (`src/index.html`) from one bundle (`dist/index
 |---|---|---|
 | [architecture.md](architecture.md) | Boot sequence, module graph, DOM ownership, build pipeline, manifest | `index.ts`, `index.html`, `build.sh`, `manifest.json` |
 | [storage.md](storage.md) | The reactive store, every settings key, IndexedDB, raw localStorage caches | `store.ts`, `defaults.ts`, `idb.ts`, `browser.d.ts` |
+| [layouts.md](layouts.md) | The three view modes, the slot/card system, and the switch transition | `layout.ts`, `index.html` |
 | [design-system.md](design-system.md) | Design tokens, theme cascade, color palettes, squircles, fonts, icons | `styles.css`, `theme.ts`, `squircle.ts`, `icons/` |
 | [components.md](components.md) | The UI kit — buttons, inputs, selects, dialogs, popovers, tooltips | `components.ts` |
 | [settings-ui.md](settings-ui.md) | The settings dialog, and how to add a new setting end to end | `settings.ts` |
@@ -34,6 +35,8 @@ Everything renders into one page (`src/index.html`) from one bundle (`dist/index
 |---|---|
 | A setting that won't persist, or syncs wrong across devices | [storage.md](storage.md) |
 | Adding a brand new setting | [settings-ui.md](settings-ui.md#adding-a-setting) |
+| Where a widget shows up in a given view mode | [layouts.md](layouts.md) |
+| The fade when switching view modes, or a layout flashing on load | [layouts.md](layouts.md#the-switch) |
 | Colors, spacing, or radii looking wrong | [design-system.md](design-system.md) |
 | Light/dark mode, accent color, or `data-*` attributes on `<html>` | [design-system.md](design-system.md#the-theme-cascade) |
 | A button/input/select that looks off-pattern | [components.md](components.md) |
@@ -66,6 +69,7 @@ src/
   defaults.ts         Every settings key and its default value
   browser.d.ts        Ambient types for the browser/chrome extension APIs
   theme.ts            Applies data-theme/accent/bg/mode to <html>
+  layout.ts           The three view modes: frames, singleton slots, card registry
   squircle.ts         Apple-style continuous corner geometry (currently unused)
   idb.ts              Tiny IndexedDB blob store for background images
   url.ts              URL prettifier

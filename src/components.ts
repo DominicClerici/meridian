@@ -541,6 +541,39 @@ export function createAccordion(
   return { container, content, toggle }
 }
 
+export function createCard(opts: {
+  title: string
+  icon?: HTMLElement | null
+  actions?: HTMLElement | null
+  body?: HTMLElement | null
+}): { el: HTMLDivElement; header: HTMLDivElement; body: HTMLDivElement } {
+  const card = document.createElement("div")
+  card.className = "widget-card flex flex-col gap-2 rounded-theme-lg p-4"
+
+  const header = document.createElement("div")
+  header.className = "flex items-center gap-2 shrink-0"
+
+  if (opts.icon) {
+    opts.icon.classList.add("shrink-0", "opacity-60")
+    header.appendChild(opts.icon)
+  }
+
+  const title = document.createElement("h2")
+  title.className = "text-xs font-semibold uppercase tracking-wider opacity-60 flex-1 min-w-0 truncate"
+  title.textContent = opts.title
+  header.appendChild(title)
+
+  if (opts.actions) header.appendChild(opts.actions)
+  card.appendChild(header)
+
+  const body = document.createElement("div")
+  body.className = "widget-card-body flex flex-col min-w-0"
+  if (opts.body) body.appendChild(opts.body)
+  card.appendChild(body)
+
+  return { el: card, header, body }
+}
+
 export function createDialog(opts?: {
   className?: string
 }): {
@@ -676,6 +709,12 @@ document.addEventListener("click", (e: MouseEvent) => {
     e.preventDefault()
   }
 }, true)
+
+export function closeAllPopovers(): void {
+  while (popoverStack.length > 0) {
+    popoverStack[popoverStack.length - 1].close()
+  }
+}
 
 export function createPopover(
   anchor: HTMLElement,

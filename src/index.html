@@ -7,51 +7,49 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <div style="height: 100vh; width: 100vw" />
     <div id="app">
       <button
         id="settings-open"
-        class="fixed top-4 left-4 w-12 h-12 flex items-center justify-center rounded-lg bg-page-foreground/20 hover:bg-page-foreground/30 transition-colors"
+        class="fixed top-4 left-4 z-40 w-12 h-12 flex items-center justify-center rounded-lg bg-page-foreground/20 hover:bg-page-foreground/30 transition-colors"
         aria-label="Open settings"
       ></button>
-      <div id="widgets" class="fixed top-4 right-4 flex items-center gap-2">
-        <button
-          id="calendar-trigger"
-          class="flex items-center gap-1 h-12 px-3 rounded-lg bg-page-foreground/20 hover:bg-page-foreground/30 transition-colors text-page-foreground text-sm"
-          hidden
-        ></button>
-        <button
-          id="weather-trigger"
-          class="flex items-center gap-1 h-12 px-3 rounded-lg bg-page-foreground/20 hover:bg-page-foreground/30 transition-colors text-page-foreground text-sm"
-          hidden
-        ></button>
-        <button
-          id="todo-trigger"
-          class="relative flex items-center justify-center w-12 h-12 rounded-lg bg-page-foreground/20 hover:bg-page-foreground/30 transition-colors text-page-foreground"
-          aria-label="Todos"
-          hidden
-        >
-          <span
-            id="todo-badge-count"
-            class="absolute -top-1 -right-1 text-[10px] bg-page-foreground/90 text-page-overlay rounded-full min-w-[18px] h-[18px] flex items-center justify-center font-semibold"
+
+      <div id="layout-stage" class="layout-stage fixed inset-0"></div>
+
+      <div id="layout-parking" hidden>
+        <div id="widgets" class="flex items-center gap-2">
+          <button
+            id="calendar-trigger"
+            class="flex items-center gap-1 h-12 px-3 rounded-lg bg-page-foreground/20 hover:bg-page-foreground/30 transition-colors text-page-foreground text-sm"
             hidden
-          ></span>
-          <span
-            id="todo-badge-overdue"
-            class="absolute -top-1 -left-1 text-[10px] bg-danger text-danger-foreground rounded-full min-w-[18px] h-[18px] flex items-center justify-center font-semibold"
+          ></button>
+          <button
+            id="weather-trigger"
+            class="flex items-center gap-1 h-12 px-3 rounded-lg bg-page-foreground/20 hover:bg-page-foreground/30 transition-colors text-page-foreground text-sm"
             hidden
-          ></span>
-        </button>
-      </div>
-      <div
-        id="search-wrapper"
-        class="fixed inset-0 flex items-center justify-center pointer-events-none"
-      >
-        <div class="w-full max-w-lg pointer-events-auto">
-          <div
-            id="clock"
-            class="text-center text-page-foreground mb-4 font-mono tabular-nums"
-          ></div>
+          ></button>
+          <button
+            id="todo-trigger"
+            class="relative flex items-center justify-center w-12 h-12 rounded-lg bg-page-foreground/20 hover:bg-page-foreground/30 transition-colors text-page-foreground"
+            aria-label="Todos"
+            hidden
+          >
+            <span
+              id="todo-badge-count"
+              class="absolute -top-1 -right-1 text-[10px] bg-page-foreground/90 text-page-overlay rounded-full min-w-[18px] h-[18px] flex items-center justify-center font-semibold"
+              hidden
+            ></span>
+            <span
+              id="todo-badge-overdue"
+              class="absolute -top-1 -left-1 text-[10px] bg-danger text-danger-foreground rounded-full min-w-[18px] h-[18px] flex items-center justify-center font-semibold"
+              hidden
+            ></span>
+          </button>
+        </div>
+
+        <div id="clock" class="text-page-foreground font-mono tabular-nums"></div>
+
+        <div id="search-wrapper" class="w-full max-w-lg">
           <input
             id="search-input"
             type="text"
@@ -64,26 +62,27 @@
             hidden
           ></div>
         </div>
-      </div>
-      <div
-        id="dock-wrapper"
-        class="fixed bottom-4 left-0 right-0 flex flex-col items-center gap-1.5 pointer-events-none"
-        hidden
-      >
+
         <div
-          id="dock"
-          class="dock-surface pointer-events-auto relative max-w-[80vw] rounded-2xl"
+          id="dock-wrapper"
+          class="flex flex-col items-center gap-1.5 pointer-events-none"
+          hidden
         >
-          <div id="dock-scroll" class="flex items-center overflow-x-auto dock-scroll">
-            <div id="dock-suggestions" class="flex items-center gap-1 shrink-0" hidden></div>
-            <div id="dock-divider" class="w-px self-stretch bg-page-foreground/15 mx-1 shrink-0" hidden></div>
-            <div id="dock-items" class="flex items-center gap-1 shrink-0"></div>
+          <div
+            id="dock"
+            class="dock-surface pointer-events-auto relative max-w-[80vw] rounded-2xl"
+          >
+            <div id="dock-scroll" class="flex items-center overflow-x-auto dock-scroll">
+              <div id="dock-suggestions" class="flex items-center gap-1 shrink-0" hidden></div>
+              <div id="dock-divider" class="w-px self-stretch bg-page-foreground/15 mx-1 shrink-0" hidden></div>
+              <div id="dock-items" class="flex items-center gap-1 shrink-0"></div>
+            </div>
           </div>
+          <div
+            id="dock-tabs"
+            class="pointer-events-auto flex items-center gap-1"
+          ></div>
         </div>
-        <div
-          id="dock-tabs"
-          class="pointer-events-auto flex items-center gap-1"
-        ></div>
       </div>
     </div>
 

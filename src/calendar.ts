@@ -1,4 +1,5 @@
 import { store } from "./store"
+import { refreshCards, registerCard } from "./layout"
 import { icon } from "./icons/registry"
 import { createPopover } from "./components"
 
@@ -884,6 +885,7 @@ function showDayEventList(anchor: HTMLElement, date: Date, events: CalendarEvent
 }
 
 function renderTrigger(): void {
+  cardBody?.rebuild()
   const trigger = document.getElementById("calendar-trigger") as HTMLButtonElement
   if (!store.sync.get("calendarEnabled")) {
     trigger.hidden = true
@@ -924,38 +926,45 @@ function renderTrigger(): void {
   trigger.appendChild(evtLabel)
 }
 
+/**
+ * Nav controls plus the current view (1d/1w/1m). Shared by the immersive popover
+ * and the card in the other layouts; `rebuild` re-renders after a nav or fetch.
+ */
+export function buildCalendarBody(): { el: HTMLElement; rebuild: () => void } {
+  const content = document.createElement("div")
+  content.className = "flex flex-col gap-0 min-w-0"
+
+  function rebuild(): void {
+    content.innerHTML = ""
+    content.appendChild(
+      renderControls(() => {
+        fetchEvents().then(rebuild)
+      })
+    )
+
+    if (viewMode === "1d") {
+      content.appendChild(renderDayView(currentEvents))
+    } else if (viewMode === "1w") {
+      content.appendChild(renderWeekView(currentEvents))
+    } else {
+      content.appendChild(renderMonthView(currentEvents))
+    }
+  }
+
+  rebuild()
+  return { el: content, rebuild }
+}
+
 function showCalendarPopover(anchor: HTMLElement): void {
   closeCalendarPopover()
   viewMode = "1d"
   offset = 0
 
-  const content = document.createElement("div")
-  content.className = "flex flex-col gap-0"
-  content.style.width = "660px"
+  const body = buildCalendarBody()
+  body.el.style.width = "660px"
+  popoverRebuild = body.rebuild
 
-  function rebuild() {
-    content.innerHTML = ""
-
-    const controls = renderControls(() => {
-      fetchEvents().then(rebuild)
-    })
-    content.appendChild(controls)
-
-    let view: HTMLElement
-    if (viewMode === "1d") {
-      view = renderDayView(currentEvents)
-    } else if (viewMode === "1w") {
-      view = renderWeekView(currentEvents)
-    } else {
-      view = renderMonthView(currentEvents)
-    }
-    content.appendChild(view)
-  }
-
-  rebuild()
-  popoverRebuild = rebuild
-
-  const { close } = createPopover(anchor, content, {
+  const { close } = createPopover(anchor, body.el, {
     onClose: () => {
       calendarPopoverClose = null
       popoverRebuild = null
@@ -963,6 +972,27 @@ function showCalendarPopover(anchor: HTMLElement): void {
   })
   calendarPopoverClose = close
 }
+
+let cardBody: { el: HTMLElement; rebuild: () => void } | null = null
+
+registerCard({
+  id: "calendar",
+  title: "Calendar",
+  order: 30,
+  regions: { default: "grid", dashboard: "main" },
+  span: { default: 2 },
+  enabledKey: "calendarEnabled",
+  isEnabled: () => store.local.get("calendarConnected"),
+  render: () => {
+    viewMode = "1d"
+    offset = 0
+    cardBody = buildCalendarBody()
+    return cardBody.el
+  },
+  onUnmount: () => {
+    cardBody = null
+  },
+})
 
 function startRefreshInterval(): void {
   stopRefreshInterval()
@@ -1006,6 +1036,7 @@ export function initCalendar(): void {
   })
 
   store.local.subscribe("calendarConnected", (connected) => {
+    refreshCards()
     if (connected && store.sync.get("calendarEnabled")) {
       fetchEvents()
       startRefreshInterval()

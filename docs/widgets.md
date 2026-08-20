@@ -4,13 +4,19 @@ The shared shape every widget follows, and the clock.
 
 **Per-widget docs:** [todos.md](todos.md) · [weather.md](weather.md) · [spotify.md](spotify.md) · [calendar.md](calendar.md)
 
+## Where widgets appear
+
+The [layout](layouts.md) decides. In **Immersive** every widget is behind a trigger in `#widgets`, exactly as described below. In **Default** and **Dashboard** the same content is mounted into a card instead, via `registerCard()`.
+
+That's why each widget now exposes its content as a standalone builder — `buildWeatherBody()`, `buildTodoList()`, `buildCalendarBody()`, `buildSpotifyBody()` — used by both its popover and its card. Adding to the popover means adding to the card for free; the two must never diverge.
+
 ## The pattern
 
-Three widgets — calendar, weather, todo — are **trigger + popover**. Their trigger buttons live in `#widgets` (top-right of the page) in `index.html`, all starting `hidden`. Two widgets break the pattern: the clock renders directly into `#clock` with no trigger, and Spotify renders a fixed card in the bottom-right corner.
+Three widgets — calendar, weather, todo — are **trigger + popover** in the Immersive layout. Their trigger buttons live in `#widgets` (top-right of the page) in `index.html`, all starting `hidden`. Two widgets break the pattern: the clock renders directly into `#clock` with no trigger, and Spotify renders a fixed card in the bottom-right corner (Immersive only — elsewhere it is a regular card).
 
 The trigger-based widgets share a structure worth knowing before you touch any one of them, because the same six pieces recur in each:
 
-**1. A visibility flag.** Every widget has a `*Enabled` sync setting. `initX()` sets `trigger.hidden = !enabled` and subscribes to the key. Turning a widget off also closes its popover and stops its refresh interval.
+**1. A visibility flag.** Every widget has a `*Enabled` sync setting. `initX()` sets `trigger.hidden = !enabled` and subscribes to the key; the same key goes into the card's `enabledKey` so the card appears and disappears with it. Turning a widget off also closes its popover and stops its refresh interval.
 
 **2. A state machine.** Network widgets carry a module-level `currentState`:
 
@@ -41,7 +47,7 @@ The cooldown guards against redundant fetches (a re-init, a settings change); th
 
 `clock.ts` (169 lines) — the largest element on the page, and the simplest module.
 
-Renders into `#clock`, which sits above the search bar. No trigger, no popover, no network.
+Renders into `#clock`. No trigger, no popover, no network. The element sits above the search bar in Default and Immersive; in Dashboard the Clock card adopts the very same element, so the running interval is never interrupted. See [layouts.md](layouts.md#singleton-slots).
 
 **Settings** (seven, all `sync`, all in the General tab):
 
@@ -64,11 +70,12 @@ Renders into `#clock`, which sits above the search bar. No trigger, no popover, 
 ## Adding a widget
 
 1. Add `myWidgetEnabled` to `SyncSettings` in `defaults.ts`.
-2. Add a trigger button to `#widgets` in `index.html`, `hidden` by default.
+2. Add a trigger button to `#widgets` inside `#layout-parking` in `index.html`, `hidden` by default.
 3. Create `src/my-widget.ts` exporting `initMyWidget()`: look up the trigger, wire the click toggle with `e.stopPropagation()`, render from cache, subscribe to `myWidgetEnabled`.
-4. Call `initMyWidget()` in `index.ts` inside the `DOMContentLoaded` handler.
-5. Add an accordion to `buildWidgetsTab()` in `settings.ts` — see [settings-ui.md](settings-ui.md#adding-a-setting).
-6. Document the storage keys in [storage.md](storage.md#key-inventory).
+4. Build the content in a `buildMyWidgetBody()` that the popover uses, and `registerCard({ id, title, order, regions, enabledKey: "myWidgetEnabled", render: buildMyWidgetBody })` at module scope. Call `refreshCard("my-widget")` (or keep a rebuild closure) when its data changes — see [layouts.md](layouts.md#keeping-a-card-current).
+5. Call `initMyWidget()` in `index.ts` inside the `DOMContentLoaded` handler.
+6. Add an accordion to `buildWidgetsTab()` in `settings.ts` — see [settings-ui.md](settings-ui.md#adding-a-setting).
+7. Document the storage keys in [storage.md](storage.md#key-inventory).
 
 ## Refactor candidates
 

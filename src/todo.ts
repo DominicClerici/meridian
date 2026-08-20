@@ -19,6 +19,7 @@ import {
   createCheckbox,
   createInput,
 } from "./components"
+import { registerCard } from "./layout"
 
 let openPopoverClose: (() => void) | null = null
 
@@ -315,44 +316,33 @@ function initSectionDrag(
   })
 }
 
-function showPopover(anchor: HTMLElement): void {
-  closePopover()
-  let todos = purgeStale(getTodos())
-  save(todos)
-
-  const content = document.createElement("div")
-  content.className = "flex flex-col w-[340px]"
-
-  const header = document.createElement("div")
-  header.className =
-    "flex items-center justify-between pb-2 mb-1 border-b border-white/[0.06]"
-
-  const heading = document.createElement("h2")
-  heading.className =
-    "text-base font-semibold text-popover-foreground/70 tracking-wider uppercase"
-  heading.textContent = "Todos"
-  header.appendChild(heading)
-
+function createAddButton(onAdded: () => void): HTMLButtonElement {
   const addBtn = createButton("", "ghost", {
     icon: icon("plus"),
     onClick: async () => {
       const result = await todoFormPopover(addBtn, "New Todo")
       if (!result) return
       save(addTodo(getTodos(), result))
-      rebuildSections()
+      onAdded()
     },
   })
   addBtn.className =
     "w-7 h-7 flex items-center justify-center rounded-full bg-accent text-accent-foreground hover:bg-accent-hover transition-colors"
-  header.appendChild(addBtn)
-  content.appendChild(header)
+  return addBtn
+}
+
+/**
+ * The sectioned todo list, without any surrounding chrome. Shared by the
+ * immersive popover and the card in the other layouts; `rebuild` is how a
+ * caller re-renders it after a mutation.
+ */
+export function buildTodoList(): { el: HTMLElement; rebuild: () => void } {
+  save(purgeStale(getTodos()))
 
   const scrollArea = document.createElement("div")
-  scrollArea.className =
-    "flex flex-col gap-1 max-h-[420px] overflow-y-auto pt-1"
-  content.appendChild(scrollArea)
+  scrollArea.className = "flex flex-col gap-1 max-h-[420px] overflow-y-auto pt-1"
 
-  function rebuildSections() {
+  function rebuildSections(): void {
     scrollArea.innerHTML = ""
     const todos = getTodos()
     const overdue = getOverdue(todos)
@@ -417,6 +407,30 @@ function showPopover(anchor: HTMLElement): void {
   }
 
   rebuildSections()
+  return { el: scrollArea, rebuild: rebuildSections }
+}
+
+function showPopover(anchor: HTMLElement): void {
+  closePopover()
+
+  const content = document.createElement("div")
+  content.className = "flex flex-col w-[340px]"
+
+  const list = buildTodoList()
+
+  const header = document.createElement("div")
+  header.className =
+    "flex items-center justify-between pb-2 mb-1 border-b border-white/[0.06]"
+
+  const heading = document.createElement("h2")
+  heading.className =
+    "text-base font-semibold text-popover-foreground/70 tracking-wider uppercase"
+  heading.textContent = "Todos"
+  header.appendChild(heading)
+  header.appendChild(createAddButton(() => list.rebuild()))
+
+  content.appendChild(header)
+  content.appendChild(list.el)
 
   const { close } = createPopover(anchor, content, {
     onClose: () => {
@@ -426,6 +440,24 @@ function showPopover(anchor: HTMLElement): void {
   })
   openPopoverClose = close
 }
+
+let cardList: { el: HTMLElement; rebuild: () => void } | null = null
+
+registerCard({
+  id: "todo",
+  title: "Todos",
+  order: 40,
+  regions: { default: "grid", dashboard: "side" },
+  enabledKey: "todoEnabled",
+  render: () => {
+    cardList = buildTodoList()
+    return cardList.el
+  },
+  actions: () => createAddButton(() => cardList?.rebuild()),
+  onUnmount: () => {
+    cardList = null
+  },
+})
 
 export function initTodo(): void {
   const trigger = document.getElementById("todo-trigger") as HTMLButtonElement

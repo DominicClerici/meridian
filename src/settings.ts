@@ -1,6 +1,6 @@
 import { store } from "./store"
 import type { SyncSettings } from "./defaults"
-import { ACCENT_COLORS } from "./defaults"
+import { ACCENT_COLORS, LAYOUT_MODES } from "./defaults"
 import {
   authenticate as spotifyAuthenticate,
   clearTokens as spotifyClearTokens,
@@ -253,6 +253,82 @@ function buildSwatchGroup(storeKey: "accentColor" | "bgColor"): HTMLElement {
 
   updateSelected(store.sync.get(storeKey))
   store.sync.subscribe(storeKey, updateSelected)
+
+  return container
+}
+
+function buildLayoutSelector(): HTMLElement {
+  const container = document.createElement("div")
+  container.className = "grid grid-cols-3 gap-2"
+
+  const META: Record<
+    SyncSettings["layout"],
+    { label: string; hint: string; preview: string }
+  > = {
+    default: {
+      label: "Default",
+      hint: "Search on top, widget cards beneath",
+      preview: `<span class="lp-bar"></span>
+        <div class="lp-row">
+          <span class="lp-fill"></span><span class="lp-fill"></span><span class="lp-fill"></span>
+        </div>`,
+    },
+    dashboard: {
+      label: "Dashboard",
+      hint: "Cards across the top, three-column grid below",
+      preview: `<div class="lp-row" style="flex:0 0 7px">
+          <span class="lp-fill"></span><span class="lp-fill"></span><span class="lp-fill"></span>
+        </div>
+        <div class="lp-row">
+          <span class="lp-fill" style="flex:2"></span><span class="lp-fill"></span>
+        </div>`,
+    },
+    immersive: {
+      label: "Immersive",
+      hint: "Everything behind triggers and popovers",
+      preview: `<div class="lp-row" style="align-items:center;justify-content:center">
+          <span class="lp-bar" style="flex:0 0 60%"></span>
+        </div>`,
+    },
+  }
+
+  const buttons: HTMLButtonElement[] = []
+
+  for (const mode of LAYOUT_MODES) {
+    const meta = META[mode]
+    const btn = document.createElement("button")
+    btn.type = "button"
+    btn.className =
+      "flex flex-col items-center gap-2 p-2 border rounded-theme transition-colors text-xs font-medium"
+    btn.title = meta.hint
+
+    const preview = document.createElement("div")
+    preview.className = "layout-preview"
+    preview.innerHTML = meta.preview
+    btn.appendChild(preview)
+
+    const label = document.createElement("span")
+    label.textContent = meta.label
+    btn.appendChild(label)
+
+    btn.addEventListener("click", () => store.sync.set("layout", mode))
+    buttons.push(btn)
+    container.appendChild(btn)
+  }
+
+  function updateSelected(val: string): void {
+    LAYOUT_MODES.forEach((mode, i) => {
+      const btn = buttons[i]
+      const selected = mode === val
+      btn.setAttribute("aria-pressed", String(selected))
+      btn.style.borderColor = "var(--accent)"
+      btn.style.background = selected ? "var(--accent)" : "transparent"
+      btn.style.color = selected ? "var(--accent-foreground)" : "var(--accent)"
+    })
+  }
+
+  updateSelected(store.sync.get("layout"))
+  store.sync.subscribe("layout", updateSelected)
 
   return container
 }
@@ -705,6 +781,7 @@ function buildAppearanceTab(): void {
   themeRow.appendChild(themeSelect)
   panel.appendChild(themeRow)
 
+  panel.appendChild(section("Layout", buildLayoutSelector()))
   panel.appendChild(section("Accent Color", buildSwatchGroup("accentColor")))
   panel.appendChild(section("Mode", buildModeSelector()))
 

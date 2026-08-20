@@ -141,6 +141,21 @@ Creates a native `<dialog class="dialog-surface">`, **appends it to `document.bo
 
 Styling lives in `.dialog-surface` — see [design-system.md](design-system.md#component-css).
 
+## createCard
+
+```ts
+createCard(opts: {
+  title: string
+  icon?: HTMLElement | null
+  actions?: HTMLElement | null
+  body?: HTMLElement | null
+}): { el: HTMLDivElement; header: HTMLDivElement; body: HTMLDivElement }
+```
+
+The surface the non-immersive layouts put widgets on: an uppercase title row with optional leading icon and trailing action, over a body container. Returns the body separately because `layout.ts` re-renders into it (`refreshCard`) without rebuilding the shell.
+
+Styling is `.widget-card` in `styles.css`, which deliberately reuses the **popover** palette — `--popover` / `--popover-foreground` are dark in both light and dark mode, so a widget body extracted from a popover renders in a card with no restyling. See [layouts.md](layouts.md).
+
 ## createPopover
 
 ```ts
@@ -171,6 +186,8 @@ The most intricate thing in the file. A module-level **popover stack** (`compone
 **Focus trap.** Only the top popover traps. Tab and Shift+Tab cycle through the anchor plus every visible focusable descendant; `focusin` outside the top popover is pulled back to its first focusable. The trap is torn down and reinstalled on every push and pop.
 
 **Note:** there is no Escape handler. Escape does not close popovers.
+
+**`closeAllPopovers()`** unwinds the whole stack from the top. `layout.ts` calls it before a layout switch, since the anchors are about to be reparented.
 
 ## createTooltip
 

@@ -53,7 +53,7 @@ Because the events cache is keyed by range, navigating back to a range you've al
 
 ## Views
 
-The popover is 660px wide: a controls header, then one of three views. `viewMode` and `offset` are module-level, and reset to `1d` / `0` every time the popover opens.
+`buildCalendarBody()` returns a controls header plus one of three views, and a `rebuild` closure. The immersive popover pins it to 660px; the card in the other layouts fills its column. `viewMode` and `offset` are module-level, and reset to `1d` / `0` every time the popover opens or the card mounts — which is why data refreshes call the held `cardBody.rebuild()` rather than `refreshCard`, so a background fetch doesn't throw away the view the user navigated to. See [layouts.md](layouts.md#keeping-a-card-current).
 
 **Controls** (`renderControls`): a `1D / 1W / 1M` segmented control, and prev/label/next navigation. `getNavLabel()` produces "Today"/"Yesterday"/"Tomorrow", "This Week"/"Last Week"/"Next Week", or a formatted date/range/month. Navigation is bounded by `NAV_LIMITS` — ±6 days, ±3 weeks, ±1 month — with the arrows dimmed at the edge. Changing view or offset refetches, then rebuilds.
 

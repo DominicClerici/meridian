@@ -23,7 +23,7 @@ Five tabs, defined in the `TABS` array (`settings.ts:33`):
 |---|---|---|
 | General | `buildGeneralTab()` | All seven clock settings |
 | Shortcuts | `buildShortcutsPanel()` | Empty containers for `shortcut-settings.ts`, plus the recommendations toggle and open-in select |
-| Appearance | `buildAppearanceTab()` | Theme, accent, mode, and the three background accordions |
+| Appearance | `buildAppearanceTab()` | Theme, layout, accent, mode, and the three background accordions |
 | Widgets | `buildWidgetsTab()` | Search, Todo, Weather, Spotify, Calendar accordions |
 | Advanced | `buildAdvancedPanel()` | Unsplash API key |
 
@@ -102,6 +102,7 @@ Seven clock settings, all `createCheckbox`/`createSelect` rows, with the two con
 ### Appearance
 
 - **Theme** — a `createSelect` with exactly one option (`modern`).
+- **Layout** — `buildLayoutSelector()`, three buttons carrying a `.layout-preview` schematic (bars and blocks built from the div/span markup in `styles.css`) over a label. Selected state fills with the accent; writes `store.sync.layout`, which `layout.ts` picks up and animates. See [layouts.md](layouts.md).
 - **Accent Color / Background → Color** — both are `buildSwatchGroup(storeKey)` (`settings.ts:169`), a row of ten `bg-swatch-*` circles plus one special button: `random` for accent (daily rotation), `auto` for background (follow the accent). Selection is drawn as an outline in the swatch's own color, with a checkmark injected into the selected circle; the special buttons instead take an accent outline. Selected state is driven by a store subscription, so the two groups stay right when the underlying value changes elsewhere.
 - **Mode** — `buildModeSelector()` (`settings.ts:260`), three `"override"` buttons using the `--mode-light-*` / `--mode-dark-*` tokens, with `auto` rendered in the accent.
 - **Background** — three `"settings"`-variant accordions (Color, Unsplash, Upload). The one matching `bgSource` opens by default and gets a 3px accent left border on its trigger, applied via inline styles in `updateActiveIndicator()`.

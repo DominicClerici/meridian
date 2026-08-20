@@ -43,9 +43,11 @@ Stored as `Todo[]` at `store.local.get("todos")`. `MAX_TODOS` is 500, enforced i
 
 **`reorderTodos` scopes to a section.** It filters the array to `sectionIds`, moves within that slice, then rewrites `order` as the slice's 0-based index for exactly those todos — so `order` values are only meaningful relative to their section, and re-ordering one section renumbers it independently of the others.
 
-**`purgeStale`** drops completed todos older than **3 days** (by `completedAt`, falling back to `updatedAt`) and incomplete todos untouched for **6 months** (by `updatedAt`). It runs in `initTodo()` and again every time the popover opens.
+**`purgeStale`** drops completed todos older than **3 days** (by `completedAt`, falling back to `updatedAt`) and incomplete todos untouched for **6 months** (by `updatedAt`). It runs in `initTodo()` and again in `buildTodoList()`, so every popover open and every card mount purges.
 
 ## UI
+
+**Content:** `buildTodoList()` builds the sectioned list and returns a `rebuild` closure; `createAddButton()` builds the + control. The immersive popover pairs them under a "Todos" heading, and the card in the other layouts puts the button in the card header via `actions` and the list in the body.
 
 **Trigger:** `#todo-trigger` in `#widgets`, with two absolutely-positioned badges — `#todo-badge-count` (top-right, overdue + active) and `#todo-badge-overdue` (top-left, danger-colored, overdue only). Both are gated on `todoShowBadges` and hidden at zero. `updateBadges()` re-runs on any `todos` change, so the counts stay live without the popover being open.
 

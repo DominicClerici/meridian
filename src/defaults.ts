@@ -22,8 +22,12 @@ export type BgImageMeta = {
   cachedAt: number
 }
 
+export const LAYOUT_MODES = ["default", "dashboard", "immersive"] as const
+export type LayoutMode = (typeof LAYOUT_MODES)[number]
+
 export type SyncSettings = {
   theme: "modern";
+  layout: LayoutMode;
   accentColor: AccentColor | "random";
   bgColor: AccentColor | "auto";
   mode: "light" | "dark" | "auto";
@@ -67,6 +71,7 @@ export type LocalSettings = {
 
 export const syncDefaults: SyncSettings = {
   theme: "modern",
+  layout: "default",
   accentColor: "sky",
   bgColor: "auto",
   mode: "auto",

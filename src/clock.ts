@@ -1,4 +1,5 @@
 import { store } from "./store"
+import { adoptSlot, registerCard } from "./layout"
 import type { SyncSettings } from "./defaults"
 
 const SIZE_MAP: Record<SyncSettings["clockSize"], string> = {
@@ -150,6 +151,20 @@ function renderClock(): void {
     }, 1000)
   }
 }
+
+/**
+ * The dashboard clock card hosts the live #clock element itself rather than a
+ * copy — layout.ts parks it again on the next switch, so the running interval
+ * and every subscription survive.
+ */
+registerCard({
+  id: "clock",
+  title: "Clock",
+  order: 10,
+  regions: { dashboard: "top" },
+  enabledKey: "clockEnabled",
+  render: () => adoptSlot("clock", "text-center"),
+})
 
 export function initClock(): void {
   renderClock()

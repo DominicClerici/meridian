@@ -117,6 +117,7 @@ Choosing a namespace: put it in `sync` if the user would expect it on their othe
 | Key | Type | Default | Used by |
 |---|---|---|---|
 | `theme` | `"modern"` | `"modern"` | `theme.ts`, `icons/registry.ts` |
+| `layout` | `"default" \| "dashboard" \| "immersive"` | `"default"` | `layout.ts` |
 | `accentColor` | `AccentColor \| "random"` | `"sky"` | `theme.ts` |
 | `bgColor` | `AccentColor \| "auto"` | `"auto"` | `theme.ts` |
 | `mode` | `"light" \| "dark" \| "auto"` | `"auto"` | `theme.ts` |
