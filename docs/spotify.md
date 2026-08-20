@@ -1,6 +1,6 @@
 # Spotify
 
-**File:** `src/spotify.ts` (462 lines). **API:** Spotify Web API. **Auth:** OAuth 2.0 with PKCE, entirely in the browser — no backend.
+**File:** `src/spotify.ts` (544 lines). **API:** Spotify Web API. **Auth:** OAuth 2.0 with PKCE, entirely in the browser — no backend.
 
 The one widget with no trigger button: when something is playing it renders a card — floating bottom-right in the Immersive layout, in the grid elsewhere — and when nothing is playing it renders nothing at all.
 
@@ -17,7 +17,9 @@ PKCE (Proof Key for Code Exchange) is what makes a public client safe without a 
 5. `POST /api/token` with the code and the original verifier — Spotify hashes the verifier and checks it against the challenge it stored.
 6. Store `access_token`, `refresh_token`, and `Date.now() + expires_in * 1000` in `store.local`.
 
-Every step returns `false` on failure and swallows the error, so the connect button in settings just doesn't flip to "connected".
+Every failure path returns `{ ok: false, error }` with a message naming what actually went wrong — cancelled, unreachable, or a rejected exchange (Spotify's `error_description` is read out of the response body when there is one). Settings renders the string under the connect button.
+
+The token exchange depends on `host_permissions` covering `accounts.spotify.com`; without it the `POST /api/token` is an ordinary CORS request from a `chrome-extension://` origin and can be refused outright. See [architecture.md](architecture.md#manifest).
 
 `CLIENT_ID` is hard-coded at `spotify.ts:4` — public by design in PKCE. Scopes: `user-read-playback-state`, `user-modify-playback-state`, `user-read-currently-playing`, `user-read-private`.
 
@@ -57,6 +59,5 @@ Rendered by assigning a template string to `innerHTML`. Track name and artists a
 - **`checkPremium()` runs once per connect** and is never rechecked, so upgrading or downgrading an account needs a reconnect.
 - **Polling only — no push.** Five seconds of latency on every state change, and a request every five seconds even when nothing is playing.
 - **The floating card can't be dismissed or moved.** In Immersive it's fixed bottom-right with `z-50`, on top of whatever is there.
-- **Failures are entirely silent.** `authenticate()` has five separate `return false` paths and none of them distinguishes "user cancelled" from "network down" from "token exchange rejected"; the settings button just reverts to "Connect Spotify".
 - **`retryAfterUntil` gates `fetchPlayerState` but not the control calls**, so pressing next during a rate-limit window still fires a request.
 - **No error state in the UI.** Weather and calendar both have one; here a failure is indistinguishable from nothing playing.

@@ -25,7 +25,7 @@ Five tabs, defined in the `TABS` array (`settings.ts:33`):
 | Shortcuts | `buildShortcutsPanel()` | Empty containers for `shortcut-settings.ts`, plus the recommendations toggle and open-in select |
 | Appearance | `buildAppearanceTab()` | Theme, layout, accent, mode, and the three background accordions |
 | Widgets | `buildWidgetsTab()` | Search, Todo, Weather, Spotify, Calendar accordions |
-| Advanced | `buildAdvancedPanel()` | Unsplash API key |
+| Advanced | `buildAdvancedPanel()` | Unsplash API key, Google OAuth client ID, browser-capability report |
 
 Two construction styles coexist. `buildShortcutsPanel()` and `buildAdvancedPanel()` **return** a panel element that `initSettings()` appends; `buildGeneralTab()`, `buildAppearanceTab()`, and `buildWidgetsTab()` **query** for their already-appended panel via `document.querySelector('[data-settings-tab="…"]')` and fill it. That's why the first two run inline in `initSettings()` while the other three are called afterward.
 
@@ -115,9 +115,11 @@ The **Upload accordion** (`settings.ts:565`) previews the current upload by pull
 
 Five `"settings"` accordions, all collapsed by default. Each widget follows the same shape: an enable checkbox, its own options, then any connect/disconnect controls.
 
-Spotify and Calendar connection state is derived from the store — `spotifyAccessToken !== null` and `calendarConnected` — and both subscribe so the buttons flip when auth completes or is cleared elsewhere. `createSpotifyButton()` and `createGoogleButton()` (`settings.ts:749`, `775`) are bespoke brand-colored buttons that bypass `createButton` and use placeholder colored squares where the brand logos should be.
+Spotify and Calendar connection state is derived from the store — `spotifyAccessToken !== null` and `calendarConnected` — and both subscribe so the buttons flip when auth completes or is cleared elsewhere. `createSpotifyButton()` and `createGoogleButton()` are bespoke brand-colored buttons that bypass `createButton` and use placeholder colored squares where the brand logos should be.
 
-Weather additionally has a "Grant location access" row that calls `navigator.geolocation.getCurrentPosition` directly and writes `weatherLat`/`weatherLon`; the row hides itself once coordinates exist.
+Both connect buttons render failures rather than swallowing them: `authenticate()` returns `{ ok: false, error }`, and `showStatus()` puts the string under the button in `text-danger`. When the Calendar failure carries `needsClientId`, the message gets an inline button that calls `selectTab("advanced")` — a module-level hook `buildNav()` assigns, since `switchTab` is otherwise closed over.
+
+Weather's location controls come from `buildLocationControls()`. A "Use device location" button (which shows a `Locating…` state and reports the specific `GEO_FAILURE_TEXT` on failure), a 300ms-debounced city search against Open-Meteo's geocoder with an `AbortController` per keystroke, and a summary line reading e.g. `Boulder, CO, US · set manually`. The manual path is always visible, not revealed on failure. Both paths call `refreshWeather()` so the widget updates without a reload — the old row wrote `weatherLat` and left the widget stale until the next page load.
 
 ### Shortcuts
 
@@ -125,11 +127,15 @@ Weather additionally has a "Grant location access" row that calls `navigator.geo
 
 ### Advanced
 
-One row: the Unsplash API key, a password-type `createInput` with a Show/Hide toggle, saved on `change` (blur), plus a link to unsplash.com/developers.
+Three sections, separated by `sectionHeading()` rules:
+
+1. **Unsplash API key** — a password-type `createInput` with a Show/Hide toggle, saved on `change` (blur), plus a link to unsplash.com/developers.
+2. **Google Calendar sign-in** (`buildGoogleAuthSection()`) — the `googleClientId` field, the extension's redirect URI with a copy button, and setup instructions. Always shown, so the path is discoverable before sign-in fails rather than only after.
+3. **Browser capabilities** (`buildCapabilityPanel()`) — renders `probeCapabilities()` as label / state badge / detail rows with a Re-check button. Runs cached on open; the button forces a live probe. See [browser-compat.md](browser-compat.md#detection).
 
 ## Refactor candidates
 
-- **1420 lines in one file.** Dialog chrome, nav animation, and per-feature control logic all live together, and the file imports from five feature modules to do it. Moving each `buildXTab()` into the module it configures — or at minimum into `settings/` submodules — is the single biggest structural win available in this codebase.
+- **1832 lines in one file.** Dialog chrome, nav animation, and per-feature control logic all live together, and the file imports from five feature modules to do it. Moving each `buildXTab()` into the module it configures — or at minimum into `settings/` submodules — is the single biggest structural win available in this codebase.
 - **Two panel construction conventions.** Some builders return a panel, some query for one they assume was already appended. Pick one.
 - **The three-line store-sync pattern is repeated ~25 times.** `get` → control → `set` → `subscribe` → setter, with an `as any` in the checkbox case. A `bindCheckbox(key, label)` / `bindSelect(key, label, options)` helper would collapse most of the General and Widgets tabs to one line per setting and remove every `as any`.
 - **`settingsRow` isn't used everywhere.** Appearance and Advanced hand-build rows with duplicated class strings that have already drifted from the helper's.

@@ -22,10 +22,10 @@ The trigger-based widgets share a structure worth knowing before you touch any o
 
 | Widget | States |
 |---|---|
-| Weather | `loading` · `loaded` · `error` · `no-permission` |
+| Weather | `loading` · `loaded` · `error` · `no-location` |
 | Calendar | `loading` · `loaded` · `error` · `not-connected` |
 
-`renderTrigger()` switches on it to decide what the button shows, and the click handler switches on it to decide what a click does — in `error` the calendar retries, in `no-permission` the weather widget opens the settings dialog.
+`renderTrigger()` switches on it to decide what the button shows, and the click handler switches on it to decide what a click does — in `error` the calendar retries, in `no-location` the weather widget opens the settings dialog.
 
 **3. A single popover handle.** A module-level `openPopoverClose: (() => void) | null` doubles as "is the popover open?" and as the way to close it. Clicking the trigger toggles: close if set, open if not. The popover's `onClose` nulls it. See [components.md](components.md#createpopover).
 

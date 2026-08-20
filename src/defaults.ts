@@ -25,6 +25,12 @@ export type BgImageMeta = {
 export const LAYOUT_MODES = ["default", "dashboard", "immersive"] as const
 export type LayoutMode = (typeof LAYOUT_MODES)[number]
 
+/** How the weather widget arrived at its coordinates. See `docs/weather.md`. */
+export type LocationSource = "device" | "manual" | "timezone"
+
+/** Which Google OAuth path the calendar is using. See `docs/calendar.md`. */
+export type GoogleAuthMethod = "native" | "web"
+
 export type SyncSettings = {
   theme: "modern";
   layout: LayoutMode;
@@ -49,6 +55,7 @@ export type SyncSettings = {
   recommendationsEnabled: boolean;
   shortcutsOpenIn: "current" | "new";
   calendarEnabled: boolean;
+  googleClientId: string;
   bgSource: "color" | "unsplash" | "upload";
   unsplashDaily: boolean;
   unsplashTopic: string;
@@ -60,11 +67,16 @@ export type LocalSettings = {
   todos: Todo[]
   weatherLat: number | null
   weatherLon: number | null
+  weatherLocationSource: LocationSource | null
+  weatherLocationLabel: string | null
   spotifyAccessToken: string | null
   spotifyRefreshToken: string | null
   spotifyTokenExpiry: number | null
   recommendationData: RecommendationData | null
   calendarConnected: boolean
+  googleAuthMethod: GoogleAuthMethod | null
+  googleAccessToken: string | null
+  googleTokenExpiry: number | null
   bgUnsplashMeta: BgImageMeta | null
   bgUploadMeta: BgImageMeta | null
 }
@@ -93,6 +105,7 @@ export const syncDefaults: SyncSettings = {
   shortcutsOpenIn: "current",
   recommendationsEnabled: false,
   calendarEnabled: false,
+  googleClientId: "",
   bgSource: "color",
   unsplashDaily: false,
   unsplashTopic: "wallpapers",
@@ -104,11 +117,16 @@ export const localDefaults: LocalSettings = {
   todos: [],
   weatherLat: null,
   weatherLon: null,
+  weatherLocationSource: null,
+  weatherLocationLabel: null,
   spotifyAccessToken: null,
   spotifyRefreshToken: null,
   spotifyTokenExpiry: null,
   recommendationData: null,
   calendarConnected: false,
+  googleAuthMethod: null,
+  googleAccessToken: null,
+  googleTokenExpiry: null,
   bgUnsplashMeta: null,
   bgUploadMeta: null,
 }

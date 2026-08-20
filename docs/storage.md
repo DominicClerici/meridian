@@ -152,22 +152,30 @@ Choosing a namespace: put it in `sync` if the user would expect it on their othe
 |---|---|---|---|
 | `shortcuts` | `Tab[]` | `[]` | `shortcuts.ts` consumers — the whole dock/folder tree |
 | `todos` | `Todo[]` | `[]` | `todo.ts`, `todos.ts` |
-| `weatherLat` | `number \| null` | `null` | `weather.ts` |
-| `weatherLon` | `number \| null` | `null` | `weather.ts` |
+| `weatherLat` | `number \| null` | `null` | `location.ts` |
+| `weatherLon` | `number \| null` | `null` | `location.ts` |
+| `weatherLocationSource` | `LocationSource \| null` | `null` | `location.ts` |
+| `weatherLocationLabel` | `string \| null` | `null` | `location.ts` |
 | `spotifyAccessToken` | `string \| null` | `null` | `spotify.ts` |
 | `spotifyRefreshToken` | `string \| null` | `null` | `spotify.ts` |
 | `spotifyTokenExpiry` | `number \| null` (epoch ms) | `null` | `spotify.ts` |
 | `recommendationData` | `RecommendationData \| null` | `null` | `recommendations.ts` |
 | `calendarConnected` | `boolean` | `false` | `calendar.ts` |
+| `googleAuthMethod` | `"native" \| "web" \| null` | `null` | `google-auth.ts` |
+| `googleAccessToken` | `string \| null` | `null` | `google-auth.ts` |
+| `googleTokenExpiry` | `number \| null` (epoch ms) | `null` | `google-auth.ts` |
 | `bgUnsplashMeta` | `BgImageMeta \| null` | `null` | `background.ts` |
 | `bgUploadMeta` | `BgImageMeta \| null` | `null` | `background.ts` |
 
 `RecommendationData` is `{ heatmap: { [domain: string]: number[][] }, builtAt: number }`.
 `BgImageMeta` is `{ id, url, authorName, authorUrl, downloadUrl, cachedAt }`.
+`LocationSource` is `"device" | "manual" | "timezone"` — see [browser-compat.md](browser-compat.md#location).
+
+Both Google token keys are written by `google-auth.ts` regardless of which flow produced them, so `calendar.ts` reads one shape either way. `googleAuthMethod` is what `getValidToken()` uses to pick a silent-renewal path.
 
 ## Raw localStorage caches
 
-Three modules bypass the store and write `localStorage` directly, for data that is a disposable cache rather than a setting. None of it is typed, mirrored, or cross-tab synced.
+Several modules bypass the store and write `localStorage` directly, for data that is a disposable cache rather than a setting. None of it is typed, mirrored, or cross-tab synced.
 
 | Key | Written by | Contents |
 |---|---|---|
@@ -181,6 +189,10 @@ Three modules bypass the store and write `localStorage` directly, for data that 
 | `sp:calendar:events:<range>` | `calendar.ts:33` prefix | Cached events, keyed by date range |
 | `sp:local:randomAccentDate` | `theme.ts:10` | `toDateString()` of the day the random accent was picked |
 | `sp:local:randomAccentColor` | `theme.ts:11` | The accent picked that day |
+| `sp:geo:deviceFailed` | `location.ts` | Epoch ms of the last device-locator failure; suppresses retries for 6h |
+| `sp:google:nativeProbe` | `google-auth.ts` | `"available"` / `"unavailable"` — whether `identity.getAuthToken` answers at all |
+
+The last two are capability memos rather than data caches: both record something about the *browser* that won't change between page loads, so probing for it once is enough. See [browser-compat.md](browser-compat.md).
 
 Disconnecting Calendar clears every `sp:calendar:` key by prefix scan (`calendar.ts:152`).
 

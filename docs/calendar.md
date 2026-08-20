@@ -1,28 +1,43 @@
 # Calendar
 
-**File:** `src/calendar.ts` (1033 lines). **Trigger:** `#calendar-trigger`. **API:** Google Calendar v3. **Auth:** OAuth2 via `chrome.identity.getAuthToken`.
+**Files:** `src/calendar.ts` (1044 lines), `src/google-auth.ts` (314 lines). **Trigger:** `#calendar-trigger`. **API:** Google Calendar v3. **Auth:** OAuth2, brokered or redirect — see [browser-compat.md](browser-compat.md#google-sign-in).
 
 The largest widget, and the only one with multiple views. Follows the trigger/popover pattern in [widgets.md](widgets.md).
 
 ## Auth
 
-Unlike Spotify's PKCE flow, this uses Chrome's built-in `identity.getAuthToken`, which relies on the `oauth2` block in `manifest.json`:
+Auth lives in `google-auth.ts`, not here. It presents one interface —
+`authenticate()`, `getValidToken()`, `invalidateToken()`, `revoke()` — over two
+mechanisms, because `identity.getAuthToken` does not work on every Chromium.
 
-```json
-"oauth2": {
-  "client_id": "…apps.googleusercontent.com",
-  "scopes": ["https://www.googleapis.com/auth/calendar.readonly"]
-}
-```
+- **Brokered** (`getAuthToken`): zero setup, uses the browser profile's
+  signed-in Google account and the `oauth2` block in `manifest.json`. Preferred
+  where it works. Every call is raced against a clock, because on builds with
+  Google sign-in removed it hangs rather than failing.
+- **Redirect** (`launchWebAuthFlow`, implicit): works anywhere, needs the user's
+  own OAuth client ID in the `googleClientId` setting.
 
-Chrome brokers the token against the signed-in Chrome profile — there's no redirect flow and no token storage. The extension only tracks a `calendarConnected` boolean in `store.local`.
+`authenticate()` probes the broker, uses it when it answers, and falls back to
+the redirect flow only when the broker is *silent* — a declined consent is
+returned as-is rather than triggering a second window. The full rationale,
+including why implicit rather than PKCE, is in
+[browser-compat.md](browser-compat.md#google-sign-in).
 
-The `key` field in `manifest.json` pins the extension ID, which is what makes the OAuth client's registered redirect URI stable across installs. **Forking this requires your own Google OAuth client**, since the shipped `client_id` is bound to this extension's ID.
+Either way the resulting token lands in `googleAccessToken` / `googleTokenExpiry`,
+so this module reads one shape. `calendar.ts` itself only tracks the
+`calendarConnected` boolean in `store.local`.
 
-- `authenticate()` — `getToken(true)` (interactive), then set `calendarConnected`.
-- `disconnect()` — `removeCachedAuthToken`, then hit Google's revoke endpoint, clear the flag, and delete every `sp:calendar:*` localStorage key by prefix scan.
+The `key` field in `manifest.json` pins the extension ID, which is what makes
+the redirect URI stable across installs. **Forking this requires your own Google
+OAuth client** either way — the shipped `client_id` is bound to this extension's
+ID.
 
-**401 recovery** (`calendar.ts:254`): if the calendar-list or colors call fails with a 401, the cached list, list timestamp, and color map are dropped, the token is removed from Chrome's cache, a fresh non-interactive token is requested, and both calls are retried once. Failing that, the widget drops to `not-connected`.
+- `authenticate()` — delegates to `google-auth`, then sets `calendarConnected`.
+- `disconnect()` — `revoke()` (drops the cached token, hits Google's revoke
+  endpoint, clears the method), then clears the flag and deletes every
+  `sp:calendar:*` localStorage key by prefix scan.
+
+**401 recovery**: if the calendar-list or colors call fails with a 401, the cached list, list timestamp, and color map are dropped, `invalidateToken()` clears the token (removing it from the browser's cache too, on the brokered path), a fresh one is fetched silently via `getValidToken()`, and both calls are retried once. Failing that, the widget drops to `not-connected`.
 
 ## Fetching
 

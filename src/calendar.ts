@@ -2,6 +2,15 @@ import { store } from "./store"
 import { refreshCards, registerCard } from "./layout"
 import { icon } from "./icons/registry"
 import { createPopover } from "./components"
+import {
+  authenticate as googleAuthenticate,
+  getValidToken,
+  invalidateToken,
+  revoke as googleRevoke,
+} from "./google-auth"
+import type { AuthOutcome } from "./google-auth"
+
+export type { AuthOutcome }
 
 type CalendarEvent = {
   id: string
@@ -53,27 +62,10 @@ let popoverRebuild: (() => void) | null = null
 let viewMode: ViewMode = "1d"
 let offset = 0
 
-function getApi() {
-  return globalThis.browser ?? globalThis.chrome
-}
-
-async function getToken(interactive: boolean): Promise<string | null> {
-  const api = getApi()
-  if (!api?.identity?.getAuthToken) return null
-
-  try {
-    const result = await api.identity.getAuthToken({ interactive })
-    return result?.token ?? null
-  } catch {
-    return null
-  }
-}
-
-export async function authenticate(): Promise<boolean> {
-  const token = await getToken(true)
-  if (!token) return false
-  store.local.set("calendarConnected", true)
-  return true
+export async function authenticate(): Promise<AuthOutcome> {
+  const outcome = await googleAuthenticate()
+  if (outcome.ok) store.local.set("calendarConnected", true)
+  return outcome
 }
 
 function getCachedCalendarList(): CalendarInfo[] | null {
@@ -135,16 +127,7 @@ async function fetchColorMap(token: string): Promise<GoogleColorMap> {
 }
 
 export async function disconnect(): Promise<void> {
-  const api = getApi()
-  if (api?.identity?.removeCachedAuthToken) {
-    const token = await getToken(false)
-    if (token) {
-      try {
-        await api.identity.removeCachedAuthToken({ token })
-        await fetch(`https://accounts.google.com/o/oauth2/revoke?token=${token}`)
-      } catch { /* */ }
-    }
-  }
+  await googleRevoke()
 
   store.local.set("calendarConnected", false)
   try {
@@ -237,7 +220,7 @@ async function fetchEvents(): Promise<void> {
     renderTrigger()
   }
 
-  let token = await getToken(false)
+  let token = await getValidToken()
   if (!token) {
     store.local.set("calendarConnected", false)
     currentState = "not-connected"
@@ -257,11 +240,8 @@ async function fetchEvents(): Promise<void> {
         localStorage.removeItem(LS_CALENDAR_LIST)
         localStorage.removeItem(LS_CALENDAR_LIST_TS)
         localStorage.removeItem(LS_COLOR_MAP)
-        const api = getApi()
-        if (api?.identity?.removeCachedAuthToken) {
-          try { await api.identity.removeCachedAuthToken({ token }) } catch { /* */ }
-        }
-        token = await getToken(false)
+        await invalidateToken()
+        token = await getValidToken()
         if (!token) {
           store.local.set("calendarConnected", false)
           currentState = "not-connected"

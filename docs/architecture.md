@@ -82,13 +82,18 @@ Feature modules and what they pull in beyond `store`:
 
 | Module | Depends on |
 |---|---|
-| `settings.ts` | `components`, `icons/registry`, `spotify`, `calendar`, `unsplash`, `background`, `idb`, `defaults` |
+| `settings.ts` | `components`, `icons/registry`, `spotify`, `calendar`, `weather`, `location`, `capabilities`, `google-auth`, `unsplash`, `background`, `idb`, `defaults` |
 | `dock.ts` | `components`, `icons/registry`, `recommendations`, `shortcuts` |
 | `shortcut-settings.ts` | `components`, `icons/registry`, `shortcuts`, `shortcut-drag`, `url`, `defaults` |
 | `shortcut-drag.ts` | `shortcuts` only — no store, no DOM lookups of its own |
 | `search.ts` | its two providers (imported for their registration side effect) |
 | `todo.ts` | `components`, `icons/registry`, `todos` |
-| `weather.ts`, `calendar.ts`, `spotify.ts` | `components`, `icons/registry` |
+| `weather.ts` | `components`, `icons/registry`, `location` |
+| `calendar.ts` | `components`, `icons/registry`, `google-auth` |
+| `spotify.ts` | `icons/registry` |
+| `location.ts` | `timezone-coords` only — plus the store |
+| `google-auth.ts` | the store only; wraps every `identity` call |
+| `capabilities.ts` | `location`, `google-auth` — probes, renders nothing |
 | `history-import.ts` | `shortcuts` |
 | `layout.ts` | `components` only — it knows nothing about any widget; widgets register themselves |
 | `background.ts` | `unsplash`, `idb`, `mesh-bg`, `defaults` |
@@ -179,12 +184,17 @@ There is no test suite, no linter, and no CI.
 |---|---|---|
 | `chrome_url_overrides.newtab` | `index.html` | The whole point |
 | `permissions` | `storage` | The store's `browser.storage.sync` / `.local` backing |
-| | `geolocation` | Weather coordinates |
-| | `identity` | OAuth for Spotify (`launchWebAuthFlow`) and Google Calendar (`getAuthToken`) |
+| | `geolocation` | Weather coordinates, where the browser can supply them |
+| | `identity` | OAuth for Spotify and Google Calendar (`launchWebAuthFlow`, `getAuthToken`) |
 | | `history` | Recommendations heatmap + history import |
-| `oauth2.client_id` | a Google OAuth client | Calendar. Replace with your own to use Calendar in a fork |
+| `host_permissions` | the nine API hosts the app calls | Lets extension-page `fetch` bypass CORS instead of depending on each third party's headers |
+| `oauth2.client_id` | a Google OAuth client | Calendar via `getAuthToken`. Only used where the browser has a Google account service |
 | `oauth2.scopes` | `calendar.readonly` | |
 | `key` | a fixed public key | Pins the extension ID, which pins the OAuth redirect URI |
+
+**`host_permissions` is load-bearing, not belt-and-braces.** Without it every cross-origin call from the page is an ordinary CORS request carrying a `chrome-extension://` origin, and succeeds only if the remote host happens to allow it. Adding a host here is part of adding an API call.
+
+The `oauth2` block is now a fast path rather than the mechanism: when `identity.getAuthToken` doesn't work, `google-auth.ts` falls back to a redirect flow driven by the `googleClientId` setting. See [browser-compat.md](browser-compat.md#google-sign-in).
 
 No background service worker and no content scripts — the commented-out `cp src/service-worker.js` line in `build.sh:71` is a leftover from a design that was never shipped.
 

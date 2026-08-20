@@ -31,9 +31,13 @@ async function sha256(plain: string): Promise<ArrayBuffer> {
   return crypto.subtle.digest("SHA-256", encoder.encode(plain))
 }
 
-export async function authenticate(): Promise<boolean> {
+export type SpotifyAuthOutcome = { ok: true } | { ok: false; error: string }
+
+export async function authenticate(): Promise<SpotifyAuthOutcome> {
   const api = globalThis.browser ?? globalThis.chrome
-  if (!api?.identity) return false
+  if (!api?.identity?.launchWebAuthFlow) {
+    return { ok: false, error: "This browser doesn't support the extension auth flow." }
+  }
 
   const codeVerifier = generateCodeVerifier()
   const codeChallenge = base64UrlEncode(await sha256(codeVerifier))
@@ -56,16 +60,32 @@ export async function authenticate(): Promise<boolean> {
       url: authUrl,
       interactive: true,
     })
-  } catch {
-    return false
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    return {
+      ok: false,
+      error: /did not approve|cancel/i.test(msg)
+        ? "Sign-in was cancelled."
+        : `Sign-in failed: ${msg}`,
+    }
   }
 
-  if (!responseUrl) return false
-  const code = new URL(responseUrl).searchParams.get("code")
-  if (!code) return false
+  if (!responseUrl) {
+    return { ok: false, error: "The Spotify window closed before completing." }
+  }
 
+  const returned = new URL(responseUrl)
+  const authError = returned.searchParams.get("error")
+  if (authError) return { ok: false, error: `Spotify returned: ${authError}` }
+
+  const code = returned.searchParams.get("code")
+  if (!code) {
+    return { ok: false, error: "Spotify didn't return an authorization code." }
+  }
+
+  let tokenRes: Response
   try {
-    const tokenRes = await fetch(SPOTIFY_TOKEN_URL, {
+    tokenRes = await fetch(SPOTIFY_TOKEN_URL, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
@@ -76,9 +96,24 @@ export async function authenticate(): Promise<boolean> {
         code_verifier: codeVerifier,
       }),
     })
+  } catch (e) {
+    return {
+      ok: false,
+      error: `Couldn't reach Spotify to exchange the code: ${e instanceof Error ? e.message : String(e)}`,
+    }
+  }
 
-    if (!tokenRes.ok) return false
+  if (!tokenRes.ok) {
+    let detail = `HTTP ${tokenRes.status}`
+    try {
+      const body = await tokenRes.json()
+      if (body?.error_description) detail = body.error_description
+      else if (body?.error) detail = body.error
+    } catch { /* non-JSON error body */ }
+    return { ok: false, error: `Spotify rejected the token exchange: ${detail}` }
+  }
 
+  try {
     const tokenData = await tokenRes.json()
     store.local.set("spotifyAccessToken", tokenData.access_token)
     store.local.set("spotifyRefreshToken", tokenData.refresh_token)
@@ -86,9 +121,9 @@ export async function authenticate(): Promise<boolean> {
       "spotifyTokenExpiry",
       Date.now() + tokenData.expires_in * 1000
     )
-    return true
+    return { ok: true }
   } catch {
-    return false
+    return { ok: false, error: "Spotify returned a token response we couldn't read." }
   }
 }
 

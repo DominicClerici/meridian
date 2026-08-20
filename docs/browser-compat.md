@@ -1,0 +1,138 @@
+# Browser compatibility
+
+Two of this extension's features are built on browser services that Chromium
+*forks* often remove. This doc covers what breaks, how the code detects it, and
+how it degrades.
+
+The motivating case is **ungoogled-chromium**, but nothing here is specific to
+it — Brave, Vivaldi, a Chrome profile with enterprise policy, and Firefox all
+trip some subset of the same wires.
+
+## What a de-Googled build actually changes
+
+Ungoogled-chromium rewrites Google domains in Chromium's *own source* at build
+time to a sentinel TLD (`www.googleapis.com` → `www.9oo91eapis.qjz9zk`) and
+blocks anything that reaches for one. It also ships no Google API keys and
+removes browser sign-in.
+
+The consequence that matters, and the one that is easy to get backwards:
+
+> **Domain substitution only touches Chromium's compiled-in URLs, not extension
+> code.** A `fetch("https://www.googleapis.com/calendar/v3/…")` from
+> `calendar.ts` goes out completely normally. Only the browser's *internal*
+> requests — the network location provider, GAIA, sync — are rewritten and
+> blocked.
+
+So the Calendar API is fine. What breaks is narrower than it first looks:
+
+| Service | Status | Why |
+|---|---|---|
+| `navigator.geolocation` | Permanently broken | The network locator posts to `googleapis.com`, which is substituted and blocked. No API key either, and on Linux there's no OS provider to fall back to. Returns `POSITION_UNAVAILABLE` regardless of the permission state. |
+| `identity.getAuthToken` | Hangs | Brokers against the profile's signed-in Google account. With sign-in removed, the interactive flow starts a sign-in that has no UI to complete, so the callback never fires — no rejection, no console error. |
+| `identity.launchWebAuthFlow` | Works | Pure Chromium. No GAIA, no API key, no signed-in profile. |
+| `fetch` to Google APIs | Works | Not subject to substitution, per above. |
+
+## Detection
+
+**Don't sniff the browser.** Ungoogled-chromium reports as stock Chrome on
+purpose — the UA string and `navigator.userAgentData` brands both match — and
+probing `googleapis.com` with `fetch` reports "all good" while the platform is
+broken. Both approaches produce confident wrong answers.
+
+**Probe the capability instead.** Two signals do the whole job:
+
+- **Permission vs. provider.** `navigator.permissions.query({name:"geolocation"})`
+  returning `granted` while `getCurrentPosition` returns `POSITION_UNAVAILABLE`
+  is proof that the *provider* is broken rather than the permission.
+  `location.ts` records the failure in `sp:geo:deviceFailed`.
+- **Answer vs. silence.** `probeNativeBroker()` (`google-auth.ts`) races
+  `getAuthToken({interactive:false})` against a 4s clock. A *rejection* counts
+  as available — "not signed in" is a real answer. Only silence means the broker
+  isn't there. Cached in `sp:google:nativeProbe`.
+
+Both results are memos about the browser, not about the user, so they're probed
+once and cached rather than re-run per page load.
+
+`capabilities.ts` composes these into the report rendered in
+Settings → Advanced. It deliberately reports capabilities rather than naming a
+browser, because the same capability goes missing for several unrelated reasons.
+
+## Location
+
+`location.ts` owns a four-step chain, tried in order by `resolveLocation()`:
+
+1. **A manual pick always wins.** If `weatherLocationSource === "manual"` the
+   stored coordinates are returned without touching the device locator — an
+   explicit choice is never silently overridden.
+2. **The device locator**, unless it failed within the last 6 hours
+   (`DEVICE_RETRY_BACKOFF`). Where the provider is blocked this fails *every*
+   time, and retrying on each 5-minute refresh would burn a 10s timeout and spam
+   the console for nothing.
+3. **Whatever was last stored**, from any source.
+4. **A timezone estimate** — `Intl.DateTimeFormat().resolvedOptions().timeZone`
+   looked up in the ~140-entry table in `timezone-coords.ts`. Zero network, zero
+   permission, accurate to the right metro area, which is all a temperature
+   reading needs.
+
+`null` comes back only when the timezone is unmapped *and* nothing is stored;
+the widget then asks for a city.
+
+A timezone estimate is labelled as one — `approximateNote()` in `weather.ts`
+renders "Approximate — estimated from your timezone (Denver)" under the chart.
+It's good enough to show, but it isn't what the user asked for, so it says so.
+
+**Manual entry** is a city search against
+`geocoding-api.open-meteo.com` — same vendor as the forecast itself, no API key.
+It's always visible in settings rather than appearing only after a failure, so
+the path exists before it's needed.
+
+`requestDeviceLocation()` wraps `getCurrentPosition` with its own wall-clock
+guard on top of the `timeout` option, because a blocked provider can leave the
+call hanging past its own deadline. It maps the three `PositionError` codes onto
+distinct messages in `GEO_FAILURE_TEXT` — "denied" and "no provider" need
+different fixes and must not be reported as the same thing.
+
+## Google sign-in
+
+`google-auth.ts` presents one interface over two mechanisms.
+
+**`authenticate()`** probes the native broker, then:
+
+- Broker available → `getAuthToken({interactive:true})`, raced against a 2-minute
+  clock. If that fails for any reason *other* than the broker going silent, that
+  failure is returned as-is — a declined consent is the user's answer, not a
+  reason to open a second window.
+- Broker unavailable, or it went silent mid-flow → the redirect flow.
+
+**The redirect flow** is `launchWebAuthFlow` against Google's OAuth endpoint
+using `response_type=token` (implicit). It needs no client secret and no token
+exchange; the token comes back in the URL *fragment*. Renewal is the same call
+with `prompt=none` and `interactive:false`, which succeeds whenever the auth
+partition still holds a Google session.
+
+It does require the user to supply their own OAuth client, because a
+Chrome-Extension-type client can't register redirect URIs. Settings → Advanced
+has the field, shows the extension's redirect URI with a copy button, and links
+to the console. `summarizeCalendar()` in `capabilities.ts` reports
+`Needs setup` until a client ID is present.
+
+**Why implicit rather than PKCE:** Google's Web-application clients still expect
+a `client_secret` at the token endpoint, and the client types that accept PKCE
+without one (Desktop app) only allow `localhost` redirect URIs — not
+`chromiumapp.org`. Implicit avoids embedding a secret. The cost is no refresh
+token and a ~1h lifetime, which is invisible behind a 5-minute refresh interval.
+
+## The general rule
+
+All three original bugs presented the same way: a control that froze or did
+nothing, with nothing in the console. That's the failure mode to design against.
+
+- **Every platform-brokered call gets a timeout.** `getAuthToken` has no
+  contract that says it must settle, and on some builds it doesn't.
+- **Every async button gets three terminal states** — success, actionable
+  failure, unknown failure with the detail attached. `spotify.ts:authenticate()`
+  used to have five `return false` paths that were indistinguishable from each
+  other; it now returns `{ ok: false, error }` and settings renders the string.
+- **Say what's wrong, not what you guessed.** "Your browser has no working
+  location provider" is true and actionable on every browser. "Permission
+  denied" was neither.

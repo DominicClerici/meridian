@@ -29,6 +29,18 @@ import {
 } from "./background"
 import { idbGet } from "./idb"
 import type { UnsplashPhoto } from "./unsplash"
+import {
+  GEO_FAILURE_TEXT,
+  getStoredLocation,
+  requestDeviceLocation,
+  searchCity,
+  setLocation,
+} from "./location"
+import type { GeocodeResult } from "./location"
+import { refreshWeather } from "./weather"
+import { probeCapabilities } from "./capabilities"
+import type { Capability } from "./capabilities"
+import { getRedirectUri } from "./google-auth"
 
 const TABS = [
   { id: "general", label: "General", iconName: "tabGeneral" },
@@ -55,6 +67,32 @@ function settingsRow(
   row.appendChild(labelEl)
   row.appendChild(control)
   return row
+}
+
+let selectTabFn: ((tabId: string) => void) | null = null
+
+function selectTab(tabId: string): void {
+  selectTabFn?.(tabId)
+}
+
+/** Buttons from `createButton` put the label in the last span; icons come first. */
+function setButtonLabel(btn: HTMLButtonElement, text: string): void {
+  const spans = btn.querySelectorAll("span")
+  const target = spans[spans.length - 1]
+  if (target) target.textContent = text
+}
+
+function statusText(): HTMLParagraphElement {
+  const el = document.createElement("p")
+  el.className = "text-xs text-muted mt-1"
+  el.hidden = true
+  return el
+}
+
+function showStatus(el: HTMLParagraphElement, text: string, isError: boolean): void {
+  el.textContent = text
+  el.className = isError ? "text-xs text-danger mt-1" : "text-xs text-muted mt-1"
+  el.hidden = false
 }
 
 function buildGeneralTab(): void {
@@ -823,6 +861,137 @@ function buildAppearanceTab(): void {
   panel.appendChild(bgWrapper)
 }
 
+function describeLocation(): string {
+  const loc = getStoredLocation()
+  if (!loc) return "Not set"
+
+  const name = loc.label ?? `${loc.lat.toFixed(2)}, ${loc.lon.toFixed(2)}`
+  const origin =
+    loc.source === "device"
+      ? "from your device"
+      : loc.source === "manual"
+        ? "set manually"
+        : "estimated from your timezone"
+  return `${name} · ${origin}`
+}
+
+/**
+ * Device location, then a city search. The device path can fail permanently on
+ * browsers with no location provider, so the manual path is always visible
+ * rather than hidden behind a failure.
+ */
+function buildLocationControls(): HTMLElement {
+  const wrap = document.createElement("div")
+  wrap.className = "flex flex-col gap-2 py-3"
+
+  const header = document.createElement("div")
+  header.className = "flex items-center justify-between gap-3"
+  const label = document.createElement("span")
+  label.className = "text-sm text-foreground shrink-0"
+  label.textContent = "Location"
+  const value = document.createElement("span")
+  value.className = "text-sm text-muted text-right truncate min-w-0"
+  header.appendChild(label)
+  header.appendChild(value)
+  wrap.appendChild(header)
+
+  const status = statusText()
+
+  function update(): void {
+    value.textContent = describeLocation()
+  }
+  update()
+
+  const deviceBtn = createButton("Use device location", "outline", {
+    onClick: async () => {
+      deviceBtn.disabled = true
+      setButtonLabel(deviceBtn, "Locating…")
+      status.hidden = true
+
+      const result = await requestDeviceLocation()
+
+      deviceBtn.disabled = false
+      setButtonLabel(deviceBtn, "Use device location")
+
+      if (result.ok) {
+        setLocation(result.lat, result.lon, null, "device")
+        refreshWeather()
+        update()
+        showStatus(status, "Location updated from your device.", false)
+      } else {
+        showStatus(status, GEO_FAILURE_TEXT[result.reason], true)
+      }
+    },
+  })
+  deviceBtn.className += " self-start"
+  wrap.appendChild(deviceBtn)
+
+  const searchInput = createInput({
+    placeholder: "Or search for a city…",
+  }) as HTMLInputElement
+  wrap.appendChild(searchInput)
+
+  const results = document.createElement("div")
+  results.className = "flex flex-col gap-0.5"
+  wrap.appendChild(results)
+  wrap.appendChild(status)
+
+  function renderResults(hits: GeocodeResult[]): void {
+    results.replaceChildren()
+    if (hits.length === 0) {
+      showStatus(status, "No matching city found.", false)
+      return
+    }
+    status.hidden = true
+
+    for (const hit of hits) {
+      const item = document.createElement("button")
+      item.className =
+        "text-left text-sm px-2 py-1.5 rounded-theme text-foreground hover:bg-surface transition-colors"
+      item.textContent = hit.label
+      item.addEventListener("click", () => {
+        setLocation(hit.lat, hit.lon, hit.label, "manual")
+        refreshWeather()
+        update()
+        searchInput.value = ""
+        results.replaceChildren()
+        showStatus(status, `Weather now uses ${hit.label}.`, false)
+      })
+      results.appendChild(item)
+    }
+  }
+
+  let searchTimer: ReturnType<typeof setTimeout> | null = null
+  let searchAbort: AbortController | null = null
+
+  searchInput.addEventListener("input", () => {
+    if (searchTimer) clearTimeout(searchTimer)
+    searchAbort?.abort()
+
+    const query = searchInput.value.trim()
+    if (query.length < 2) {
+      results.replaceChildren()
+      return
+    }
+
+    searchTimer = setTimeout(async () => {
+      const controller = new AbortController()
+      searchAbort = controller
+      try {
+        renderResults(await searchCity(query, controller.signal))
+      } catch (e) {
+        if (e instanceof DOMException && e.name === "AbortError") return
+        results.replaceChildren()
+        showStatus(status, "City search failed — check your connection.", true)
+      }
+    }, 300)
+  })
+
+  store.local.subscribe("weatherLocationSource", update)
+
+  return wrap
+}
+
 function createSpotifyButton(onClick: () => void): HTMLButtonElement {
   const btn = document.createElement("button")
   btn.className =
@@ -997,37 +1166,7 @@ function buildWidgetsTab(): void {
     weatherUnit.value = v
   })
 
-  const locationRow = document.createElement("div")
-  const grantBtn = createButton("Grant location access", "primary", {
-    onClick: () => {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          store.local.set("weatherLat", pos.coords.latitude)
-          store.local.set("weatherLon", pos.coords.longitude)
-          locationRow.hidden = true
-        },
-        () => {
-          locationHelp.hidden = false
-        },
-        { timeout: 10000 }
-      )
-    },
-  })
-  locationRow.appendChild(grantBtn)
-
-  const locationHelp = document.createElement("p")
-  locationHelp.className = "text-xs text-muted mt-1"
-  locationHelp.textContent =
-    "Location access was denied. Please enable it in your browser settings for this extension."
-  locationHelp.hidden = true
-  locationRow.appendChild(locationHelp)
-
-  locationRow.hidden = store.local.get("weatherLat") !== null
-  store.local.subscribe("weatherLat", () => {
-    locationRow.hidden = store.local.get("weatherLat") !== null
-  })
-
-  weatherAcc.content.appendChild(locationRow)
+  weatherAcc.content.appendChild(buildLocationControls())
   panel.appendChild(weatherAcc.container)
 
   // --- Spotify ---
@@ -1049,15 +1188,22 @@ function buildWidgetsTab(): void {
   })
 
   const spotifyConnectRow = document.createElement("div")
+  const spotifyStatus = statusText()
   const spotifyBtn = createSpotifyButton(async () => {
     spotifyBtn.disabled = true
-    spotifyBtn.querySelector("span")!.textContent = "Connecting..."
-    const success = await spotifyAuthenticate()
+    setButtonLabel(spotifyBtn, "Connecting…")
+    spotifyStatus.hidden = true
+
+    const result = await spotifyAuthenticate()
+
     spotifyBtn.disabled = false
-    spotifyBtn.querySelector("span")!.textContent = "Connect Spotify"
-    if (success) updateSpotifyUI()
+    setButtonLabel(spotifyBtn, "Connect Spotify")
+
+    if (result.ok) updateSpotifyUI()
+    else showStatus(spotifyStatus, result.error, true)
   })
   spotifyConnectRow.appendChild(spotifyBtn)
+  spotifyConnectRow.appendChild(spotifyStatus)
 
   const spotifyDisconnectRow = document.createElement("div")
   spotifyDisconnectRow.hidden = true
@@ -1104,15 +1250,33 @@ function buildWidgetsTab(): void {
   })
 
   const calConnectRow = document.createElement("div")
+  const calStatus = statusText()
   const calBtn = createGoogleButton(async () => {
     calBtn.disabled = true
-    calBtn.querySelector("span")!.textContent = "Signing in..."
-    const success = await calendarAuthenticate()
+    setButtonLabel(calBtn, "Signing in…")
+    calStatus.hidden = true
+
+    const result = await calendarAuthenticate()
+
     calBtn.disabled = false
-    calBtn.querySelector("span")!.textContent = "Sign in with Google"
-    if (success) updateCalendarUI()
+    setButtonLabel(calBtn, "Sign in with Google")
+
+    if (result.ok) {
+      updateCalendarUI()
+      return
+    }
+
+    showStatus(calStatus, result.error, true)
+    if (result.needsClientId) {
+      const link = document.createElement("button")
+      link.className = "underline text-accent ml-1"
+      link.textContent = "Open Advanced settings"
+      link.addEventListener("click", () => selectTab("advanced"))
+      calStatus.appendChild(link)
+    }
   })
   calConnectRow.appendChild(calBtn)
+  calConnectRow.appendChild(calStatus)
 
   const calDisconnectRow = document.createElement("div")
   calDisconnectRow.hidden = true
@@ -1270,6 +1434,12 @@ function buildNav(): { refreshIndicator: () => void } {
     }, 25)
   }
 
+  selectTabFn = (tabId: string) => {
+    const index = TABS.findIndex((t) => t.id === tabId)
+    if (index === -1 || index === activeIndex || switching) return
+    switchTab(tabId, index)
+  }
+
   return {
     refreshIndicator: () => {
       indicator.style.transform = `translateY(${indicatorTop(activeIndex)}px)`
@@ -1402,8 +1572,173 @@ function buildAdvancedPanel(): HTMLDivElement {
   helpText.innerHTML = `Get a free key at <a href="https://unsplash.com/developers" target="_blank" rel="noopener" class="underline text-accent">unsplash.com/developers</a>`
   wrapper.appendChild(helpText)
 
+  wrapper.appendChild(buildGoogleAuthSection())
+  wrapper.appendChild(buildCapabilityPanel())
+
   panel.appendChild(wrapper)
   return panel
+}
+
+function sectionHeading(text: string): HTMLElement {
+  const h = document.createElement("h3")
+  h.className =
+    "text-[11px] uppercase tracking-wider text-muted mt-6 mb-1 pt-4 border-t border-input-border/10"
+  h.textContent = text
+  return h
+}
+
+/**
+ * Only needed where `identity.getAuthToken` doesn't work — de-Googled Chromium
+ * builds, and any non-Chrome browser. Always shown so the setup path is
+ * discoverable before sign-in fails rather than only after.
+ */
+function buildGoogleAuthSection(): HTMLElement {
+  const section = document.createElement("div")
+  section.appendChild(sectionHeading("Google Calendar sign-in"))
+
+  const clientInput = createInput({
+    placeholder: "…apps.googleusercontent.com",
+  }) as HTMLInputElement
+  clientInput.value = store.sync.get("googleClientId")
+  clientInput.style.width = "220px"
+  clientInput.addEventListener("change", () => {
+    store.sync.set("googleClientId", clientInput.value.trim())
+  })
+  store.sync.subscribe("googleClientId", (v) => {
+    clientInput.value = v
+  })
+
+  const clientRow = document.createElement("div")
+  clientRow.className =
+    "flex items-center justify-between py-3 border-b border-input-border/10"
+  const clientLabel = document.createElement("span")
+  clientLabel.className = "text-sm text-foreground"
+  clientLabel.textContent = "OAuth client ID"
+  clientRow.appendChild(clientLabel)
+  clientRow.appendChild(clientInput)
+  section.appendChild(clientRow)
+
+  const redirect = getRedirectUri()
+  if (redirect) {
+    const redirectRow = document.createElement("div")
+    redirectRow.className =
+      "flex items-center justify-between gap-3 py-3 border-b border-input-border/10"
+
+    const redirectLabel = document.createElement("span")
+    redirectLabel.className = "text-sm text-foreground shrink-0"
+    redirectLabel.textContent = "Redirect URI"
+
+    const redirectValue = document.createElement("code")
+    redirectValue.className = "text-xs text-muted truncate min-w-0"
+    redirectValue.textContent = redirect
+
+    const copyBtn = createButton("Copy", "ghost", {
+      onClick: async () => {
+        try {
+          await navigator.clipboard.writeText(redirect)
+          setButtonLabel(copyBtn, "Copied")
+          setTimeout(() => setButtonLabel(copyBtn, "Copy"), 1500)
+        } catch {
+          setButtonLabel(copyBtn, "Press Ctrl+C")
+        }
+      },
+    })
+    copyBtn.classList.add("shrink-0")
+
+    const right = document.createElement("div")
+    right.className = "flex items-center gap-1 min-w-0"
+    right.appendChild(redirectValue)
+    right.appendChild(copyBtn)
+
+    redirectRow.appendChild(redirectLabel)
+    redirectRow.appendChild(right)
+    section.appendChild(redirectRow)
+  }
+
+  const help = document.createElement("p")
+  help.className = "text-xs text-muted mt-2 leading-relaxed"
+  help.innerHTML =
+    `Leave this blank if "Sign in with Google" already works — it's only needed when your browser has no Google account service. ` +
+    `In <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener" class="underline text-accent">Google Cloud Console</a>, ` +
+    `enable the Calendar API, create an OAuth client of type <strong>Web application</strong>, add the redirect URI above, and paste the client ID here.`
+  section.appendChild(help)
+
+  return section
+}
+
+const CAPABILITY_STYLE: Record<Capability["state"], { label: string; className: string }> = {
+  available: { label: "Available", className: "text-accent" },
+  degraded: { label: "Needs setup", className: "text-muted" },
+  unavailable: { label: "Unavailable", className: "text-danger" },
+  unknown: { label: "Not checked", className: "text-muted" },
+}
+
+/**
+ * Reports what the browser actually provides rather than guessing which browser
+ * it is — the same capability can be missing for several unrelated reasons.
+ */
+function buildCapabilityPanel(): HTMLElement {
+  const section = document.createElement("div")
+  section.appendChild(sectionHeading("Browser capabilities"))
+
+  const list = document.createElement("div")
+  list.className = "flex flex-col"
+  section.appendChild(list)
+
+  const checkBtn = createButton("Re-check", "outline", {
+    icon: getIconSvg("refresh"),
+    onClick: () => run(true),
+  })
+  checkBtn.className += " self-start mt-2"
+  section.appendChild(checkBtn)
+
+  function render(capabilities: Capability[]): void {
+    list.replaceChildren()
+
+    for (const cap of capabilities) {
+      const row = document.createElement("div")
+      row.className = "py-2.5 border-b border-input-border/10 last:border-b-0"
+
+      const top = document.createElement("div")
+      top.className = "flex items-center justify-between gap-3"
+
+      const name = document.createElement("span")
+      name.className = "text-sm text-foreground"
+      name.textContent = cap.label
+
+      const style = CAPABILITY_STYLE[cap.state]
+      const badge = document.createElement("span")
+      badge.className = `text-xs shrink-0 ${style.className}`
+      badge.textContent = style.label
+
+      top.appendChild(name)
+      top.appendChild(badge)
+      row.appendChild(top)
+
+      const detail = document.createElement("p")
+      detail.className = "text-xs text-muted mt-0.5"
+      detail.textContent = cap.detail
+      row.appendChild(detail)
+
+      list.appendChild(row)
+    }
+  }
+
+  async function run(force: boolean): Promise<void> {
+    checkBtn.disabled = true
+    setButtonLabel(checkBtn, force ? "Checking…" : "Re-check")
+    try {
+      render(await probeCapabilities(force))
+    } finally {
+      checkBtn.disabled = false
+      setButtonLabel(checkBtn, "Re-check")
+    }
+  }
+
+  run(false)
+  store.sync.subscribe("googleClientId", () => run(false))
+
+  return section
 }
 
 export function initSettings(): void {

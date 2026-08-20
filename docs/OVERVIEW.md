@@ -23,9 +23,10 @@ Everything renders into one page (`src/index.html`) from one bundle (`dist/index
 | [search.md](search.md) | The search bar, the provider registry, and its two providers | `search.ts`, `search-provider-*.ts`, `url.ts` |
 | [widgets.md](widgets.md) | The shared widget pattern (trigger + popover + cache), and the clock | `clock.ts` |
 | [todos.md](todos.md) | Todo data model, pure operations, and the todo popover | `todos.ts`, `todo.ts` |
-| [weather.md](weather.md) | Open-Meteo fetching, caching, and the hourly SVG chart | `weather.ts` |
+| [weather.md](weather.md) | Open-Meteo fetching, caching, and the hourly SVG chart | `weather.ts`, `location.ts`, `timezone-coords.ts` |
 | [spotify.md](spotify.md) | PKCE OAuth, player polling, playback controls | `spotify.ts` |
-| [calendar.md](calendar.md) | Google OAuth, event fetching, the 1d/1w/1m views | `calendar.ts` |
+| [calendar.md](calendar.md) | Google OAuth, event fetching, the 1d/1w/1m views | `calendar.ts`, `google-auth.ts` |
+| [browser-compat.md](browser-compat.md) | What de-Googled Chromium breaks, how it's detected, how it degrades | `location.ts`, `google-auth.ts`, `capabilities.ts` |
 | [recommendations.md](recommendations.md) | The browsing-history heatmap, scoring, and history import | `recommendations.ts`, `history-import.ts` |
 | [backgrounds.md](backgrounds.md) | Background sources — mesh gradient, Unsplash, upload — and blob storage | `background.ts`, `mesh-bg.ts`, `color.ts`, `unsplash.ts`, `idb.ts` |
 
@@ -46,6 +47,8 @@ Everything renders into one page (`src/index.html`) from one bundle (`dist/index
 | The search bar, or results ranked wrong | [search.md](search.md) |
 | A widget's popover not opening or closing | [widgets.md](widgets.md), [components.md](components.md#createpopover) |
 | An OAuth/connect button | [spotify.md](spotify.md), [calendar.md](calendar.md) |
+| Sign-in that hangs, or "Enable location" doing nothing | [browser-compat.md](browser-compat.md) |
+| A `fetch` failing CORS from the extension page | [architecture.md](architecture.md#manifest) |
 | The wallpaper, the animated mesh gradient, attribution credit, or a stale daily photo | [backgrounds.md](backgrounds.md) |
 | The suggested sites at the left of the dock | [recommendations.md](recommendations.md) |
 | Which module owns a given element ID | [architecture.md](architecture.md#dom-ownership) |
@@ -55,7 +58,7 @@ Everything renders into one page (`src/index.html`) from one bundle (`dist/index
 
 ```
 build.sh              One-shot and watch builds → dist/
-manifest.json         MV3 manifest: newtab override, OAuth client, permissions
+manifest.json         MV3 manifest: newtab override, OAuth client, permissions, host_permissions
 bin/                  tailwindcss + esbuild standalone binaries (gitignored)
 dist/                 Build output — load this folder as an unpacked extension
 docs/                 This documentation set
@@ -90,8 +93,12 @@ src/
   todos.ts            Todo data model + pure operations
   todo.ts             Todo widget UI
   weather.ts          Weather widget
+  location.ts         Location resolution chain: manual → device → stored → timezone
+  timezone-coords.ts  IANA timezone → coarse coordinates table
   spotify.ts          Spotify widget
   calendar.ts         Google Calendar widget
+  google-auth.ts      Google OAuth over both the brokered and redirect flows
+  capabilities.ts     Browser capability probes for the Advanced settings report
   recommendations.ts  History heatmap + scoring
   history-import.ts   Bulk-import shortcuts from browser history
   background.ts       Background source switching + image application

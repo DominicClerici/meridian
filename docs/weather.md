@@ -1,6 +1,6 @@
 # Weather
 
-**File:** `src/weather.ts` (548 lines). **Trigger:** `#weather-trigger`. **API:** [Open-Meteo](https://open-meteo.com/) — free, no key.
+**Files:** `src/weather.ts` (641 lines), `src/location.ts` (211 lines), `src/timezone-coords.ts` (157 lines). **Trigger:** `#weather-trigger`. **API:** [Open-Meteo](https://open-meteo.com/) — free, no key.
 
 Follows the trigger/popover pattern in [widgets.md](widgets.md).
 
@@ -10,7 +10,7 @@ Follows the trigger/popover pattern in [widgets.md](widgets.md).
 initWeather()
    └─ fetchWeather()
         ├─ cooldown active + cached?  → render from cache, done
-        ├─ getCoordinates()           → geolocation, else stored lat/lon, else no-permission
+        ├─ resolveLocation()          → manual, else device, else stored, else timezone estimate
         ├─ GET /v1/forecast?current=… → { temperature, weatherCode }
         └─ shouldRefetchHourly()?     → fetchHourlyData() (25-hour series for the chart)
 ```
@@ -19,9 +19,17 @@ Two separate endpoints. The **current** call drives the trigger button; the **ho
 
 ### Coordinates
 
-`getCoordinates()` calls `navigator.geolocation.getCurrentPosition` with a 10s timeout. On success it caches the result into `weatherLat`/`weatherLon` (local store); on failure it falls back to those stored values, and returns `null` only if there's nothing stored. So permission is asked once and the widget keeps working afterward from cache.
+Coordinates come from `location.ts`, not from this module. `resolveLocation()` tries a manual pick, then the device locator, then the last stored value, then a timezone estimate — the full chain and the reasoning behind it are in [browser-compat.md](browser-compat.md#location).
 
-State `no-permission` renders a "Enable location" trigger that **opens the settings dialog** on click, where a Grant location access button lives (see [settings-ui.md](settings-ui.md#widgets)).
+What the widget adds on top:
+
+- `currentLocation` holds the resolved location for the current render, seeded from `getStoredLocation()` in `initWeather()` so a cache-only render on page load still knows where it came from.
+- `approximateNote()` appends a one-line "Approximate — estimated from your timezone (…)" caption whenever the source is `timezone`.
+- `refreshWeather()` is the exported entry point settings calls after the user grants access or picks a city. It clears all three caches first, because the cached reading belongs to the old coordinates.
+
+State `no-location` — reached only when the timezone is unmapped *and* nothing is stored — renders a "Set location" trigger that **opens the settings dialog** on click, where the location controls live (see [settings-ui.md](settings-ui.md#widgets)).
+
+`fetchWeather()` guards re-entry with `fetchInFlight` around the resolve step. Location writes fire store subscribers, and without the guard a device-location refresh could re-enter the fetch it was triggered by.
 
 ### Caching
 
@@ -41,7 +49,7 @@ Changing `weatherUnit` clears **all three** cache keys and refetches, because th
 
 | State | Renders |
 |---|---|
-| `no-permission` | `locationOff` icon + "Enable location" |
+| `no-location` | `locationOff` icon + "Set location" |
 | `loading` | "Loading..." |
 | `error` | `refresh` icon (clicking does nothing — the state check only opens the popover when `loaded`) |
 | `loaded` | Emoji + `72°F Partly cloudy` |
@@ -63,16 +71,15 @@ Colors come from `var(--accent)` inside SVG attributes, so the chart follows the
 
 `formatHour()` respects the **clock's** `clock24Hour` setting rather than having its own.
 
-`buildWeatherBody()` shows the chart when hourly data exists, and falls back to a single line of text (`⛅ 72°F · Partly cloudy`) when it doesn't; before either it renders the current state (a settings link for `no-permission`, a retry button for `error`). The immersive popover wraps it at 280px, and the card in the other layouts hosts the same builder — `renderTrigger()` calls `refreshCard("weather")`, so both stay current. See [layouts.md](layouts.md).
+`buildWeatherBody()` shows the chart when hourly data exists, and falls back to a single line of text (`⛅ 72°F · Partly cloudy`) when it doesn't; before either it renders the current state (a settings link for `no-location`, a retry button for `error`). The immersive popover wraps it at 280px, and the card in the other layouts hosts the same builder — `renderTrigger()` calls `refreshCard("weather")`, so both stay current. See [layouts.md](layouts.md).
 
 ## Refactor candidates
 
 - **Weather codes map to emoji.** `WEATHER_MAP` renders ☀️ 🌤️ ⛅ ☁️ straight into `innerHTML`, so the widget's visual identity is whatever the OS emoji font decides — inconsistent across platforms and unstylable. Every other icon in the app goes through the theme-aware registry ([design-system.md](design-system.md#icons)).
 - **The trigger is built with `innerHTML` string concatenation** (`weather.ts:481`) interpolating live API values. `condition` is from a fixed local map so it's not injectable today, but it's the one place in this file that writes unescaped data into markup.
-- **Error state is a dead end.** `renderTrigger` shows a refresh icon, but the click handler only acts on `loaded` and `no-permission` — clicking the refresh icon does nothing. Calendar handles the same state by retrying.
+- **Error state is a dead end.** `renderTrigger` shows a refresh icon, but the click handler only acts on `loaded` and `no-location` — clicking the refresh icon does nothing. Calendar handles the same state by retrying.
 - **The gradient uses a fixed `id="wg"`.** Two charts on the page would collide; harmless today because only one weather body — popover or card — exists at a time.
 - **Cooldown and interval logic is duplicated from `calendar.ts`** almost line for line — see [widgets.md](widgets.md#refactor-candidates).
 - **The refresh interval runs in hidden tabs.** Every open new tab polls Open-Meteo every 5 minutes forever.
 - **Hourly data is fetched for a fixed 25-hour window** with `currentIndex` hard-coded to 12, so any change to `past_hours` silently breaks the marker.
 - **Chart interaction is mouse-only** — `mousemove`/`mouseleave`, no touch or keyboard equivalent.
-- **`getCoordinates` writes to the store as a side effect** of a function whose name says it reads.

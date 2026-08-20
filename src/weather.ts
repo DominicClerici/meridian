@@ -2,6 +2,8 @@ import { store } from "./store"
 import { icon } from "./icons/registry"
 import { createButton, createPopover } from "./components"
 import { refreshCard, registerCard } from "./layout"
+import { getStoredLocation, resolveLocation } from "./location"
+import type { ResolvedLocation } from "./location"
 
 type WeatherData = {
   temperature: number
@@ -61,13 +63,15 @@ const LS_HOURLY = "sp:weather:hourlyData"
 const COOLDOWN = 120_000
 const REFRESH_INTERVAL = 300_000
 
-type State = "no-permission" | "loading" | "loaded" | "error"
+type State = "no-location" | "loading" | "loaded" | "error"
 
 let currentState: State = "loading"
 let currentData: WeatherData | null = null
+let currentLocation: ResolvedLocation | null = null
 let hourlyCache: HourlyCache | null = null
 let refreshIntervalId: ReturnType<typeof setInterval> | null = null
 let openPopoverClose: (() => void) | null = null
+let fetchInFlight = false
 
 function getCachedData(): WeatherData | null {
   try {
@@ -127,28 +131,9 @@ function shouldRefetchHourly(currentTemp: number): boolean {
   return false
 }
 
-function getCoordinates(): Promise<{ lat: number; lon: number } | null> {
-  return new Promise((resolve) => {
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const coords = { lat: pos.coords.latitude, lon: pos.coords.longitude }
-        store.local.set("weatherLat", coords.lat)
-        store.local.set("weatherLon", coords.lon)
-        resolve(coords)
-      },
-      () => {
-        const lat = store.local.get("weatherLat")
-        const lon = store.local.get("weatherLon")
-        if (lat !== null && lon !== null) resolve({ lat, lon })
-        else resolve(null)
-      },
-      { timeout: 10000 }
-    )
-  })
-}
-
 async function fetchWeather(): Promise<void> {
   if (!store.sync.get("weatherEnabled")) return
+  if (fetchInFlight) return
 
   if (isCooldownActive()) {
     const cached = getCachedData()
@@ -164,9 +149,17 @@ async function fetchWeather(): Promise<void> {
   currentState = "loading"
   renderTrigger()
 
-  const coords = await getCoordinates()
+  fetchInFlight = true
+  let coords: ResolvedLocation | null
+  try {
+    coords = await resolveLocation()
+  } finally {
+    fetchInFlight = false
+  }
+
+  currentLocation = coords
   if (!coords) {
-    currentState = "no-permission"
+    currentState = "no-location"
     renderTrigger()
     return
   }
@@ -417,6 +410,34 @@ function closePopover(): void {
   }
 }
 
+function openSettingsButton(label: string): HTMLElement {
+  const btn = createButton(label, "outline", {
+    onClick: () => {
+      const dialog = document.getElementById(
+        "settings-dialog"
+      ) as HTMLDialogElement | null
+      dialog?.showModal()
+    },
+  })
+  btn.className += " self-start"
+  return btn
+}
+
+/**
+ * A timezone estimate is good enough to show a temperature but is not what the
+ * user asked for, so say so once, quietly, rather than leaving it implicit.
+ */
+function approximateNote(): HTMLElement | null {
+  if (currentLocation?.source !== "timezone") return null
+
+  const note = document.createElement("p")
+  note.className = "text-[11px] text-popover-foreground/50"
+  note.textContent = currentLocation.label
+    ? `Approximate — estimated from your timezone (${currentLocation.label}).`
+    : "Approximate — estimated from your timezone."
+  return note
+}
+
 /**
  * The widget's content, independent of where it is shown: the hourly chart when
  * hourly data is cached, otherwise a one-line summary or the current state.
@@ -426,19 +447,13 @@ export function buildWeatherBody(): HTMLElement {
   const content = document.createElement("div")
   content.className = "flex flex-col gap-2 text-popover-foreground"
 
-  if (currentState === "no-permission") {
+  if (currentState === "no-location") {
     const p = document.createElement("p")
     p.className = "text-sm text-popover-foreground/70"
-    p.textContent = "Location access is off."
+    p.textContent =
+      "No location yet — your browser didn't provide one and your timezone isn't recognized."
     content.appendChild(p)
-    const btn = createButton("Open settings", "outline", {
-      onClick: () => {
-        const dialog = document.getElementById("settings-dialog") as HTMLDialogElement | null
-        dialog?.showModal()
-      },
-    })
-    btn.className += " self-start"
-    content.appendChild(btn)
+    content.appendChild(openSettingsButton("Set a location"))
     return content
   }
 
@@ -473,6 +488,9 @@ export function buildWeatherBody(): HTMLElement {
     content.appendChild(p)
   }
 
+  const note = approximateNote()
+  if (note) content.appendChild(note)
+
   return content
 }
 
@@ -502,12 +520,12 @@ function renderTrigger(): void {
   }
   trigger.hidden = false
 
-  if (currentState === "no-permission") {
+  if (currentState === "no-location") {
     trigger.innerHTML = ""
     trigger.appendChild(icon("locationOff", { size: 24 }))
     const locLabel = document.createElement("span")
     locLabel.className = "text-xs"
-    locLabel.textContent = "Enable location"
+    locLabel.textContent = "Set location"
     trigger.appendChild(locLabel)
     return
   }
@@ -531,6 +549,25 @@ function renderTrigger(): void {
   }
 }
 
+function clearCaches(): void {
+  try {
+    localStorage.removeItem(LS_LAST_FETCH)
+    localStorage.removeItem(LS_CACHED_DATA)
+  } catch { /* */ }
+  clearHourlyCache()
+}
+
+/**
+ * Refetch after the location changed — settings calls this when access is
+ * granted or a city is picked. The cached reading belongs to the old
+ * coordinates, so it has to go with it.
+ */
+export function refreshWeather(): void {
+  clearCaches()
+  currentData = null
+  fetchWeather()
+}
+
 export function initWeather(): void {
   const trigger = document.getElementById(
     "weather-trigger"
@@ -540,10 +577,12 @@ export function initWeather(): void {
   ) as HTMLDialogElement
 
   hourlyCache = getCachedHourly()
+  // So a cached render on load can still say the location is only an estimate.
+  currentLocation = getStoredLocation()
 
   trigger.addEventListener("click", (e) => {
     e.stopPropagation()
-    if (currentState === "no-permission") {
+    if (currentState === "no-location") {
       settingsDialog.showModal()
       return
     }
@@ -568,11 +607,7 @@ export function initWeather(): void {
   })
 
   store.sync.subscribe("weatherUnit", () => {
-    try {
-      localStorage.removeItem(LS_LAST_FETCH)
-      localStorage.removeItem(LS_CACHED_DATA)
-    } catch { /* */ }
-    clearHourlyCache()
+    clearCaches()
     fetchWeather()
   })
 
