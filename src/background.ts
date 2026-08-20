@@ -3,6 +3,7 @@ import type { BgImageMeta } from "./defaults"
 import type { UnsplashPhoto } from "./unsplash"
 import { getRandomPhoto, triggerDownload } from "./unsplash"
 import { idbGet, idbSet } from "./idb"
+import { startMesh, stopMesh } from "./mesh-bg"
 
 const root = document.documentElement
 let attributionEl: HTMLElement | null = null
@@ -68,19 +69,21 @@ function isStale(cachedAt: number): boolean {
   return new Date(cachedAt).toDateString() !== new Date().toDateString()
 }
 
-async function loadFromSlot(slot: "unsplash" | "upload"): Promise<void> {
+async function loadFromSlot(slot: "unsplash" | "upload"): Promise<boolean> {
   const metaKey = slot === "unsplash" ? "bgUnsplashMeta" : "bgUploadMeta"
   const meta = store.local.get(metaKey)
-  if (!meta) return
+  if (!meta) return false
 
   const blob = await idbGet(slot)
-  if (!blob) return
+  if (!blob) return false
 
+  stopMesh()
   revokeCurrentUrl()
   currentObjectUrl = URL.createObjectURL(blob)
   applyImageStyle(currentObjectUrl)
   if (slot === "unsplash") renderAttribution(meta)
   else removeAttribution()
+  return true
 }
 
 async function refreshDaily(): Promise<void> {
@@ -101,18 +104,27 @@ async function refreshDaily(): Promise<void> {
 
 export function applyBackground(): void {
   const source = store.sync.get("bgSource")
-  if (source === "color") return
+  if (source === "color") {
+    startMesh()
+    return
+  }
 
   if (source === "unsplash") {
     const meta = store.local.get("bgUnsplashMeta")
-    if (!meta) return
-    loadFromSlot("unsplash").then(() => {
+    if (!meta) {
+      startMesh()
+      return
+    }
+    loadFromSlot("unsplash").then((applied) => {
+      if (!applied) startMesh()
       if (store.sync.get("unsplashDaily") && isStale(meta.cachedAt)) {
         refreshDaily()
       }
     })
   } else if (source === "upload") {
-    loadFromSlot("upload")
+    loadFromSlot("upload").then((applied) => {
+      if (!applied) startMesh()
+    })
   }
 }
 
@@ -141,6 +153,7 @@ export async function setUnsplashPhoto(photo: UnsplashPhoto): Promise<void> {
 
   triggerDownload(photo.downloadUrl)
 
+  stopMesh()
   revokeCurrentUrl()
   currentObjectUrl = URL.createObjectURL(blob)
   applyImageStyle(currentObjectUrl)
@@ -162,6 +175,7 @@ export async function setUploadedPhoto(file: File): Promise<void> {
   store.sync.set("unsplashDaily", false)
   store.sync.set("bgSource", "upload")
 
+  stopMesh()
   revokeCurrentUrl()
   currentObjectUrl = URL.createObjectURL(file)
   applyImageStyle(currentObjectUrl)
@@ -172,6 +186,7 @@ export function switchToColor(): void {
   revokeCurrentUrl()
   removeImageStyle()
   removeAttribution()
+  startMesh()
   store.sync.set("unsplashDaily", false)
   store.sync.set("bgSource", "color")
 }
@@ -194,10 +209,15 @@ export function subscribeBackground(): void {
       revokeCurrentUrl()
       removeImageStyle()
       removeAttribution()
+      startMesh()
     } else if (val === "unsplash") {
-      loadFromSlot("unsplash")
+      loadFromSlot("unsplash").then((applied) => {
+        if (!applied) startMesh()
+      })
     } else if (val === "upload") {
-      loadFromSlot("upload")
+      loadFromSlot("upload").then((applied) => {
+        if (!applied) startMesh()
+      })
     }
   })
 }

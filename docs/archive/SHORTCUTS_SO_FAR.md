@@ -1,5 +1,8 @@
 # Shortcuts System — Current State
 
+> **Archived.** This was a handoff document written before drag-and-drop existed, and it describes the system as it stood then. It is kept for history only.
+> Current documentation: [`docs/shortcuts.md`](../shortcuts.md) and [`docs/drag-and-drop.md`](../drag-and-drop.md).
+
 This document describes everything built so far for the shortcuts system, written for the developer implementing drag-and-drop.
 
 ## Data Model

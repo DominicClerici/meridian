@@ -759,3 +759,21 @@
     /* transition: background-color var(--transition-speed, 0.15s) ease; */
   }
 }
+
+/* Sits above the propagated html background but below every positioned element
+   in #app, so the flat --page-bg stays visible if WebGL never comes up. */
+#mesh-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.35s ease;
+}
+
+#mesh-bg[hidden] {
+  display: none;
+}
