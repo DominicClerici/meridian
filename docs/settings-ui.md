@@ -130,6 +130,8 @@ The **Upload accordion** (`settings.ts:565`) previews the current upload by pull
 
 Five `"settings"` accordions, all collapsed by default. Each widget follows the same shape: an enable checkbox, its own options, then any connect/disconnect controls.
 
+Spotify's rows are an enable checkbox, **Hide when nothing is playing** (`spotifyHideWhenIdle`, on by default — off keeps the card up in its idle state, [spotify.md](spotify.md#the-idle-card)), then the connect/disconnect pair.
+
 Spotify and Calendar connection state is derived from the store — `spotifyAccessToken !== null` and `calendarConnected` — and both subscribe so the buttons flip when auth completes or is cleared elsewhere. `createSpotifyButton()` and `createGoogleButton()` are bespoke brand-colored buttons that bypass `createButton` and use placeholder colored squares where the brand logos should be.
 
 Both connect buttons render failures rather than swallowing them: `authenticate()` returns `{ ok: false, error }`, and `showStatus()` puts the string under the button in `text-danger`. When the Calendar failure carries `needsClientId`, the message gets an inline button that calls `selectTab("advanced")` — a module-level hook `buildNav()` assigns, since `switchTab` is otherwise closed over.

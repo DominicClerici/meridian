@@ -136,6 +136,7 @@ Choosing a namespace: put it in `sync` if the user would expect it on their othe
 | `weatherEnabled` | `boolean` | `true` | `weather.ts` |
 | `weatherUnit` | `"f" \| "c"` | `"f"` | `weather.ts` |
 | `spotifyEnabled` | `boolean` | `true` | `spotify.ts` |
+| `spotifyHideWhenIdle` | `boolean` | `true` | `spotify.ts` — off keeps the card up with an idle body ([spotify.md](spotify.md#the-idle-card)) |
 | `spotifyClientId` | `string` | `""` | `spotify.ts`, `capabilities.ts` — a user-supplied Spotify app, needed where the bundled one's redirect URI can't apply |
 | `recommendationsEnabled` | `boolean` | `false` | `recommendations.ts`, `dock.ts` |
 | `shortcutsOpenIn` | `"current" \| "new"` | `"current"` | `dock.ts` |
@@ -160,6 +161,7 @@ Choosing a namespace: put it in `sync` if the user would expect it on their othe
 | `spotifyAccessToken` | `string \| null` | `null` | `spotify.ts` |
 | `spotifyRefreshToken` | `string \| null` | `null` | `spotify.ts` |
 | `spotifyTokenExpiry` | `number \| null` (epoch ms) | `null` | `spotify.ts` |
+| `spotifyRecentTrack` | `SpotifyRecentTrack \| null` | `null` | `spotify.ts` — last played, cached so the idle card draws on the first frame. Cleared by `clearTokens()`, since it belongs to the account rather than the browser |
 | `recommendationData` | `RecommendationData \| null` | `null` | `recommendations.ts` |
 | `calendarConnected` | `boolean` | `false` | `calendar.ts` |
 | `googleAuthMethod` | `"native" \| "web" \| null` | `null` | `google-auth.ts` |

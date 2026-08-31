@@ -41,6 +41,18 @@ export type WeatherMetric =
 /** Which Google OAuth path the calendar is using. See `docs/calendar.md`. */
 export type GoogleAuthMethod = "native" | "web"
 
+/**
+ * The last track Spotify reports as played, cached so a new tab can draw the
+ * idle state before the API answers. See `docs/spotify.md`.
+ */
+export type SpotifyRecentTrack = {
+  name: string
+  artists: string
+  albumArt: string | null
+  url: string | null
+  playedAt: number
+}
+
 export type SyncSettings = {
   theme: "modern";
   layout: LayoutMode;
@@ -63,6 +75,7 @@ export type SyncSettings = {
   weatherUnit: "f" | "c";
   weatherMetric: WeatherMetric;
   spotifyEnabled: boolean;
+  spotifyHideWhenIdle: boolean;
   spotifyClientId: string;
   recommendationsEnabled: boolean;
   shortcutsOpenIn: "current" | "new";
@@ -84,6 +97,7 @@ export type LocalSettings = {
   spotifyAccessToken: string | null
   spotifyRefreshToken: string | null
   spotifyTokenExpiry: number | null
+  spotifyRecentTrack: SpotifyRecentTrack | null
   recommendationData: RecommendationData | null
   calendarConnected: boolean
   googleAuthMethod: GoogleAuthMethod | null
@@ -117,6 +131,7 @@ export const syncDefaults: SyncSettings = {
   weatherUnit: "f",
   weatherMetric: "apparent",
   spotifyEnabled: true,
+  spotifyHideWhenIdle: true,
   spotifyClientId: "",
   shortcutsOpenIn: "current",
   recommendationsEnabled: false,
@@ -138,6 +153,7 @@ export const localDefaults: LocalSettings = {
   spotifyAccessToken: null,
   spotifyRefreshToken: null,
   spotifyTokenExpiry: null,
+  spotifyRecentTrack: null,
   recommendationData: null,
   calendarConnected: false,
   googleAuthMethod: null,

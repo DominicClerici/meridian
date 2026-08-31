@@ -20,6 +20,8 @@ export type CardDef = {
   enabledKey?: keyof SyncSettings
   /** Extra gate beyond enabledKey — e.g. "only when there is something to show". */
   isEnabled?: () => boolean
+  /** Title that tracks the card's state — falls back to the static `title`. */
+  cardTitle?: () => string
   render: () => HTMLElement
   /**
    * Compact form for tile regions (the Dashboard's top row), where a card is a
@@ -87,9 +89,12 @@ export function refreshCard(id: string): void {
   if (!def) return
   reclaimSingletons(mounted.host)
   mounted.host.replaceChildren(renderFor(def, mounted.tile))
-  if (mounted.title && mounted.tile && def.tileTitle) {
-    mounted.title.textContent = def.tileTitle()
-  }
+  if (mounted.title) mounted.title.textContent = titleFor(def, mounted.tile)
+}
+
+function titleFor(def: CardDef, tile: boolean): string {
+  if (tile && def.tileTitle) return def.tileTitle()
+  return def.cardTitle?.() ?? def.title
 }
 
 function titleEl(card: HTMLElement): HTMLElement | null {
@@ -314,7 +319,7 @@ function mountCards(mode: LayoutMode): void {
     const tile = host.dataset.variant === "tile"
     const body = renderFor(def, tile)
     const card = createCard({
-      title: tile && def.tileTitle ? def.tileTitle() : def.title,
+      title: titleFor(def, tile),
       actions: def.actions?.() ?? null,
       body,
     })
@@ -332,7 +337,7 @@ function mountCards(mode: LayoutMode): void {
     } else if (host.dataset.carousel) {
       // The carousel owns placement: setItems() appends into its own viewport.
       const items = carouselled.get(host) ?? []
-      items.push({ id: def.id, title: def.title, el: card.el })
+      items.push({ id: def.id, title: titleFor(def, tile), el: card.el })
       carouselled.set(host, items)
     } else {
       const spanClass = SPAN_CLASSES[span]

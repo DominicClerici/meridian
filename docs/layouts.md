@@ -61,10 +61,11 @@ registerCard({
 | `regions` | Which region this card mounts into, **per layout**. A layout that isn't listed doesn't show the card at all. |
 | `span` | Optional column span per layout. A packed region (Default's `grid`) hands it to the packer; an unpacked region gets a Tailwind class from `SPAN_CLASSES`, which holds literal class names because the scanner can't see interpolated ones. |
 | `enabledKey` | A `SyncSettings` key that gates the card. `registerCard` subscribes to it and rebuilds when it flips. |
-| `isEnabled` | Extra gate for state the store doesn't hold — Spotify uses it for "something is playing". |
+| `isEnabled` | Extra gate for state the store doesn't hold — Spotify uses it for "something is playing, or the idle card is switched on". |
+| `cardTitle` | Header text that tracks live state, for a card whose name changes with what it is showing — Spotify is *Now Playing* while something is, and *Spotify* when it isn't. Re-read on every `refreshCard`. Falls back to `title`. |
 | `render` | Builds the body. Called on every mount and every `refreshCard`. |
 | `renderTile` | Compact body for a tile region (Dashboard's top row). Falls back to `render` when absent. |
-| `tileTitle` | Header text in tile form, when the card title is too generic for a glance — the weather tile names its city. Re-read on every `refreshCard`, so it can track live state. |
+| `tileTitle` | Header text in tile form, winning over `cardTitle` there, when the card title is too generic for a glance — the weather tile names its city. Re-read on every `refreshCard`, so it can track live state. |
 | `actions` | Optional control for the card header. Called after `render()`, so it can close over what `render` just built. No card uses it today — the todo card moved its `+` into a toolbar inside the body, so the immersive popover gets it too. |
 | `onUnmount` | Called before the card is discarded. |
 

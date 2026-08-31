@@ -1228,6 +1228,18 @@ function buildWidgetsTab(): void {
     ;(spotifyEnabled as any).setChecked(v)
   })
 
+  const spotifyHideWhenIdle = createCheckbox(
+    "",
+    store.sync.get("spotifyHideWhenIdle"),
+    (v) => store.sync.set("spotifyHideWhenIdle", v)
+  )
+  spotifyAcc.content.appendChild(
+    settingsRow("Hide when nothing is playing", spotifyHideWhenIdle)
+  )
+  store.sync.subscribe("spotifyHideWhenIdle", (v) => {
+    ;(spotifyHideWhenIdle as any).setChecked(v)
+  })
+
   const spotifyConnectRow = document.createElement("div")
   const spotifyStatus = statusText()
   const spotifyBtn = createSpotifyButton(async () => {

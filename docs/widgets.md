@@ -14,7 +14,7 @@ Dashboard's top row is a third host, and the only one that isn't the same conten
 
 ## The pattern
 
-Three widgets — calendar, weather, todo — are **trigger + popover** in the Immersive layout. Their trigger buttons live in `#widgets` (top-right of the page) in `index.html`, all starting `hidden`. Two widgets break the pattern: the clock renders directly into `#clock` with no trigger, and Spotify renders a fixed card in the bottom-right corner (Immersive only — elsewhere it is a regular card).
+Three widgets — calendar, weather, todo — are **trigger + popover** in the Immersive layout. Their trigger buttons live in `#widgets` (top-right of the page) in `index.html`, all starting `hidden`. Two widgets break the pattern: the clock renders directly into `#clock` with no trigger, and Spotify renders a fixed card in the bottom-right corner (Immersive only — elsewhere it is a regular card), which idle shrinks and fades back rather than vanishing when `spotifyHideWhenIdle` is off ([spotify.md](spotify.md#the-idle-card)).
 
 The trigger-based widgets share a structure worth knowing before you touch any one of them, because the same six pieces recur in each:
 
@@ -43,7 +43,7 @@ Weather's `loaded` trigger also follows its `weatherMetric` setting, so what the
 |---|---|---|
 | Weather | 120s | 300s |
 | Calendar | 10s | 300s |
-| Spotify | — | 5s poll |
+| Spotify | — | 5s poll; last played at most 1/min, and only when the idle card is on |
 
 The cooldown guards against redundant fetches (a re-init, a settings change); the interval keeps a long-lived tab current. Weather and Calendar both implement this with the same `isCooldownActive()` / `startRefreshInterval()` / `stopRefreshInterval()` trio, written twice.
 

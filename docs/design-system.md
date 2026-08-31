@@ -229,7 +229,7 @@ const raw = getIconSvg("check")              // → the SVG source string
 
 **Adding a theme.** Call `registerTheme(name, map)` from a new module, import it for side effect in `index.ts`, and add the name to the `theme` union in `defaults.ts`. There's no fallback: if the active theme's map lacks a name, `icon()` renders an empty span silently (`registry.ts:71`).
 
-The `modern` set has 61 icons: UI chrome (settings, close, check, chevrons, plus, edit, trash, alertTriangle), settings-nav tabs (`tab*`), mode toggles (`mode*`), media controls (play, pause, skip*), weather conditions (`wx*` — clear, clearNight, partly, partlyNight, cloudy, fog, drizzle, rain, sleet, snow, thunder, unknown), and feature icons (calendar, folder, globe, link, sparkle, spinner, locationOff, bgImage, bgUpload, todoList, todoEmpty, dragHandle, externalLink, refresh), plus the todo widget's
+The `modern` set has 63 icons: UI chrome (settings, close, check, chevrons, plus, edit, trash, alertTriangle), settings-nav tabs (`tab*`), mode toggles (`mode*`), media controls (play, pause, skip*, musicNote), weather conditions (`wx*` — clear, clearNight, partly, partlyNight, cloudy, fog, drizzle, rain, sleet, snow, thunder, unknown), and feature icons (calendar, folder, globe, link, sparkle, spinner, locationOff, spotify, bgImage, bgUpload, todoList, todoEmpty, dragHandle, externalLink, refresh), plus the todo widget's
 row of actions (moreVertical, pin, pinFilled, repeat, archive, archiveRestore,
 checkCircle, subtasks, flag).
 

@@ -1,6 +1,7 @@
 import { store } from "./store"
+import type { SpotifyRecentTrack } from "./defaults"
 import { getLayout, refreshCard, refreshCards, registerCard } from "./layout"
-import { getIconSvg } from "./icons/registry"
+import { getIconSvg, icon } from "./icons/registry"
 
 /**
  * The extension's own Spotify app. Its redirect allowlist is fixed, and the
@@ -13,7 +14,7 @@ const BUNDLED_CLIENT_ID = "acd29601607e4e1c8896ab4c1ab534d7"
 const BUNDLED_REDIRECT_HOST = ".chromiumapp.org"
 
 const SCOPES =
-  "user-read-playback-state user-modify-playback-state user-read-currently-playing user-read-private"
+  "user-read-playback-state user-modify-playback-state user-read-currently-playing user-read-recently-played user-read-private"
 const SPOTIFY_AUTH_URL = "https://accounts.spotify.com/authorize"
 const SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"
 
@@ -220,6 +221,10 @@ export function clearTokens(): void {
   store.local.delete("spotifyAccessToken")
   store.local.delete("spotifyRefreshToken")
   store.local.delete("spotifyTokenExpiry")
+  // Last played belongs to the account that was signed in, not to the browser.
+  store.local.delete("spotifyRecentTrack")
+  recentScopeMissing = false
+  recentFetchedAt = 0
 }
 
 async function ensureValidToken(): Promise<boolean> {
@@ -337,33 +342,106 @@ async function fetchPlayerState(): Promise<void> {
   }
 }
 
-async function playerPlay(): Promise<boolean> {
-  const res = await spotifyFetch("https://api.spotify.com/v1/me/player/play", {
-    method: "PUT",
-  })
-  return res !== null && (res.ok || res.status === 204)
+/* ── Last played ────────────────────────────────────────────────────────── */
+
+/**
+ * The idle card's one piece of content. Cached in `store.local` so a new tab
+ * draws it on the first frame instead of after a round trip — the API stays the
+ * source of truth, the cache only removes the flash of an emptier empty state.
+ */
+const RECENT_MAX_AGE = 60_000
+
+let recentFetchedAt = 0
+
+/**
+ * `user-read-recently-played` was added to `SCOPES` after the first release, and
+ * a refresh token keeps the scopes it was issued with. A 403 here means the
+ * session predates the scope, so the idle card offers a reconnect instead of
+ * asking again every minute.
+ */
+let recentScopeMissing = false
+
+function getRecentTrack(): SpotifyRecentTrack | null {
+  return store.local.get("spotifyRecentTrack")
 }
 
-async function playerPause(): Promise<boolean> {
-  const res = await spotifyFetch("https://api.spotify.com/v1/me/player/pause", {
-    method: "PUT",
-  })
-  return res !== null && (res.ok || res.status === 204)
+async function fetchRecentTrack(): Promise<void> {
+  if (recentScopeMissing) return
+  if (Date.now() - recentFetchedAt < RECENT_MAX_AGE) return
+  recentFetchedAt = Date.now()
+
+  try {
+    const res = await spotifyFetch(
+      "https://api.spotify.com/v1/me/player/recently-played?limit=1"
+    )
+    if (!res) return
+    if (res.status === 403) {
+      recentScopeMissing = true
+      return
+    }
+    if (!res.ok) return
+
+    const data = await res.json()
+    const played = data.items?.[0]
+    if (!played?.track) return
+
+    store.local.set("spotifyRecentTrack", {
+      name: played.track.name,
+      artists: (played.track.artists ?? [])
+        .map((a: { name: string }) => a.name)
+        .join(", "),
+      albumArt: played.track.album?.images?.[0]?.url ?? null,
+      url: played.track.external_urls?.spotify ?? null,
+      playedAt: Date.parse(played.played_at) || Date.now(),
+    })
+  } catch {
+    // Keep whatever is cached rather than blanking the card on a hiccup.
+  }
 }
 
-async function playerNext(): Promise<boolean> {
-  const res = await spotifyFetch("https://api.spotify.com/v1/me/player/next", {
-    method: "POST",
+function relativeTime(ts: number): string {
+  const minutes = Math.floor((Date.now() - ts) / 60_000)
+  if (minutes < 1) return "just now"
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  if (days === 1) return "yesterday"
+  if (days < 7) return `${days}d ago`
+  return new Date(ts).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
   })
-  return res !== null && (res.ok || res.status === 204)
 }
 
-async function playerPrevious(): Promise<boolean> {
-  const res = await spotifyFetch(
-    "https://api.spotify.com/v1/me/player/previous",
-    { method: "POST" }
-  )
-  return res !== null && (res.ok || res.status === 204)
+/**
+ * Spotify answers a transport call with 404 when the account has no active
+ * device. That is the ordinary case for the idle card's resume button — nothing
+ * has been playing — so it is reported rather than swallowed as a plain failure.
+ */
+type ControlResult = { ok: boolean; noDevice?: boolean }
+
+async function control(url: string, method: string): Promise<ControlResult> {
+  const res = await spotifyFetch(url, { method })
+  if (!res) return { ok: false }
+  if (res.status === 404) return { ok: false, noDevice: true }
+  return { ok: res.ok || res.status === 204 }
+}
+
+function playerPlay(): Promise<ControlResult> {
+  return control("https://api.spotify.com/v1/me/player/play", "PUT")
+}
+
+function playerPause(): Promise<ControlResult> {
+  return control("https://api.spotify.com/v1/me/player/pause", "PUT")
+}
+
+function playerNext(): Promise<ControlResult> {
+  return control("https://api.spotify.com/v1/me/player/next", "POST")
+}
+
+function playerPrevious(): Promise<ControlResult> {
+  return control("https://api.spotify.com/v1/me/player/previous", "POST")
 }
 
 const POLL_INTERVAL = 5000
@@ -382,8 +460,25 @@ function stopPolling(): void {
   }
 }
 
+/** Whether the idle body will be drawn — the only thing last played is for. */
+function idleBodyWanted(): boolean {
+  return (
+    store.sync.get("spotifyEnabled") && !store.sync.get("spotifyHideWhenIdle")
+  )
+}
+
 async function poll(): Promise<void> {
+  const wasPlaying = currentPlayerState !== null
   await fetchPlayerState()
+
+  if (currentPlayerState) {
+    // Whatever is playing becomes the last-played entry the moment it stops.
+    recentFetchedAt = 0
+  } else if (idleBodyWanted()) {
+    if (wasPlaying) recentFetchedAt = 0
+    await fetchRecentTrack()
+  }
+
   renderCard()
 }
 
@@ -428,13 +523,10 @@ function btnIcon(action: string, isPlaying: boolean): string {
  * immersive layout and the grid card in the others.
  */
 export function buildSpotifyBody(): HTMLElement {
+  if (!currentPlayerState) return buildIdleBody("card")
+
   const body = document.createElement("div")
   body.className = "flex gap-3 items-center min-w-0"
-
-  if (!currentPlayerState) {
-    body.innerHTML = `<div class="text-sm opacity-60">Nothing playing</div>`
-    return body
-  }
 
   const { track, isPlaying } = currentPlayerState
   const playPauseAction = isPlaying ? "pause" : "play"
@@ -479,13 +571,10 @@ export function buildSpotifyBody(): HTMLElement {
  * the tile only so far before it truncates.
  */
 export function buildSpotifyTile(): HTMLElement {
+  if (!currentPlayerState) return buildIdleBody("tile")
+
   const body = document.createElement("div")
   body.className = "flex gap-3 items-center min-w-0"
-
-  if (!currentPlayerState) {
-    body.innerHTML = `<div class="text-sm opacity-60">Nothing playing</div>`
-    return body
-  }
 
   const { track, isPlaying } = currentPlayerState
   const playPauseAction = isPlaying ? "pause" : "play"
@@ -523,6 +612,263 @@ export function buildSpotifyTile(): HTMLElement {
   return body
 }
 
+/* ── Idle state ─────────────────────────────────────────────────────────── */
+
+/**
+ * With "Hide when nothing is playing" off the card stays put, so it needs
+ * something worth looking at. Three states, in order of how much there is to
+ * say: the last track played (dimmed, with a resume button), a plain "nothing
+ * playing" note once there is no history to show, and a connect prompt when
+ * there is no session at all.
+ *
+ * Three sizes, because the card has three hosts: the grid card, the Dashboard's
+ * 118px tile, and the Immersive layout's floating corner card — which stays
+ * deliberately slight, since idle it is a box sitting over someone's wallpaper
+ * doing nothing.
+ */
+type IdleSize = "card" | "tile" | "mini"
+
+type IdleScale = {
+  art: number
+  glyph: number
+  eyebrow: string
+  title: string
+  meta: string
+  button: string
+  buttonIcon: number
+  gap: string
+}
+
+/* Literal class names: the Tailwind scanner reads source text. */
+const IDLE_SCALES: Record<IdleSize, IdleScale> = {
+  card: {
+    art: 64,
+    glyph: 26,
+    eyebrow: "text-[10px]",
+    title: "text-sm",
+    meta: "text-xs",
+    button: "w-9 h-9",
+    buttonIcon: 16,
+    gap: "gap-3",
+  },
+  tile: {
+    art: 44,
+    glyph: 22,
+    eyebrow: "text-[9px]",
+    title: "text-[13px]",
+    meta: "text-[11px]",
+    button: "w-8 h-8",
+    buttonIcon: 14,
+    gap: "gap-2.5",
+  },
+  mini: {
+    art: 36,
+    glyph: 20,
+    eyebrow: "text-[9px]",
+    title: "text-[13px]",
+    meta: "text-[11px]",
+    button: "w-8 h-8",
+    buttonIcon: 14,
+    gap: "gap-2.5",
+  },
+}
+
+let hint: string | null = null
+let hintTimer: ReturnType<typeof setTimeout> | null = null
+
+/** A transient line under the body — a failed control, a rejected sign-in. */
+function setHint(message: string | null): void {
+  hint = message
+  if (hintTimer) clearTimeout(hintTimer)
+  hintTimer = null
+  if (!message) return
+  hintTimer = setTimeout(() => {
+    hint = null
+    hintTimer = null
+    renderCard()
+  }, 6000)
+}
+
+function line(className: string, text: string): HTMLElement {
+  const el = document.createElement("div")
+  el.className = className
+  el.textContent = text
+  return el
+}
+
+function withHint(row: HTMLElement): HTMLElement {
+  if (!hint) return row
+  const wrap = document.createElement("div")
+  wrap.className = "flex flex-col gap-1.5 min-w-0"
+  wrap.appendChild(row)
+  wrap.appendChild(line("text-[11px] leading-snug text-warning/90", hint))
+  return wrap
+}
+
+function authAction(label: string): HTMLButtonElement {
+  const btn = document.createElement("button")
+  btn.className =
+    "self-start mt-1 text-[11px] font-medium text-accent hover:underline disabled:opacity-50 disabled:no-underline"
+  btn.textContent = label
+  btn.addEventListener("click", async () => {
+    btn.disabled = true
+    btn.textContent = "Connecting…"
+    const result = await authenticate()
+    // On success the access-token subscriber restarts polling and re-renders,
+    // which discards this button along with the rest of the body.
+    if (result.ok) {
+      recentScopeMissing = false
+      recentFetchedAt = 0
+      return
+    }
+    btn.disabled = false
+    btn.textContent = label
+    setHint(result.error)
+    renderCard()
+  })
+  return btn
+}
+
+/** Glyph + two lines + an optional action. The card with nothing to show. */
+function idleNote(
+  s: IdleScale,
+  glyph: string,
+  title: string,
+  meta: string,
+  action?: HTMLElement
+): HTMLElement {
+  const row = document.createElement("div")
+  row.className = `flex ${s.gap} items-center min-w-0`
+
+  row.appendChild(
+    icon(glyph, { size: s.glyph, class: "opacity-20 self-start mt-0.5" })
+  )
+
+  const col = document.createElement("div")
+  col.className = "flex flex-col min-w-0 flex-1"
+  col.appendChild(line(`${s.title} font-medium opacity-70`, title))
+  col.appendChild(line(`${s.meta} opacity-40 leading-snug`, meta))
+  if (action) col.appendChild(action)
+  row.appendChild(col)
+
+  return row
+}
+
+/**
+ * The now-playing row, turned down: the same shape and rhythm, with the art
+ * desaturated and an eyebrow saying what it is, so the card reads as a memory
+ * rather than as something currently on.
+ */
+function lastPlayedRow(s: IdleScale, track: SpotifyRecentTrack): HTMLElement {
+  const row = document.createElement("div")
+  row.className = `group flex ${s.gap} items-center min-w-0`
+
+  const art = document.createElement("div")
+  art.className =
+    "relative shrink-0 overflow-hidden rounded-theme-sm bg-page-foreground/10"
+  art.style.width = `${s.art}px`
+  art.style.height = `${s.art}px`
+  if (track.albumArt) {
+    const img = document.createElement("img")
+    img.src = track.albumArt
+    img.alt = ""
+    img.className =
+      "w-full h-full object-cover opacity-45 saturate-50 transition duration-500 group-hover:opacity-75 group-hover:saturate-100"
+    art.appendChild(img)
+  } else {
+    art.appendChild(
+      icon("musicNote", {
+        size: Math.round(s.art * 0.4),
+        class: "absolute inset-0 m-auto opacity-25",
+      })
+    )
+  }
+  row.appendChild(art)
+
+  const col = document.createElement("div")
+  col.className = "flex flex-col min-w-0 flex-1"
+
+  col.appendChild(
+    line(
+      `${s.eyebrow} font-semibold uppercase tracking-[0.1em] opacity-35`,
+      "Last played"
+    )
+  )
+
+  const name = track.url
+    ? document.createElement("a")
+    : document.createElement("div")
+  name.className = `${s.title} font-medium truncate opacity-80`
+  name.textContent = track.name
+  if (name instanceof HTMLAnchorElement) {
+    name.href = track.url!
+    name.target = "_blank"
+    name.rel = "noopener"
+    name.classList.add("hover:underline", "hover:opacity-100", "transition-opacity")
+  }
+  col.appendChild(name)
+
+  const meta = [track.artists, relativeTime(track.playedAt)]
+    .filter(Boolean)
+    .join(" \u00b7 ")
+  col.appendChild(line(`${s.meta} opacity-45 truncate`, meta))
+  row.appendChild(col)
+
+  if (isPremium) {
+    const play = document.createElement("button")
+    play.dataset.spotifyAction = "play"
+    play.className =
+      `shrink-0 inline-flex items-center justify-center rounded-full ${s.button} ` +
+      "border border-page-foreground/15 opacity-60 transition-colors " +
+      "hover:opacity-100 hover:bg-accent hover:border-accent hover:text-accent-foreground " +
+      "disabled:opacity-30"
+    play.disabled = controlsDisabled
+    play.setAttribute("aria-label", `Resume ${track.name}`)
+    play.innerHTML =
+      loadingAction === "play" ? getIconSvg("spinner") : getIconSvg("play")
+    const svg = play.querySelector("svg")
+    if (svg) {
+      svg.setAttribute("width", String(s.buttonIcon))
+      svg.setAttribute("height", String(s.buttonIcon))
+    }
+    row.appendChild(play)
+  }
+
+  return row
+}
+
+function buildIdleBody(size: IdleSize): HTMLElement {
+  const s = IDLE_SCALES[size]
+
+  let row: HTMLElement
+  if (!store.local.get("spotifyAccessToken")) {
+    row = idleNote(
+      s,
+      "spotify",
+      "Not connected",
+      "Sign in to see what\u2019s playing.",
+      authAction("Connect Spotify")
+    )
+  } else {
+    const track = getRecentTrack()
+    row = track
+      ? lastPlayedRow(s, track)
+      : idleNote(
+          s,
+          "musicNote",
+          "Nothing playing",
+          "Anything you play shows up here.",
+          recentScopeMissing
+            ? authAction("Reconnect to see recent plays")
+            : undefined
+        )
+  }
+
+  const body = withHint(row)
+  body.addEventListener("click", handleControlClick)
+  return body
+}
+
 function removeFloatingCard(): void {
   if (cardEl) {
     cardEl.remove()
@@ -530,9 +876,16 @@ function removeFloatingCard(): void {
   }
 }
 
+/**
+ * Whether the widget has anything to draw. Playback always counts; with
+ * "Hide when nothing is playing" off, the idle body counts too.
+ */
+function hasContent(): boolean {
+  return currentPlayerState !== null || !store.sync.get("spotifyHideWhenIdle")
+}
+
 function renderCard(): void {
-  const shouldShow =
-    store.sync.get("spotifyEnabled") && currentPlayerState !== null
+  const shouldShow = store.sync.get("spotifyEnabled") && hasContent()
 
   if (getLayout() !== "immersive") {
     removeFloatingCard()
@@ -553,12 +906,19 @@ function renderCard(): void {
 
   if (!cardEl) {
     cardEl = document.createElement("div")
-    cardEl.className =
-      "fixed bottom-4 right-4 w-[320px] z-50 bg-page-overlay/70 backdrop-blur-sm text-page-foreground rounded-xl p-3 shadow-lg"
     document.body.appendChild(cardEl)
   }
 
-  cardEl.replaceChildren(buildSpotifyBody())
+  // Idle it is a box over someone's wallpaper doing nothing, so it gives back
+  // its width and most of its presence until the pointer is near it.
+  const idle = currentPlayerState === null
+  cardEl.className =
+    "fixed bottom-4 right-4 z-50 bg-page-overlay/70 backdrop-blur-sm text-page-foreground rounded-xl shadow-lg transition-opacity duration-300 " +
+    (idle
+      ? "max-w-[300px] p-2.5 opacity-55 hover:opacity-100"
+      : "w-[320px] p-3")
+
+  cardEl.replaceChildren(idle ? buildIdleBody("mini") : buildSpotifyBody())
 }
 
 registerCard({
@@ -567,7 +927,8 @@ registerCard({
   order: 15,
   regions: { default: "grid", dashboard: "top" },
   enabledKey: "spotifyEnabled",
-  isEnabled: () => currentPlayerState !== null,
+  isEnabled: hasContent,
+  cardTitle: () => (currentPlayerState ? "Now Playing" : "Spotify"),
   render: buildSpotifyBody,
   renderTile: buildSpotifyTile,
 })
@@ -583,25 +944,28 @@ async function handleControlClick(e: MouseEvent): Promise<void> {
   loadingAction = action
   renderCard()
 
-  let success = false
+  let result: ControlResult = { ok: false }
   switch (action) {
     case "play":
-      success = await playerPlay()
+      result = await playerPlay()
       break
     case "pause":
-      success = await playerPause()
+      result = await playerPause()
       break
     case "next":
-      success = await playerNext()
+      result = await playerNext()
       break
     case "previous":
-      success = await playerPrevious()
+      result = await playerPrevious()
       break
   }
 
-  if (success) {
+  if (result.ok) {
+    setHint(null)
     await new Promise((r) => setTimeout(r, 300))
     await fetchPlayerState()
+  } else if (result.noDevice) {
+    setHint("No active device — open Spotify on a device first.")
   }
 
   controlsDisabled = false
@@ -626,15 +990,25 @@ export function initSpotify(): void {
       startPolling()
     } else {
       stopPolling()
-      if (cardEl) {
-        cardEl.remove()
-        cardEl = null
-      }
+      if (!enabled) currentPlayerState = null
+    }
+    // registerCard's own `enabledKey` subscription has already remounted the
+    // grid card by the time this runs; only the floating card is ours to place.
+    cardVisible = enabled && hasContent()
+    if (getLayout() === "immersive") renderCard()
+  })
+
+  store.sync.subscribe("spotifyHideWhenIdle", () => {
+    renderCard()
+    if (idleBodyWanted() && !currentPlayerState) {
+      void fetchRecentTrack().then(renderCard)
     }
   })
 
   store.local.subscribe("spotifyAccessToken", (token) => {
     if (token) {
+      recentScopeMissing = false
+      recentFetchedAt = 0
       ;(async () => {
         await checkPremium()
         startPolling()
@@ -645,6 +1019,11 @@ export function initSpotify(): void {
       renderCard()
     }
   })
+
+  // The idle body has something to say without a session, so the card is placed
+  // before the token checks below rather than after them.
+  cardVisible = store.sync.get("spotifyEnabled") && hasContent()
+  renderCard()
 
   if (!store.sync.get("spotifyEnabled")) return
   if (!store.local.get("spotifyAccessToken")) return

@@ -1,8 +1,8 @@
 # Spotify
 
-**File:** `src/spotify.ts` (544 lines). **API:** Spotify Web API. **Auth:** OAuth 2.0 with PKCE, entirely in the browser — no backend.
+**File:** `src/spotify.ts` (1037 lines). **API:** Spotify Web API. **Auth:** OAuth 2.0 with PKCE, entirely in the browser — no backend.
 
-The one widget with no trigger button: when something is playing it renders a card — floating bottom-right in the Immersive layout, in the grid elsewhere — and when nothing is playing it renders nothing at all.
+The one widget with no trigger button: when something is playing it renders a card — floating bottom-right in the Immersive layout, in the grid elsewhere. When nothing is playing, **`spotifyHideWhenIdle`** decides whether it disappears (the default) or stays up in the idle state below.
 
 ## Auth
 
@@ -21,7 +21,9 @@ Every failure path returns `{ ok: false, error }` with a message naming what act
 
 The token exchange depends on `host_permissions` covering `accounts.spotify.com`; without it the `POST /api/token` is an ordinary CORS request from a `chrome-extension://` origin and can be refused outright. See [architecture.md](architecture.md#manifest).
 
-Scopes: `user-read-playback-state`, `user-modify-playback-state`, `user-read-currently-playing`, `user-read-private`.
+Scopes: `user-read-playback-state`, `user-modify-playback-state`, `user-read-currently-playing`, `user-read-recently-played`, `user-read-private`.
+
+`user-read-recently-played` was added after the first release, and a refresh token keeps the scopes it was issued with — so a session created before it exists gets a 403 from `/me/player/recently-played` forever. `fetchRecentTrack()` latches that into `recentScopeMissing`, stops asking, and the idle card offers a **Reconnect to see recent plays** button instead of failing invisibly.
 
 ### Which client ID
 
@@ -52,7 +54,37 @@ Worth noting this isn't only a Firefox concern: a Spotify app in development mod
 
 **Premium gating.** `checkPremium()` reads `/me` once after connecting and sets `isPremium = data.product === "premium"`. Playback control endpoints are premium-only, so free accounts get the card with track info but no transport buttons. `isPremium` **defaults to `true`**, so the buttons show until proven otherwise.
 
-**Controls.** `playerPlay/Pause/Next/Previous` are PUT/POST calls treating both `ok` and 204 as success. `handleControlClick` is a single delegated listener on the card reading `data-spotify-action`; it disables all controls, swaps the pressed button's icon for a spinner, awaits the call, waits 300ms for Spotify's state to settle, refetches, and re-renders.
+**Controls.** `playerPlay/Pause/Next/Previous` all go through `control()`, which treats `ok` and 204 as success and reports a 404 as `{ noDevice: true }` — Spotify's answer when the account has no active device. That is the ordinary case for the idle card's resume button, since by definition nothing has been playing, so it surfaces as "No active device" rather than as a click that does nothing. `handleControlClick` is a single delegated listener on the card reading `data-spotify-action`; it disables all controls, swaps the pressed button's icon for a spinner, awaits the call, waits 300ms for Spotify's state to settle, refetches, and re-renders.
+
+**Hints.** `setHint()` parks a one-line message under the body and clears it six seconds later. It is the widget's only transient feedback channel — a failed control, a rejected sign-in.
+
+## The idle card
+
+With **Hide when nothing is playing** off (`spotifyHideWhenIdle: false`), `isEnabled` stops meaning "something is playing" and the card stays mounted with nothing to report. `buildIdleBody(size)` gives it something, picking one of three states in order of how much there is to say:
+
+1. **Last played** — `lastPlayedRow()`, the now-playing row turned down: same shape and rhythm, album art at `opacity-45 saturate-50` (both released on hover), a `LAST PLAYED` eyebrow, and *artist · 2h ago*. The track name links to Spotify; premium accounts also get a round resume button carrying `data-spotify-action="play"`, so it rides the same delegated handler as the transport.
+2. **Nothing playing** — a music glyph and a line, once there is a session but no history to show.
+3. **Not connected** — the Spotify mark and a **Connect Spotify** button calling `authenticate()` directly, so the widget is a way in and not just a dead box. On success the `spotifyAccessToken` subscriber restarts polling and re-renders, which discards the button along with the rest of the body.
+
+`cardTitle` swaps the header between *Now Playing* and *Spotify* to match ([layouts.md](layouts.md#the-card-registry)).
+
+### Three sizes
+
+`IDLE_SCALES` holds one literal set of class names per host — the Tailwind scanner reads source text, so these can never be interpolated:
+
+| Size | Host | Art |
+|---|---|---|
+| `card` | the grid card | 64px |
+| `tile` | the Dashboard's 118px tile | 44px |
+| `mini` | the Immersive floating card | 36px |
+
+`mini` also changes the floating card itself: idle it drops its fixed 320px width, tightens its padding, and sits at `opacity-55` until hovered. Playing, it is a card worth the space; idle, it is a box over someone's wallpaper doing nothing.
+
+### Last played
+
+The API is the source of truth — `GET /me/player/recently-played?limit=1`, at most once a minute (`RECENT_MAX_AGE`), and **only when the idle body would actually be drawn**, so the default setting adds no requests at all. `poll()` resets the timer whenever something is playing, since that track becomes the last-played entry the moment it stops.
+
+The result is cached in `store.local.spotifyRecentTrack` purely so a new tab draws the row on its first frame instead of after a round trip. `clearTokens()` deletes it — it describes an account, not a browser.
 
 ## The card
 
@@ -60,11 +92,15 @@ Worth noting this isn't only a Firefox concern: a Spotify app in development mod
 
 Where that row goes depends on the [layout](layouts.md). In **Immersive** it goes in the floating card `renderCard()` creates lazily on the first render with content and removes when there's nothing playing or the widget is disabled — fixed bottom-right, 320px, `bg-page-overlay/70` with a backdrop blur. In the other layouts there is no floating card; the same body is mounted as a registered card, gated on `currentPlayerState !== null`. `renderCard()` branches on `getLayout()` and `initSpotify()` subscribes to `layout`, so a switch moves the player without a reload.
 
-Rendered by assigning a template string to `innerHTML`. Track name and artists are run through `escapeHtml()` (`spotify.ts:316`) first, using the textContent-then-read-innerHTML trick. The album art URL is **not** escaped, and is interpolated straight into a `src` attribute.
+Rendered by assigning a template string to `innerHTML`. Track name and artists are run through `escapeHtml()` first, using the textContent-then-read-innerHTML trick. The album art URL is **not** escaped, and is interpolated straight into a `src` attribute.
 
 ## Init
 
-`initSpotify()` installs the visibility handler, subscribes to `spotifyEnabled` and to `spotifyAccessToken` (so connecting or disconnecting in settings starts or stops polling immediately), then — if enabled and a token exists — validates the token, checks premium, and starts polling.
+`initSpotify()` installs the visibility handler, subscribes to `spotifyEnabled`, `spotifyHideWhenIdle` and `spotifyAccessToken` (so connecting or disconnecting in settings starts or stops polling immediately), places the card, then — if enabled and a token exists — validates the token, checks premium, and starts polling.
+
+The card is placed **before** those two token checks, not after: the idle body has something to say without a session, so returning early would leave the Immersive floating card unplaced for a user who has never connected.
+
+`spotifyEnabled` is subscribed twice — once by `registerCard` via `enabledKey`, once here. `registerCard` runs at module evaluation, so its handler goes first and has already remounted the grid card by the time this one runs; this one only has the floating card left to place, and syncs `cardVisible` so the next `renderCard()` doesn't remount everything a second time.
 
 ## Refactor candidates
 
@@ -73,6 +109,8 @@ Rendered by assigning a template string to `innerHTML`. Track name and artists a
 - **`isPremium` defaults to `true`.** If `/me` fails, a free account sees transport buttons that silently do nothing.
 - **`checkPremium()` runs once per connect** and is never rechecked, so upgrading or downgrading an account needs a reconnect.
 - **Polling only — no push.** Five seconds of latency on every state change, and a request every five seconds even when nothing is playing.
+- **`recentScopeMissing` only resets on a reconnect.** A user who grants the scope elsewhere still sees the reconnect prompt for the life of the tab.
 - **The floating card can't be dismissed or moved.** In Immersive it's fixed bottom-right with `z-50`, on top of whatever is there.
 - **`retryAfterUntil` gates `fetchPlayerState` but not the control calls**, so pressing next during a rate-limit window still fires a request.
-- **No error state in the UI.** Weather and calendar both have one; here a failure is indistinguishable from nothing playing.
+- **No error state in the UI.** `setHint()` covers control failures, but a failed `/me/player` fetch still reads as nothing playing — weather and calendar both distinguish the two.
+- **The idle body builds DOM, the playing body builds strings.** `buildIdleBody` and friends use `createElement`; `buildSpotifyBody`/`buildSpotifyTile` are still `innerHTML` templates beside them. Converting the playing bodies would settle the file on one style and retire `escapeHtml`.
