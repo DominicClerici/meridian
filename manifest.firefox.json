@@ -6,11 +6,12 @@
   "chrome_url_overrides": {
     "newtab": "index.html"
   },
-  "oauth2": {
-    "client_id": "310838993202-starsb3jdsv4f5d38rh9gvp3hio3s1jk.apps.googleusercontent.com",
-    "scopes": ["https://www.googleapis.com/auth/calendar.readonly"]
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "startpage@meridian",
+      "strict_min_version": "109.0"
+    }
   },
-  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAjq/qtH2kGe1vYPz9VKPcUQ5IuCKLoYtprBjH+YvcZJsz04QC5q6EO0K2lFjQOLaAP2ClT4N5d5gGJfP2dTIiMUMsaBHB7a/m+Tc10wn1W2hZ3O+dq/a0z1kBUkGDI6B3rNhvg5p+P3SOSAunWX/OKe4OMmPoHxHJg5VPqQPbfO08lM5zd/YbY/EwGeTiSRsjoYp6Z/NxdU8yWzLar42Ohvp1+/WC62ZejKjMepldhkbTh3C4YzxSOO3Z0geunFWiJZp3ia4b6bWhwjYP6XH13CB9PLpYOD0GkjjfSRoPygy3wnOs5APYVuTQhnP+I3yhoJ0K3ZGwsvHU/KMIIJbRFwIDAQAB",
   "permissions": ["storage", "geolocation", "identity", "history"],
   "host_permissions": [
     "https://api.open-meteo.com/*",

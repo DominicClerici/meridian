@@ -10,9 +10,11 @@
     <div id="app">
       <button
         id="settings-open"
-        class="fixed top-4 left-4 z-40 w-12 h-12 flex items-center justify-center rounded-lg bg-page-foreground/20 hover:bg-page-foreground/30 transition-colors"
+        class="settings-button flex items-center gap-2 rounded-theme bg-page-foreground/15 hover:bg-page-foreground/25 text-page-foreground transition-colors"
         aria-label="Open settings"
-      ></button>
+      >
+        <span class="settings-button-label">Settings</span>
+      </button>
 
       <div id="layout-stage" class="layout-stage fixed inset-0"></div>
 
@@ -25,7 +27,7 @@
           ></button>
           <button
             id="weather-trigger"
-            class="flex items-center gap-1 h-12 px-3 rounded-lg bg-page-foreground/20 hover:bg-page-foreground/30 transition-colors text-page-foreground text-sm"
+            class="relative flex items-center gap-1 h-12 px-3 rounded-lg bg-page-foreground/20 hover:bg-page-foreground/30 transition-colors text-page-foreground text-sm"
             hidden
           ></button>
           <button
@@ -49,7 +51,7 @@
 
         <div id="clock" class="text-page-foreground font-mono tabular-nums"></div>
 
-        <div id="search-wrapper" class="w-full max-w-lg">
+        <div id="search-wrapper" class="w-full">
           <input
             id="search-input"
             type="text"
@@ -65,7 +67,7 @@
 
         <div
           id="dock-wrapper"
-          class="flex flex-col items-center gap-1.5 pointer-events-none"
+          class="flex flex-col gap-1.5 pointer-events-none"
           hidden
         >
           <div

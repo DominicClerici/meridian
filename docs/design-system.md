@@ -162,10 +162,15 @@ Most styling lives in Tailwind utility strings, but effects Tailwind can't expre
 | Class | Used by | What it is |
 |---|---|---|
 | `.dock-surface` | `dock.ts` | The dock's glass slab: 20px blur, 180% saturate, layered shadow, inset highlight. Separate light-mode rule swaps to a white translucent fill. |
-| `.dock-item`, `.dock-item-favicon`, `.dock-item-color`, `.dock-item-label` | `dock.ts` | 48px tiles, hover lift, active squash, fixed-position hover label |
+| `.dock-item`, `.dock-item-glyph`, `.dock-item-name`, `.dock-item-favicon`, `.dock-item-color`, `.dock-item-label` | `dock.ts` | 48px tiles, hover lift, active squash, fixed-position hover label. A `[data-layout="dashboard"]` block re-cuts the same markup into standing labelled circles with no surrounding pill — see [shortcuts.md](shortcuts.md#the-dock). |
 | `.dock-suggestion` | `dock.ts` | Fainter fill marking recommendation tiles |
 | `.dock-tab-btn` | `dock.ts` | Pill tab selector; forces `corner-shape: round` |
 | `.dock-folder-grid`, `.dock-folder-item` | `dock.ts` | 3-column folder popover grid |
+| `.widget-card`, `.widget-tile` | `layout.ts` via `createCard()` | The card surface, on the **popover** palette so a body lifted out of a popover needs no restyling. `.widget-tile` is its Dashboard top-row variant: fixed 118px height, intrinsic width. |
+| `.card-grid-item` | `card-grid.ts` | Absolute placement plus the transform transition the packer animates |
+| `.card-carousel*` | `card-carousel.ts` | The one-at-a-time side region — height-tracking viewport, directional crossfade, hover chevrons, dot indicators |
+| `.dash-lower` | `layout.ts` | The Dashboard's two-column lower row, including the `:has()` rule that collapses it to one when the carousel is empty |
+| `.settings-button`, `.settings-button-label` | `index.html`, `layout.ts` | Corner icon button everywhere but Dashboard, where it grows a label |
 | `.glass-surface` | `components.ts` popovers | 16px blur + shadow + thin scrollbars |
 | `.popover-enter` | `components.ts` | 150ms fade/slide-in |
 | `.dialog-surface` | `components.ts` `createDialog()` | Dialog glass, plus in/out animations for the dialog and its `::backdrop` |
@@ -224,7 +229,11 @@ const raw = getIconSvg("check")              // → the SVG source string
 
 **Adding a theme.** Call `registerTheme(name, map)` from a new module, import it for side effect in `index.ts`, and add the name to the `theme` union in `defaults.ts`. There's no fallback: if the active theme's map lacks a name, `icon()` renders an empty span silently (`registry.ts:71`).
 
-The `modern` set has 36 icons: UI chrome (settings, close, check, chevrons, plus, edit, trash), settings-nav tabs (`tab*`), mode toggles (`mode*`), media controls (play, pause, skip*), and feature icons (calendar, folder, globe, link, sparkle, spinner, locationOff, bgImage, bgUpload, todoList, todoEmpty, dragHandle, externalLink, refresh).
+The `modern` set has 61 icons: UI chrome (settings, close, check, chevrons, plus, edit, trash, alertTriangle), settings-nav tabs (`tab*`), mode toggles (`mode*`), media controls (play, pause, skip*), weather conditions (`wx*` — clear, clearNight, partly, partlyNight, cloudy, fog, drizzle, rain, sleet, snow, thunder, unknown), and feature icons (calendar, folder, globe, link, sparkle, spinner, locationOff, bgImage, bgUpload, todoList, todoEmpty, dragHandle, externalLink, refresh), plus the todo widget's
+row of actions (moreVertical, pin, pinFilled, repeat, archive, archiveRestore,
+checkCircle, subtasks, flag).
+
+The `wx*` set is mapped from WMO weather codes in `weather.ts`; codes 0–2 have a night variant picked by the API's `is_day` flag.
 
 ## Refactor candidates
 

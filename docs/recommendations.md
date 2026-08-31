@@ -2,7 +2,11 @@
 
 Two features built on the `history` permission: a time-of-day model that suggests sites in the dock, and a bulk importer that turns frequently-visited sites into shortcuts.
 
-**Files:** `src/recommendations.ts` (194 lines) · `src/history-import.ts` (244 lines)
+**Files:** `src/recommendations.ts` · `src/history-import.ts` · `src/history-api.ts`
+
+Neither module calls `history` directly. Both go through `history-api.ts`, which
+papers over the fact that Chrome's `history.search` is callback-first while
+Firefox's is promise-only — see [browser-compat.md](browser-compat.md#the-history-api).
 
 > **History import is currently unreachable.** `initHistoryImport()` looks up `#sc-import-history`, which no longer exists anywhere in the codebase, and early-returns. See [architecture.md](architecture.md#refactor-candidates).
 

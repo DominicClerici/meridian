@@ -2,15 +2,50 @@ import { store } from "./store"
 import { getLayout, refreshCard, refreshCards, registerCard } from "./layout"
 import { getIconSvg } from "./icons/registry"
 
-const CLIENT_ID = "acd29601607e4e1c8896ab4c1ab534d7"
+/**
+ * The extension's own Spotify app. Its redirect allowlist is fixed, and the
+ * only redirect URI that can be on it is the `chromiumapp.org` one Chromium
+ * hands out — Firefox's `identity.getRedirectURL()` returns a host containing a
+ * UUID regenerated per *installation*, which cannot be registered ahead of
+ * time. So Firefox users bring their own Spotify app; see `docs/spotify.md`.
+ */
+const BUNDLED_CLIENT_ID = "acd29601607e4e1c8896ab4c1ab534d7"
+const BUNDLED_REDIRECT_HOST = ".chromiumapp.org"
+
 const SCOPES =
   "user-read-playback-state user-modify-playback-state user-read-currently-playing user-read-private"
 const SPOTIFY_AUTH_URL = "https://accounts.spotify.com/authorize"
 const SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"
 
-function getRedirectURL(): string {
-  const api = globalThis.browser ?? globalThis.chrome
-  return api!.identity.getRedirectURL()
+function getRedirectURL(): string | null {
+  try {
+    const api = globalThis.browser ?? globalThis.chrome
+    return api?.identity?.getRedirectURL() ?? null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Whether the bundled app could have this browser's redirect URI registered.
+ * Keyed off the URI itself rather than the browser name — that URI is the thing
+ * that has to match the registration, so it is the real test.
+ */
+export function bundledClientUsable(): boolean {
+  const redirect = getRedirectURL()
+  if (!redirect) return false
+  try {
+    return new URL(redirect).hostname.endsWith(BUNDLED_REDIRECT_HOST)
+  } catch {
+    return false
+  }
+}
+
+/** The user's own client ID if set, else the bundled one where it can work. */
+function getClientId(): string | null {
+  const own = store.sync.get("spotifyClientId").trim()
+  if (own) return own
+  return bundledClientUsable() ? BUNDLED_CLIENT_ID : null
 }
 
 function base64UrlEncode(buffer: ArrayBuffer): string {
@@ -31,7 +66,9 @@ async function sha256(plain: string): Promise<ArrayBuffer> {
   return crypto.subtle.digest("SHA-256", encoder.encode(plain))
 }
 
-export type SpotifyAuthOutcome = { ok: true } | { ok: false; error: string }
+export type SpotifyAuthOutcome =
+  | { ok: true }
+  | { ok: false; error: string; needsClientId?: boolean }
 
 export async function authenticate(): Promise<SpotifyAuthOutcome> {
   const api = globalThis.browser ?? globalThis.chrome
@@ -39,12 +76,27 @@ export async function authenticate(): Promise<SpotifyAuthOutcome> {
     return { ok: false, error: "This browser doesn't support the extension auth flow." }
   }
 
+  const redirectUri = getRedirectURL()
+  if (!redirectUri) {
+    return { ok: false, error: "Could not determine the extension's redirect URL." }
+  }
+
+  const clientId = getClientId()
+  if (!clientId) {
+    return {
+      ok: false,
+      error:
+        "This browser's redirect URL can't be registered on the built-in Spotify app. " +
+        "Add your own Spotify client ID under Settings \u2192 Advanced to connect.",
+      needsClientId: true,
+    }
+  }
+
   const codeVerifier = generateCodeVerifier()
   const codeChallenge = base64UrlEncode(await sha256(codeVerifier))
-  const redirectUri = getRedirectURL()
 
   const params = new URLSearchParams({
-    client_id: CLIENT_ID,
+    client_id: clientId,
     response_type: "code",
     redirect_uri: redirectUri,
     scope: SCOPES,
@@ -89,7 +141,7 @@ export async function authenticate(): Promise<SpotifyAuthOutcome> {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
-        client_id: CLIENT_ID,
+        client_id: clientId,
         grant_type: "authorization_code",
         code,
         redirect_uri: redirectUri,
@@ -131,12 +183,15 @@ async function refreshAccessToken(): Promise<boolean> {
   const refreshToken = store.local.get("spotifyRefreshToken")
   if (!refreshToken) return false
 
+  const clientId = getClientId()
+  if (!clientId) return false
+
   try {
     const res = await fetch(SPOTIFY_TOKEN_URL, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
-        client_id: CLIENT_ID,
+        client_id: clientId,
         grant_type: "refresh_token",
         refresh_token: refreshToken,
       }),
@@ -417,6 +472,57 @@ export function buildSpotifyBody(): HTMLElement {
   return body
 }
 
+/**
+ * The Dashboard top-row form. Same controls as the card, but laid out to a
+ * tile's fixed height: small art, one line of title, one of artist, and the
+ * transport underneath. The text column is capped so a long track name widens
+ * the tile only so far before it truncates.
+ */
+export function buildSpotifyTile(): HTMLElement {
+  const body = document.createElement("div")
+  body.className = "flex gap-3 items-center min-w-0"
+
+  if (!currentPlayerState) {
+    body.innerHTML = `<div class="text-sm opacity-60">Nothing playing</div>`
+    return body
+  }
+
+  const { track, isPlaying } = currentPlayerState
+  const playPauseAction = isPlaying ? "pause" : "play"
+
+  const albumHtml = track.albumArt
+    ? `<img src="${track.albumArt}" alt="Album art" class="w-14 h-14 rounded-theme-sm object-cover shrink-0">`
+    : `<div class="w-14 h-14 rounded-theme-sm bg-page-foreground/10 shrink-0"></div>`
+
+  const controlsHtml = isPremium
+    ? `<div class="flex items-center gap-1 -ml-1 mt-1">
+        <button data-spotify-action="previous" class="p-1 rounded-theme-sm hover:bg-page-foreground/15 transition-colors" ${
+          controlsDisabled ? "disabled" : ""
+        } aria-label="Previous track">${btnIcon("previous", isPlaying)}</button>
+        <button data-spotify-action="${playPauseAction}" class="p-1 rounded-theme-sm hover:bg-page-foreground/15 transition-colors" ${
+        controlsDisabled ? "disabled" : ""
+      } aria-label="${isPlaying ? "Pause" : "Play"}">${btnIcon(
+        playPauseAction,
+        isPlaying
+      )}</button>
+        <button data-spotify-action="next" class="p-1 rounded-theme-sm hover:bg-page-foreground/15 transition-colors" ${
+          controlsDisabled ? "disabled" : ""
+        } aria-label="Next track">${btnIcon("next", isPlaying)}</button>
+      </div>`
+    : ""
+
+  body.innerHTML = `
+    ${albumHtml}
+    <div class="min-w-0 max-w-[190px]">
+      <div class="text-[13px] font-medium truncate">${escapeHtml(track.name)}</div>
+      <div class="text-[11px] opacity-60 truncate">${escapeHtml(track.artists)}</div>
+      ${controlsHtml}
+    </div>
+  `
+  body.addEventListener("click", handleControlClick)
+  return body
+}
+
 function removeFloatingCard(): void {
   if (cardEl) {
     cardEl.remove()
@@ -458,11 +564,12 @@ function renderCard(): void {
 registerCard({
   id: "spotify",
   title: "Now Playing",
-  order: 50,
-  regions: { default: "grid", dashboard: "side" },
+  order: 15,
+  regions: { default: "grid", dashboard: "top" },
   enabledKey: "spotifyEnabled",
   isEnabled: () => currentPlayerState !== null,
   render: buildSpotifyBody,
+  renderTile: buildSpotifyTile,
 })
 
 async function handleControlClick(e: MouseEvent): Promise<void> {
@@ -506,6 +613,13 @@ export function initSpotify(): void {
   setupVisibilityHandler()
 
   store.sync.subscribe("layout", () => renderCard())
+
+  // A refresh token belongs to the app that issued it. Pointing at a different
+  // client would fail its next refresh with an opaque 400, so drop the session
+  // and make the user reconnect against the new app deliberately.
+  store.sync.subscribe("spotifyClientId", () => {
+    if (store.local.get("spotifyAccessToken")) clearTokens()
+  })
 
   store.sync.subscribe("spotifyEnabled", (enabled) => {
     if (enabled && store.local.get("spotifyAccessToken")) {

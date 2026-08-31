@@ -11,6 +11,7 @@ import {
   probeNativeBroker,
   webAuthAvailable,
 } from "./google-auth"
+import { bundledClientUsable } from "./spotify"
 
 export type CapabilityState = "available" | "unavailable" | "degraded" | "unknown"
 
@@ -121,11 +122,38 @@ function summarizeCalendar(broker: Capability, web: Capability): Capability {
     return {
       ...base,
       state: "degraded",
-      detail: "Needs a Google OAuth client ID — add one below to sign in.",
+      detail: "Needs a Google OAuth client ID — add one above to sign in.",
     }
   }
 
   return { ...base, state: "available", detail: "Uses the redirect flow with your own OAuth client." }
+}
+
+/**
+ * The bundled Spotify app's redirect allowlist is fixed, so it only works where
+ * the browser's redirect URI could be on it. Everywhere else the user supplies
+ * their own app — same shape as the calendar's fallback.
+ */
+function summarizeSpotify(web: Capability): Capability {
+  const base = { id: "spotify-auth", label: "Spotify sign-in" }
+
+  if (web.state !== "available") {
+    return { ...base, state: "unavailable", detail: "No usable sign-in path in this browser." }
+  }
+
+  if (store.sync.get("spotifyClientId").trim()) {
+    return { ...base, state: "available", detail: "Uses your own Spotify app." }
+  }
+
+  if (!bundledClientUsable()) {
+    return {
+      ...base,
+      state: "degraded",
+      detail: "This browser's redirect URI isn't on the built-in app — add a Spotify client ID above to connect.",
+    }
+  }
+
+  return { ...base, state: "available", detail: "Uses the built-in Spotify app." }
 }
 
 export async function probeCapabilities(force = false): Promise<Capability[]> {
@@ -135,5 +163,5 @@ export async function probeCapabilities(force = false): Promise<Capability[]> {
   ])
   const web = probeWebAuth()
 
-  return [location, broker, web, summarizeCalendar(broker, web)]
+  return [location, broker, web, summarizeCalendar(broker, web), summarizeSpotify(web)]
 }

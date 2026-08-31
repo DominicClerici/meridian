@@ -132,10 +132,11 @@ Choosing a namespace: put it in `sync` if the user would expect it on their othe
 | `clockDateFormat` | `"long" \| "short" \| "abbr" \| "numeric" \| "numericShort"` | `"long"` | `clock.ts` |
 | `clockSize` | `"small" \| "medium" \| "large"` | `"medium"` | `clock.ts` |
 | `todoEnabled` | `boolean` | `true` | `todo.ts` |
-| `todoShowBadges` | `boolean` | `true` | `todo.ts` |
+| `todoShowBadges` | `boolean` | `true` | `todo.ts` — badges *and* the trigger's progress ring |
 | `weatherEnabled` | `boolean` | `true` | `weather.ts` |
 | `weatherUnit` | `"f" \| "c"` | `"f"` | `weather.ts` |
 | `spotifyEnabled` | `boolean` | `true` | `spotify.ts` |
+| `spotifyClientId` | `string` | `""` | `spotify.ts`, `capabilities.ts` — a user-supplied Spotify app, needed where the bundled one's redirect URI can't apply |
 | `recommendationsEnabled` | `boolean` | `false` | `recommendations.ts`, `dock.ts` |
 | `shortcutsOpenIn` | `"current" \| "new"` | `"current"` | `dock.ts` |
 | `calendarEnabled` | `boolean` | `false` | `calendar.ts` |
@@ -151,7 +152,7 @@ Choosing a namespace: put it in `sync` if the user would expect it on their othe
 | Key | Type | Default | Used by |
 |---|---|---|---|
 | `shortcuts` | `Tab[]` | `[]` | `shortcuts.ts` consumers — the whole dock/folder tree |
-| `todos` | `Todo[]` | `[]` | `todo.ts`, `todos.ts` |
+| `todos` | `Todo[]` | `[]` | `todo.ts`, `todos.ts` — one flat array holding active, archived and subtask todos alike; **read it through `normalizeTodos()`**, since stored records predate several fields ([todos.md](todos.md#data-model)) |
 | `weatherLat` | `number \| null` | `null` | `location.ts` |
 | `weatherLon` | `number \| null` | `null` | `location.ts` |
 | `weatherLocationSource` | `LocationSource \| null` | `null` | `location.ts` |
@@ -166,6 +167,7 @@ Choosing a namespace: put it in `sync` if the user would expect it on their othe
 | `googleTokenExpiry` | `number \| null` (epoch ms) | `null` | `google-auth.ts` |
 | `bgUnsplashMeta` | `BgImageMeta \| null` | `null` | `background.ts` |
 | `bgUploadMeta` | `BgImageMeta \| null` | `null` | `background.ts` |
+| `dashboardWidget` | `string \| null` | `null` | `layout.ts` — the card id the Dashboard's side carousel was last left on |
 
 `RecommendationData` is `{ heatmap: { [domain: string]: number[][] }, builtAt: number }`.
 `BgImageMeta` is `{ id, url, authorName, authorUrl, downloadUrl, cachedAt }`.
@@ -179,9 +181,10 @@ Several modules bypass the store and write `localStorage` directly, for data tha
 
 | Key | Written by | Contents |
 |---|---|---|
-| `sp:weather:lastFetch` | `weather.ts:58` | Epoch ms; enforces a 120s fetch cooldown |
-| `sp:weather:cachedData` | `weather.ts:59` | Last current-conditions response |
-| `sp:weather:hourlyData` | `weather.ts:60` | Last hourly forecast, for the chart |
+| `sp:weather:lastFetch` | `weather.ts` | Epoch ms; enforces a 120s fetch cooldown |
+| `sp:weather:cachedData` | `weather.ts` | Last current-conditions response: `weatherCode`, `isDay`, and a `values` map keyed by API variable |
+| `sp:weather:hourlyData` | `weather.ts` | 72-hour series for every charted variable, the daily aggregates, and the location's UTC offset and timezone — see [weather.md](weather.md#caching) |
+| `sp:weather:aqiData` | `weather.ts` | 72-hour US AQI series and current reading from the separate air-quality host, fetched only while that metric is selected |
 | `sp:calendar:lastFetch` | `calendar.ts:32` | Epoch ms; 10s cooldown |
 | `sp:calendar:calendarList` | `calendar.ts:29` | The user's calendar list |
 | `sp:calendar:calendarListTs` | `calendar.ts:30` | Timestamp for the 1h TTL on the list |

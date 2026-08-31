@@ -61,39 +61,47 @@ if [ "$MISSING" -eq 1 ]; then
   exit 1
 fi
 
+# --- Target ---
+# Everything but the manifest is shared. Chrome needs `key` and `oauth2`, which
+# Firefox rejects as unknown properties; Firefox needs `browser_specific_settings`,
+# without which it refuses storage.sync. Two literal manifests rather than one
+# generated at build time, so the build stays free of a JSON parser.
+MANIFEST="manifest.json"
+OUT="dist"
+
 # --- Build functions ---
 copy_static() {
-  cp manifest.json dist/manifest.json
-  cp src/index.html dist/index.html
-  rm -rf dist/fonts
-  cp -r src/fonts dist/fonts
-  # cp src/service-worker.js dist/service-worker.js
+  cp "$MANIFEST" "$OUT/manifest.json"
+  cp src/index.html "$OUT/index.html"
+  rm -rf "$OUT/fonts"
+  cp -r src/fonts "$OUT/fonts"
+  # cp src/service-worker.js "$OUT/service-worker.js"
 }
 
 build() {
-  echo "Building..."
-  rm -rf dist
-  mkdir -p dist
+  echo "Building $MANIFEST -> $OUT/ ..."
+  rm -rf "$OUT"
+  mkdir -p "$OUT"
   copy_static
-  "$TAILWIND" -i src/styles.css -o dist/styles.css --minify
-  "$ESBUILD" src/index.ts --bundle --outfile=dist/index.js --minify
-  echo "Build complete. Output in dist/"
+  "$TAILWIND" -i src/styles.css -o "$OUT/styles.css" --minify
+  "$ESBUILD" src/index.ts --bundle --outfile="$OUT/index.js" --minify
+  echo "Build complete. Output in $OUT/"
 }
 
 watch() {
-  echo "Starting watch mode..."
-  rm -rf dist
-  mkdir -p dist
+  echo "Starting watch mode ($MANIFEST -> $OUT/) ..."
+  rm -rf "$OUT"
+  mkdir -p "$OUT"
   copy_static
 
-  # Initial build so dist/ is complete before watchers take over
-  "$TAILWIND" -i src/styles.css -o dist/styles.css --minify
-  "$ESBUILD" src/index.ts --bundle --outfile=dist/index.js --minify
+  # Initial build so the output dir is complete before watchers take over
+  "$TAILWIND" -i src/styles.css -o "$OUT/styles.css" --minify
+  "$ESBUILD" src/index.ts --bundle --outfile="$OUT/index.js" --minify
 
   # Start watchers in background
-  "$TAILWIND" -i src/styles.css -o dist/styles.css --watch &
+  "$TAILWIND" -i src/styles.css -o "$OUT/styles.css" --watch &
   TAILWIND_PID=$!
-  "$ESBUILD" src/index.ts --bundle --outfile=dist/index.js --watch=forever &
+  "$ESBUILD" src/index.ts --bundle --outfile="$OUT/index.js" --watch=forever &
   ESBUILD_PID=$!
 
   # Trap to kill background processes on exit
@@ -117,7 +125,25 @@ watch() {
 }
 
 # --- Main ---
-case "${1:-}" in
-  --watch) watch ;;
-  *) build ;;
-esac
+WATCH=0
+for arg in "$@"; do
+  case "$arg" in
+    --watch) WATCH=1 ;;
+    --firefox)
+      MANIFEST="manifest.firefox.json"
+      OUT="dist-firefox"
+      ;;
+    *)
+      echo "Unknown option: $arg"
+      echo "Usage: ./build.sh [--firefox] [--watch]"
+      exit 1
+      ;;
+  esac
+done
+
+if [ ! -f "$MANIFEST" ]; then
+  echo "ERROR: $MANIFEST not found."
+  exit 1
+fi
+
+if [ "$WATCH" -eq 1 ]; then watch; else build; fi

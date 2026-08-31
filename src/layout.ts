@@ -1,6 +1,10 @@
 import { store } from "./store"
 import type { LayoutMode, SyncSettings } from "./defaults"
 import { createCard, closeAllPopovers } from "./components"
+import { createCardGrid } from "./card-grid"
+import type { CardGrid, GridItem } from "./card-grid"
+import { createCardCarousel } from "./card-carousel"
+import type { CardCarousel, CarouselItem } from "./card-carousel"
 
 export type { LayoutMode }
 
@@ -17,6 +21,14 @@ export type CardDef = {
   /** Extra gate beyond enabledKey — e.g. "only when there is something to show". */
   isEnabled?: () => boolean
   render: () => HTMLElement
+  /**
+   * Compact form for tile regions (the Dashboard's top row), where a card is a
+   * fixed-height glance rather than a full panel. Falls back to `render`.
+   */
+  renderTile?: () => HTMLElement
+  /** Header text for the tile form, when the card title is too generic for a
+      glance — the weather tile names its city, the way the mock does. */
+  tileTitle?: () => string
   actions?: () => HTMLElement | null
   onUnmount?: () => void
 }
@@ -24,23 +36,31 @@ export type CardDef = {
 const FADE_MS = 250
 const PAUSE_MS = 100
 
+/** Where the settings button sits in every layout but the Dashboard. */
+const CORNER_SETTINGS = "absolute top-4 left-4 z-40 w-12 h-12 justify-center"
+
 const SINGLETONS = {
   widgets: "widgets",
   clock: "clock",
   search: "search-wrapper",
   dock: "dock-wrapper",
+  settings: "settings-open",
 } as const
 
 export type SlotName = keyof typeof SINGLETONS
 
+type Mounted = { host: HTMLElement; title: HTMLElement | null; tile: boolean }
+
 const cards: CardDef[] = []
-const mountedBodies = new Map<string, HTMLElement>()
+const mountedBodies = new Map<string, Mounted>()
 const baseClasses = new Map<SlotName, string>()
 
 let stageEl: HTMLElement
 let parkingEl: HTMLElement
 let currentMode: LayoutMode | null = null
 let switching = false
+let cardGrids: CardGrid[] = []
+let cardCarousels: CardCarousel[] = []
 
 export function getLayout(): LayoutMode {
   return store.sync.get("layout")
@@ -61,12 +81,23 @@ function cardVisible(def: CardDef): boolean {
 
 /** Re-renders one card's body if it is mounted in the current layout. */
 export function refreshCard(id: string): void {
-  const host = mountedBodies.get(id)
-  if (!host) return
+  const mounted = mountedBodies.get(id)
+  if (!mounted) return
   const def = cards.find((c) => c.id === id)
   if (!def) return
-  reclaimSingletons(host)
-  host.replaceChildren(def.render())
+  reclaimSingletons(mounted.host)
+  mounted.host.replaceChildren(renderFor(def, mounted.tile))
+  if (mounted.title && mounted.tile && def.tileTitle) {
+    mounted.title.textContent = def.tileTitle()
+  }
+}
+
+function titleEl(card: HTMLElement): HTMLElement | null {
+  return card.querySelector<HTMLElement>(".widget-card-title")
+}
+
+function renderFor(def: CardDef, tile: boolean): HTMLElement {
+  return tile && def.renderTile ? def.renderTile() : def.render()
 }
 
 /** Rebuilds the whole card set in place — use when a card's enabled state flips. */
@@ -132,6 +163,8 @@ function region(name: CardRegion, className: string): HTMLElement {
 function frameImmersive(): HTMLElement {
   const root = el("div", "absolute inset-0")
 
+  root.appendChild(slot("settings", CORNER_SETTINGS))
+
   const widgets = el("div", "absolute top-4 right-4")
   widgets.appendChild(slot("widgets"))
   root.appendChild(widgets)
@@ -142,7 +175,7 @@ function frameImmersive(): HTMLElement {
   )
   const col = el("div", "w-full max-w-lg flex flex-col pointer-events-auto")
   col.appendChild(slot("clock", "text-center mb-4"))
-  col.appendChild(slot("search"))
+  col.appendChild(slot("search", "max-w-lg"))
   center.appendChild(col)
   root.appendChild(center)
 
@@ -150,7 +183,7 @@ function frameImmersive(): HTMLElement {
     "div",
     "absolute bottom-4 left-0 right-0 flex justify-center pointer-events-none"
   )
-  dockRow.appendChild(slot("dock"))
+  dockRow.appendChild(slot("dock", "items-center"))
   root.appendChild(dockRow)
 
   return root
@@ -160,51 +193,77 @@ function frameDefault(): HTMLElement {
   const root = el("div", "absolute inset-0")
 
   const scroll = el("div", "absolute inset-0 overflow-y-auto px-6 pt-[10vh] pb-32")
-  const col = el("div", "mx-auto w-full max-w-5xl flex flex-col items-center gap-8")
-  col.appendChild(slot("clock", "text-center"))
-  col.appendChild(slot("search"))
-  col.appendChild(
-    region("grid", "w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-start")
-  )
-  scroll.appendChild(col)
+
+  // The head stays at reading width while the card region gets its own, wider
+  // cap — four columns need room the search bar has no use for.
+  const head = el("div", "mx-auto w-full max-w-5xl flex flex-col items-center gap-8")
+  head.appendChild(slot("clock", "text-center"))
+  head.appendChild(slot("search", "max-w-lg"))
+  scroll.appendChild(head)
+
+  const gridWrap = el("div", "mx-auto w-full max-w-[1600px] mt-8")
+  const grid = region("grid", "relative w-full")
+  grid.dataset.packed = "true"
+  gridWrap.appendChild(grid)
+  scroll.appendChild(gridWrap)
+
   root.appendChild(scroll)
 
   const dockRow = el(
     "div",
     "absolute bottom-4 left-0 right-0 flex justify-center pointer-events-none"
   )
-  dockRow.appendChild(slot("dock"))
+  dockRow.appendChild(slot("dock", "items-center"))
   root.appendChild(dockRow)
+
+  root.appendChild(slot("settings", CORNER_SETTINGS))
 
   return root
 }
 
+/**
+ * The Dashboard.
+ *
+ *   ┌──────────────────────────────────────────────┐
+ *   │ tile  tile  tile                             │   region "top"
+ *   ├───────────────────────────────┬──────────────┤
+ *   │ clock                         │              │
+ *   │ search                        │   carousel   │   region "side"
+ *   │ shortcuts                     │              │
+ *   │ ⋯                             │   ‹  ●∘  ›   │
+ *   │ settings          region main │              │
+ *   └───────────────────────────────┴──────────────┘
+ *
+ * The two halves of the lower row stretch to a common height, which is what
+ * puts the settings button on the carousel's bottom edge without either side
+ * knowing the other's size.
+ */
 function frameDashboard(): HTMLElement {
-  const root = el("div", "absolute inset-0 overflow-y-auto p-6")
-  const wrap = el("div", "mx-auto w-full max-w-7xl flex flex-col gap-4")
+  const root = el("div", "absolute inset-0 overflow-y-auto")
+  const wrap = el("div", "mx-auto w-full max-w-7xl p-8 flex flex-col gap-8")
 
-  wrap.appendChild(
-    region("top", "grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-4 items-start")
-  )
+  const top = region("top", "flex flex-wrap items-stretch gap-3")
+  top.dataset.variant = "tile"
+  wrap.appendChild(top)
 
-  const lower = el("div", "grid grid-cols-1 lg:grid-cols-3 gap-4 items-start")
+  const lower = el("div", "dash-lower")
 
-  const main = el("div", "lg:col-span-2 flex flex-col gap-4")
+  const main = el("div", "flex flex-col items-start gap-7 min-w-0")
+  main.appendChild(slot("clock", "text-left"))
+  main.appendChild(slot("search", "max-w-xl"))
+  main.appendChild(slot("dock", "items-start"))
+  main.appendChild(region("main", "w-full flex flex-col gap-4"))
 
-  const searchRow = el("div", "flex justify-center")
-  searchRow.appendChild(slot("search"))
-  main.appendChild(searchRow)
-
-  const dockRow = el("div", "flex justify-center")
-  dockRow.appendChild(slot("dock"))
-  main.appendChild(dockRow)
-
-  main.appendChild(region("main", "flex flex-col gap-4"))
+  // Pinned to the bottom of the column rather than trailing the content above,
+  // so it lines up with the foot of the carousel at any content height.
+  main.appendChild(slot("settings", "mt-auto"))
   lower.appendChild(main)
 
-  lower.appendChild(region("side", "flex flex-col gap-4"))
-  wrap.appendChild(lower)
+  const side = region("side", "min-w-0")
+  side.dataset.carousel = "true"
+  lower.appendChild(side)
 
+  wrap.appendChild(lower)
   root.appendChild(wrap)
   return root
 }
@@ -223,18 +282,27 @@ const FRAMES: Record<LayoutMode, () => HTMLElement> = {
 }
 
 function unmountCards(): void {
-  reclaimSingletons(stageEl)
+  for (const grid of cardGrids) grid.destroy()
+  cardGrids = []
+  for (const carousel of cardCarousels) carousel.destroy()
+  cardCarousels = []
   for (const id of mountedBodies.keys()) {
     cards.find((c) => c.id === id)?.onUnmount?.()
   }
   mountedBodies.clear()
+  // Scoped to the cards, not the whole stage: refreshCards() rebuilds cards
+  // without rebuilding the frame, and a frame-owned singleton parked here would
+  // never be placed again.
   for (const node of stageEl.querySelectorAll<HTMLElement>("[data-card]")) {
+    reclaimSingletons(node)
     node.remove()
   }
 }
 
 function mountCards(mode: LayoutMode): void {
   const ordered = [...cards].sort((a, b) => a.order - b.order)
+  const packed = new Map<HTMLElement, GridItem[]>()
+  const carouselled = new Map<HTMLElement, CarouselItem[]>()
 
   for (const def of ordered) {
     const target = def.regions[mode]
@@ -243,19 +311,55 @@ function mountCards(mode: LayoutMode): void {
     if (!host) continue
     if (!cardVisible(def)) continue
 
-    const body = def.render()
+    const tile = host.dataset.variant === "tile"
+    const body = renderFor(def, tile)
     const card = createCard({
-      title: def.title,
+      title: tile && def.tileTitle ? def.tileTitle() : def.title,
       actions: def.actions?.() ?? null,
       body,
     })
     card.el.dataset.card = def.id
-    const span = def.span?.[mode]
-    const spanClass = span ? SPAN_CLASSES[span] : undefined
-    if (spanClass) card.el.classList.add(spanClass)
+    if (tile) card.el.classList.add("widget-tile")
+    const span = def.span?.[mode] ?? 1
 
-    host.appendChild(card.el)
-    mountedBodies.set(def.id, card.body)
+    mountedBodies.set(def.id, { host: card.body, title: titleEl(card.el), tile })
+
+    if (host.dataset.packed) {
+      const items = packed.get(host) ?? []
+      items.push({ el: card.el, span })
+      packed.set(host, items)
+      host.appendChild(card.el)
+    } else if (host.dataset.carousel) {
+      // The carousel owns placement: setItems() appends into its own viewport.
+      const items = carouselled.get(host) ?? []
+      items.push({ id: def.id, title: def.title, el: card.el })
+      carouselled.set(host, items)
+    } else {
+      const spanClass = SPAN_CLASSES[span]
+      if (spanClass) card.el.classList.add(spanClass)
+      host.appendChild(card.el)
+    }
+  }
+
+  for (const [host, items] of packed) {
+    const grid = createCardGrid(host)
+    grid.setItems(items)
+    cardGrids.push(grid)
+  }
+
+  for (const host of stageEl.querySelectorAll<HTMLElement>("[data-carousel]")) {
+    const carousel = createCardCarousel(host, {
+      initialId: store.local.get("dashboardWidget"),
+      onChange: (id) => store.local.set("dashboardWidget", id),
+    })
+    carousel.setItems(carouselled.get(host) ?? [])
+    cardCarousels.push(carousel)
+  }
+
+  // A region with nothing in it would still take a gap from its parent flexbox.
+  for (const host of stageEl.querySelectorAll<HTMLElement>("[data-region]")) {
+    if (host.dataset.packed || host.dataset.carousel) continue
+    host.hidden = host.childElementCount === 0
   }
 }
 

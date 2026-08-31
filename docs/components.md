@@ -1,10 +1,31 @@
 # Components
 
-The UI kit. **File:** `src/components.ts` (776 lines).
+The UI kit. **File:** `src/components.ts` (952 lines).
 
-Nine factory functions that build DOM elements imperatively. No templates, no framework, no base class — each returns a detached element (or a small handle object) that the caller appends. All of them style with the design tokens from [design-system.md](design-system.md).
+Ten factory functions that build DOM elements imperatively. No templates, no framework, no base class — each returns a detached element (or a small handle object) that the caller appends. All of them style with the design tokens from [design-system.md](design-system.md).
 
 Use these instead of hand-rolling markup. If a control here doesn't fit, extend it rather than writing a one-off — the popover stack and focus management in particular are not worth reimplementing.
+
+## Tones
+
+```ts
+type Tone = "default" | "popover"
+```
+
+`createButton`, `createInput`, `createSelect` and `createCheckbox` all take `tone`. It answers a specific problem: `--popover` is **dark in both light and dark mode**, and `.widget-card` reuses that palette, so a control built from the page tokens (`bg-input`, `text-foreground`) renders as a white box with near-black text on a dark glass surface. `tone: "popover"` swaps in `popover-foreground` alphas instead:
+
+```ts
+createInput({ placeholder: "Title", tone: "popover" })
+createButton("Cancel", "ghost", { tone: "popover" })
+```
+
+Use it for anything inside a popover or a widget card; leave it off in the settings dialog and elsewhere on the page. It also sets `color-scheme: dark` on `date`/`time` inputs, whose picker chrome the browser paints itself.
+
+Before it existed, `todo.ts` overwrote `createInput`'s and `createButton`'s class lists with hard-coded `bg-white/[0.06]` strings — that is the thing tones are here to stop.
+
+### A warning about `className`
+
+Both `className` and Tailwind's own base classes end up in the same `class` attribute, and **the winner is decided by stylesheet order, not by the order in the string**. `px-3` from `createButton`'s base beats a `p-0` you append. For anything that overrides a base utility — padding, size, font size — set an inline style or build the element by hand; `todo.ts` does both (`compact()` and `iconButton()`).
 
 ## createButton
 
@@ -12,7 +33,7 @@ Use these instead of hand-rolling markup. If a control here doesn't fit, extend 
 createButton(
   label: string,
   variant: "primary" | "outline" | "ghost" | "destructive" | "destructive-outline" | "override",
-  opts?: { icon?: string | HTMLElement; onClick?: () => void; className?: string }
+  opts?: { icon?: string | HTMLElement; onClick?: () => void; className?: string; tone?: Tone }
 ): HTMLButtonElement
 ```
 
@@ -41,6 +62,8 @@ createInput(opts: {
   name?: string
   multiline?: boolean    // → <textarea>
   rows?: number          // default 3, multiline only
+  tone?: Tone            // see Tones
+  className?: string     // appended, not replaced
 }): HTMLInputElement | HTMLTextAreaElement
 ```
 
@@ -56,6 +79,8 @@ createSelect(opts: {
   value?: string          // defaults to the first option
   name?: string
   width?: string          // e.g. "120px"
+  variant?: "input" | "ghost"   // defaults to "input"
+  tone?: Tone                   // see Tones
   onChange?: (value: string) => void
 }): SelectElement          // HTMLDivElement & { value: string }
 ```
@@ -73,7 +98,8 @@ store.sync.subscribe("clockSize", v => { sel.value = v })   // the standard sync
 Behavior details:
 
 - **Width.** Given `opts.width`, the container is fixed to it. Otherwise a hidden zero-height sizer containing every option label is appended, so the control is naturally as wide as its longest option and never reflows when the value changes.
-- **Open/close.** The trigger's corners square off at the bottom and the list's at the top, so the two read as one shape while open.
+- **Variant.** `input` is the settings-form look: bordered, filled, full-width, chevron pushed to the far right. `ghost` is for a control that sits inside content rather than in a form — no border or fill, `currentColor` at 60% opacity until hovered, sized to its text with the chevron beside it, and a detached rounded list. The weather widget's metric selector uses it as its own heading.
+- **Open/close.** In the `input` variant the trigger's corners square off at the bottom and the list's at the top, so the two read as one shape while open; the `ghost` variant keeps both rounded and floats the list 4px clear.
 - **Mouse.** `mousedown` on the trigger opens the list and starts a drag; releasing over an option selects it. Click-to-open then click-to-select also works.
 - **Keyboard.** Arrow keys move the highlight (opening the list if closed), Home/End jump, Enter/Space select, Escape closes and returns focus, Tab closes.
 - **Outside click** closes it, via a `mousedown` listener registered on the next tick so the opening click doesn't immediately close it.
@@ -84,11 +110,14 @@ Behavior details:
 createCheckbox(
   label: string,
   checked: boolean,
-  onChange: (checked: boolean) => void
+  onChange: (checked: boolean) => void,
+  opts?: { tone?: Tone; className?: string; size?: number }   // size defaults to 18
 ): HTMLLabelElement
 ```
 
 A visually-hidden `<input type="checkbox" class="sr-only peer">` plus a styled box — real focus and keyboard behavior, custom appearance. The checkmark is an inline SVG that scales and fades between states.
+
+**`className` is appended, never assigned.** The box is a `<span>` sized with width/height, so it only has a size while the wrapper is `inline-flex`; a call site that replaced the wrapper's class list (`checkbox.className = "shrink-0"`) collapsed every todo checkbox to a 0px-wide vertical line. `size` scales the box and its checkmark together.
 
 The returned label carries an **untyped `setChecked(v: boolean)` method** attached at `components.ts:433`:
 
@@ -154,6 +183,8 @@ createCard(opts: {
 
 The surface the non-immersive layouts put widgets on: an uppercase title row with optional leading icon and trailing action, over a body container. Returns the body separately because `layout.ts` re-renders into it (`refreshCard`) without rebuilding the shell.
 
+The title element carries `.widget-card-title` so `layout.ts` can rewrite it on a refresh — the weather tile's header is its current city, not a fixed string.
+
 Styling is `.widget-card` in `styles.css`, which deliberately reuses the **popover** palette — `--popover` / `--popover-foreground` are dark in both light and dark mode, so a widget body extracted from a popover renders in a card with no restyling. See [layouts.md](layouts.md).
 
 ## createPopover
@@ -166,6 +197,7 @@ createPopover(
     onClose?: () => void
     modal?: boolean
     position?: "below-right" | "above-center"   // default "below-right"
+    padding?: "default" | "none"                // "none" → p-1, for menus
   }
 ): { el: HTMLDivElement; close: () => void }
 ```
@@ -189,6 +221,23 @@ The most intricate thing in the file. A module-level **popover stack** (`compone
 
 **`closeAllPopovers()`** unwinds the whole stack from the top. `layout.ts` calls it before a layout switch, since the anchors are about to be reparented.
 
+## createMenu
+
+```ts
+type MenuItem =
+  | "separator"
+  | { label: string; icon?: HTMLElement; onClick: () => void
+      danger?: boolean; disabled?: boolean; hint?: string }
+
+createMenu(anchor: HTMLElement, items: MenuItem[], opts?: { onClose?: () => void }): { close: () => void }
+```
+
+A dropdown of actions built on `createPopover` with `padding: "none"`, so it inherits the stack, the focus trap and the outside-click dismissal. Picking an item closes the menu and *then* runs `onClick`. `danger` tints an item with the danger token; `disabled` dims it and drops its listener, and `hint` becomes the `title` explaining why (the todo row's Pin item uses it at the three-pin limit).
+
+The popover is created **after** the items are in place — it measures itself when it mounts, so building it first would position an empty box.
+
+The todo row's ⋮ button is the only caller today.
+
 ## createTooltip
 
 ```ts
@@ -209,7 +258,8 @@ Because it's a child of the anchor, it inherits the anchor's overflow and stacki
 ## Refactor candidates
 
 - **Two different escape hatches for imperative updates.** `createSelect` returns a typed `SelectElement` with a `value` property; `createCheckbox` bolts an untyped `setChecked` onto an `HTMLLabelElement`, forcing `as any` at all nine call sites (all in `settings.ts`). Both should return the same shape — either a typed element or a `{ el, set }` handle.
-- **`createButton` has no size or icon-only affordance.** Callers that need a square icon button append to `className` and re-specify layout by hand (`shortcut-settings.ts:733`, `settings.ts:1360`). A `size` option, or an `iconOnly` variant, would remove that.
+- **`createButton` has no size or icon-only affordance.** Callers that need a square icon button append to `className` and re-specify layout by hand (`shortcut-settings.ts:733`, `settings.ts:1360`), or give up and build the button themselves (`iconButton()` in `todo.ts`) — appending can't reliably beat the base padding anyway. A `size` option, or an `iconOnly` variant, would remove all three.
+- **`createMenu` has no keyboard navigation.** Arrow keys don't move between items; only Tab does, via the popover's trap.
 - **`"override"` is a variant that means "not a variant".** It exists so callers can borrow the base layout classes and supply their own palette; that reads better as a separate `createButtonBase()` or an option than as a member of the variant union.
 - **Popovers ignore Escape.** Every other dismissible surface in the app closes on Escape; popovers don't.
 - **The two document-level popover listeners are hard to reason about.** Modal, nested, and anchor-toggle cases are all resolved inside two capture-phase handlers with interleaved conditions (`components.ts:653`–`678`). This is where dismissal bugs will come from.

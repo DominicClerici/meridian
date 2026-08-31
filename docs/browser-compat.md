@@ -1,12 +1,12 @@
 # Browser compatibility
 
-Two of this extension's features are built on browser services that Chromium
-*forks* often remove. This doc covers what breaks, how the code detects it, and
-how it degrades.
+Two axes of trouble. **Chromium forks** remove browser *services* the extension
+leans on — that's the first half of this doc. **Firefox** keeps the services but
+differs on API *conventions* and CSS support — that's [the second](#firefox).
 
-The motivating case is **ungoogled-chromium**, but nothing here is specific to
-it — Brave, Vivaldi, a Chrome profile with enterprise policy, and Firefox all
-trip some subset of the same wires.
+The motivating case for the first half is **ungoogled-chromium**, but nothing
+there is specific to it: Brave, Vivaldi, a Chrome profile with enterprise
+policy, and Firefox all trip some subset of the same wires.
 
 ## What a de-Googled build actually changes
 
@@ -121,6 +121,106 @@ a `client_secret` at the token endpoint, and the client types that accept PKCE
 without one (Desktop app) only allow `localhost` redirect URIs — not
 `chromiumapp.org`. Implicit avoids embedding a secret. The cost is no refresh
 token and a ~1h lifetime, which is invisible behind a 5-minute refresh interval.
+
+## Firefox
+
+Firefox has every service Chromium forks strip out. What it differs on is
+conventions, and the failures are quieter for it.
+
+### The history API
+
+The single sharpest edge in the codebase. `globalThis.browser ?? globalThis.chrome`
+resolves to `browser` on Firefox — and `browser.*` is **promise-only**. It never
+invokes a trailing callback, and its argument validation throws on the extra
+parameter. Chrome's `chrome.*` is the mirror image: callback-first, returns
+nothing.
+
+Written the Chrome way, `history.search(query, cb)` on Firefox produces a
+promise that never settles or a synchronous throw — so History Import hangs on
+its spinner and the recommendation heatmap silently never builds.
+
+`history-api.ts` calls with a callback *and* takes the return value, so whichever
+one answers wins:
+
+```ts
+try { returned = fn(arg, callback) } catch { returned = fn(arg) }
+return isThenable(returned) ? returned : viaCallback
+```
+
+Behaviour detection, not a `browser`-is-defined check — a fork that defines
+`browser` with callback semantics still works. All `history` access goes through
+this module; don't call `api.history` directly.
+
+`storage` and `identity` need no such treatment: Chrome has returned promises
+from both since MV3, so the plain `browser ?? chrome` alias is enough.
+
+### The manifest
+
+Firefox builds from `manifest.firefox.json` (`./build.sh --firefox` → `dist-firefox/`),
+which differs from the Chrome manifest in three keys and nothing else:
+
+| Key | Chrome | Firefox |
+|---|---|---|
+| `key` | Pins the extension ID | Absent — not implemented, AMO flags it |
+| `oauth2` | Configures `identity.getAuthToken` | Absent — same |
+| `browser_specific_settings.gecko.id` | Absent — Chrome warns | `startpage@meridian` |
+
+The add-on ID is the load-bearing one. Firefox refuses `storage.sync` for an
+add-on without an explicit ID, and hard-errors for temporary installs. Because
+`store.ts` catches storage failures and falls back to localStorage-only mode,
+dropping it doesn't break anything *visibly* — it just silently stops every
+`store.sync` key from syncing across devices or propagating between tabs.
+
+See [architecture.md](architecture.md#why-two-files-rather-than-one-generated)
+for why these are two literal files rather than one generated at build time.
+
+### The redirect URI
+
+`identity.getRedirectURL()` returns different hosts per browser:
+
+| Chrome | `https://<extension-id>.chromiumapp.org/` |
+| Firefox | `https://<per-install-uuid>.extensions.allizom.org/` |
+
+One value per browser, not per service — every flow redirects to the same
+place. Firefox's UUID is regenerated per *installation*, so it can't be
+registered ahead of time on any OAuth client, and it changes again each time the
+add-on is reloaded temporarily.
+
+Both services handle this the same way: a **user-supplied client ID** with the
+redirect URI shown next to it to register. `buildOAuthSection()` in `settings.ts`
+renders both, and `capabilities.ts` reports each as *Needs setup* before the
+user ever presses connect.
+
+- **Google** has no bundled fallback for this flow at all — the `oauth2` client
+  in the manifest only works through `getAuthToken`.
+- **Spotify** has a bundled app, used only where `bundledClientUsable()`
+  confirms the browser's redirect URI could be on its allowlist (i.e. the host
+  ends in `.chromiumapp.org`). Everywhere else `authenticate()` returns
+  `needsClientId: true` rather than letting Spotify answer `INVALID_CLIENT`.
+
+Note the test is on the redirect URI's host, not the browser's identity —
+consistent with [Detection](#detection) above. The URI is the thing that has to
+match the registration, so it is the real test rather than a proxy for one.
+
+### CSS
+
+| Feature | Firefox | Handling |
+|---|---|---|
+| `::-webkit-scrollbar` | Not supported | Every webkit scrollbar block is paired with `scrollbar-width` / `scrollbar-color`. `thin` is the narrowest Firefox offers, so the exact 4px/6px widths are WebKit-only. |
+| `corner-shape: squircle` | Not supported | `@supports`-guarded in `styles.css`; `--corner-shape` stays `round`. Corners are plain quarter-circles on Firefox. |
+| `backdrop-filter` | Supported (103+) | `-webkit-` prefix kept for older WebKit only. |
+
+### Not a problem
+
+- **`fetch` and host permissions.** Firefox MV3 treats `host_permissions` as
+  optional-until-granted, but every endpoint the extension calls (open-meteo,
+  Spotify, googleapis, Unsplash) sends `Access-Control-Allow-Origin`, so the
+  requests succeed on CORS alone.
+- **`chrome_url_overrides.newtab`**, `<dialog>`/`::backdrop`, `color-mix`,
+  `:has()`, Resize/MutationObserver, WAAPI, IndexedDB, `crypto.subtle` — all
+  supported on both.
+- **Geolocation** prompts on `moz-extension://` where Chrome grants silently
+  from the manifest. The fallback chain above already covers a refusal.
 
 ## The general rule
 

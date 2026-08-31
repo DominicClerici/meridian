@@ -121,6 +121,23 @@ function attachLabel(btn: HTMLElement, text: string): void {
   labelEls.push(label)
 }
 
+/**
+ * The glyph lives in its own element so the Dashboard can turn it into a
+ * standing circle with the name printed underneath, while every other layout
+ * keeps the dock's compact 48px tile and its hover tooltip.
+ */
+function itemShell(btn: HTMLElement, glyph: HTMLElement, name: string): void {
+  const host = document.createElement("span")
+  host.className = "dock-item-glyph"
+  host.appendChild(glyph)
+  btn.appendChild(host)
+
+  const label = document.createElement("span")
+  label.className = "dock-item-name"
+  label.textContent = name
+  btn.appendChild(label)
+}
+
 function createDockItem(
   item: TabItem,
   opts?: { suggestion?: boolean }
@@ -129,7 +146,7 @@ function createDockItem(
   btn.className = "dock-item" + (opts?.suggestion ? " dock-suggestion" : "")
   btn.setAttribute("aria-label", item.name)
 
-  btn.appendChild(renderItemIcon(item))
+  itemShell(btn, renderItemIcon(item), item.name)
   attachLabel(btn, item.name)
 
   if (item.type === "shortcut") {
@@ -156,7 +173,7 @@ function createSuggestionItem(rec: { name: string; url: string }): HTMLElement {
     fallback.classList.add("text-page-foreground", "opacity-50")
     img.replaceWith(fallback)
   })
-  btn.appendChild(img)
+  itemShell(btn, img, rec.name)
   attachLabel(btn, rec.name)
 
   btn.addEventListener("click", () => navigate(rec.url))

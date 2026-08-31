@@ -28,6 +28,16 @@ export type LayoutMode = (typeof LAYOUT_MODES)[number]
 /** How the weather widget arrived at its coordinates. See `docs/weather.md`. */
 export type LocationSource = "device" | "manual" | "timezone"
 
+/** The datapoint the weather widget charts. See `docs/weather.md`. */
+export type WeatherMetric =
+  | "temperature"
+  | "apparent"
+  | "humidity"
+  | "wind"
+  | "uv"
+  | "precipitation"
+  | "aqi"
+
 /** Which Google OAuth path the calendar is using. See `docs/calendar.md`. */
 export type GoogleAuthMethod = "native" | "web"
 
@@ -51,7 +61,9 @@ export type SyncSettings = {
   todoShowBadges: boolean;
   weatherEnabled: boolean;
   weatherUnit: "f" | "c";
+  weatherMetric: WeatherMetric;
   spotifyEnabled: boolean;
+  spotifyClientId: string;
   recommendationsEnabled: boolean;
   shortcutsOpenIn: "current" | "new";
   calendarEnabled: boolean;
@@ -79,6 +91,8 @@ export type LocalSettings = {
   googleTokenExpiry: number | null
   bgUnsplashMeta: BgImageMeta | null
   bgUploadMeta: BgImageMeta | null
+  /** Which widget the Dashboard's side carousel was left on. */
+  dashboardWidget: string | null
 }
 
 export const syncDefaults: SyncSettings = {
@@ -101,7 +115,9 @@ export const syncDefaults: SyncSettings = {
   todoShowBadges: true,
   weatherEnabled: true,
   weatherUnit: "f",
+  weatherMetric: "apparent",
   spotifyEnabled: true,
+  spotifyClientId: "",
   shortcutsOpenIn: "current",
   recommendationsEnabled: false,
   calendarEnabled: false,
@@ -129,4 +145,5 @@ export const localDefaults: LocalSettings = {
   googleTokenExpiry: null,
   bgUnsplashMeta: null,
   bgUploadMeta: null,
+  dashboardWidget: null,
 }

@@ -126,6 +126,10 @@
   display: none;
 }
 
+/* Firefox has no ::-webkit-scrollbar; `scrollbar-width`/`-color` are the only
+   knobs, and `thin` is the narrowest it offers — the px widths below are the
+   WebKit side only. Both are inherited, so one rule covers the subtree. */
+.dock-surface,
 .dock-scroll {
   scrollbar-width: none;
 }
@@ -204,6 +208,119 @@
 [data-mode="light"] .dock-suggestion {
   background: rgba(0, 0, 0, 0.03);
   border-color: rgba(0, 0, 0, 0.04);
+}
+
+/* The glyph is its own box so the Dashboard can promote it to a standing circle
+   with the name printed underneath, while every other layout keeps the compact
+   48px tile and its hover tooltip. */
+.dock-item-glyph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+.dock-item-name {
+  display: none;
+}
+
+/* Matches the specificity of the light-mode `.dock-surface` rule above, which
+   would otherwise put the pill back. */
+[data-theme="modern"][data-layout="dashboard"] .dock-surface {
+  background: none;
+  border: none;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  padding: 0;
+}
+
+[data-layout="dashboard"] #dock-items,
+[data-layout="dashboard"] #dock-suggestions {
+  gap: 1.125rem;
+  align-items: flex-start;
+}
+
+[data-layout="dashboard"] #dock-scroll {
+  align-items: flex-start;
+  padding: 2px 2px 4px;
+}
+
+[data-layout="dashboard"] #dock-divider {
+  margin: 6px 0.5rem 0;
+  height: 44px;
+  align-self: flex-start;
+}
+
+[data-layout="dashboard"] .dock-item,
+[data-layout="dashboard"] .dock-item:hover,
+[data-layout="dashboard"] .dock-suggestion {
+  width: auto;
+  height: auto;
+  padding: 0;
+  gap: 7px;
+  flex-direction: column;
+  background: none;
+  border: none;
+  transform: none;
+}
+
+[data-layout="dashboard"] .dock-item-glyph {
+  width: 54px;
+  height: 54px;
+  border-radius: 9999px;
+  corner-shape: round;
+  background: var(--page-overlay, rgba(0, 0, 0, 0.28));
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  -webkit-backdrop-filter: blur(18px) saturate(180%);
+  backdrop-filter: blur(18px) saturate(180%);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.16);
+  transition:
+    transform 160ms ease,
+    background 160ms ease;
+}
+
+[data-mode="light"][data-layout="dashboard"] .dock-item-glyph {
+  background: rgba(255, 255, 255, 0.55);
+  border-color: rgba(255, 255, 255, 0.45);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+}
+
+[data-layout="dashboard"] .dock-item:hover .dock-item-glyph {
+  transform: translateY(-3px);
+}
+
+[data-layout="dashboard"] .dock-item:active .dock-item-glyph {
+  transform: translateY(0) scale(0.94);
+}
+
+[data-layout="dashboard"] .dock-item-favicon,
+[data-layout="dashboard"] .dock-item-color {
+  width: 26px;
+  height: 26px;
+}
+
+[data-layout="dashboard"] .dock-item-name {
+  display: block;
+  max-width: 66px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--page-foreground);
+  opacity: 0.75;
+  /* `--page-foreground` is white in every mode, so these sit on whatever the
+     wallpaper happens to be. The shadow is what keeps them readable on a light
+     photo. */
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+}
+
+/* The name is already under the icon; the floating tooltip would only cover it. */
+[data-layout="dashboard"] .dock-item-label {
+  display: none;
 }
 
 .dock-tab-btn {
@@ -291,6 +408,24 @@
   }
 }
 
+/* Default-layout card region: every card is absolutely positioned by the packer
+   in card-grid.ts, so column heights stay independent. */
+.card-grid-item {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.card-grid-item-placed {
+  transition: transform 260ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card-grid-item-placed {
+    transition: none;
+  }
+}
+
 /* Cards are the popover surface in card form: the popover palette is dark in
    both modes, so widget bodies extracted from popovers render identically in a
    card without restyling. */
@@ -317,6 +452,242 @@
 [data-theme="modern"] .widget-card ::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.12);
   border-radius: 2px;
+}
+
+[data-theme="modern"] .widget-card * {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+}
+
+/* Dashboard tiles: the top row is a glance, not a panel. Fixed height so the
+   row reads as one band; width from content, so the row packs from the left and
+   grows as widgets are added rather than stretching two of them across it. */
+.widget-tile {
+  flex: 0 0 auto;
+  height: 118px;
+  min-width: 170px;
+  max-width: 420px;
+  padding: 12px 16px;
+}
+
+.widget-tile .widget-card-body {
+  flex: 1;
+  justify-content: center;
+}
+
+/* Dashboard side column: one widget at a time. */
+
+.card-carousel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.card-carousel-stage {
+  position: relative;
+}
+
+/* Height follows the active slide, so cycling animates between two intrinsic
+   heights instead of padding every widget out to the tallest one. */
+.card-carousel-viewport {
+  position: relative;
+  overflow: hidden;
+}
+
+.card-carousel-viewport.is-animated {
+  transition: height 300ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.card-carousel-slide {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 200ms ease,
+    transform 300ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.card-carousel-slide.is-active {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+
+.card-carousel-slide.is-exit-left {
+  transform: translateX(-20px);
+}
+
+.card-carousel-slide.is-exit-right {
+  transform: translateX(20px);
+}
+
+/* The incoming slide is parked off-centre with the transition suppressed, then
+   released in the same frame — otherwise it would slide from wherever it last
+   stopped. */
+.card-carousel-slide.is-enter {
+  transition: none;
+}
+
+.card-carousel-slide.is-enter-right {
+  transform: translateX(20px);
+}
+
+.card-carousel-slide.is-enter-left {
+  transform: translateX(-20px);
+}
+
+.card-carousel-nav {
+  position: absolute;
+  top: 50%;
+  z-index: 2;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  corner-shape: round;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--popover);
+  color: var(--popover-foreground);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  backdrop-filter: blur(16px) saturate(180%);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-50%);
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease;
+}
+
+.card-carousel-nav.is-prev {
+  left: -14px;
+}
+
+.card-carousel-nav.is-next {
+  right: -14px;
+}
+
+.card-carousel:hover .card-carousel-nav,
+.card-carousel-nav:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.card-carousel-nav:hover {
+  transform: translateY(-50%) scale(1.08);
+}
+
+.card-carousel-nav:active {
+  transform: translateY(-50%) scale(0.94);
+}
+
+.card-carousel-nav[hidden] {
+  display: none;
+}
+
+.card-carousel-dots {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 8px;
+}
+
+.card-carousel-dots[hidden] {
+  display: none;
+}
+
+.card-carousel-dot {
+  width: 6px;
+  height: 6px;
+  padding: 0;
+  border: none;
+  border-radius: 9999px;
+  corner-shape: round;
+  background: var(--page-foreground);
+  opacity: 0.25;
+  cursor: pointer;
+  transition:
+    opacity 160ms ease,
+    width 240ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.card-carousel-dot:hover {
+  opacity: 0.5;
+}
+
+.card-carousel-dot[aria-current="true"] {
+  opacity: 0.75;
+  width: 18px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card-carousel-viewport.is-animated,
+  .card-carousel-slide,
+  .card-carousel-dot {
+    transition: none;
+  }
+}
+
+/* Dashboard lower row. The side column collapses out of the grid entirely when
+   the carousel has nothing to show, rather than leaving a third of the page
+   empty. */
+.dash-lower {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2rem;
+  align-items: stretch;
+}
+
+@media (min-width: 1024px) {
+  .dash-lower {
+    grid-template-columns: minmax(0, 1.9fr) minmax(300px, 1fr);
+    /* A floor, not a stretch: the settings button hangs off the bottom of this
+       row. Pinning the row to the viewport instead would strand it half a
+       screen below the shortcuts on a tall display; leaving it at content
+       height would jam it right under them. Only applies once the two columns
+       are side by side — stacked, the carousel follows the settings button and
+       the gap would be dead space. */
+    min-height: 26rem;
+  }
+
+  .dash-lower:not(:has(> [data-region="side"]:not([hidden]))) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Settings button. A corner icon everywhere but the Dashboard, where it picks
+   up its label and sits at the foot of the main column. */
+
+.settings-button {
+  cursor: pointer;
+}
+
+.settings-button-label {
+  display: none;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+[data-layout="dashboard"] .settings-button {
+  height: 38px;
+  padding: 0 14px 0 11px;
+}
+
+[data-layout="dashboard"] .settings-button-label {
+  display: inline;
+}
+
+[data-layout="dashboard"] .settings-button svg {
+  width: 18px;
+  height: 18px;
 }
 
 /* Layout picker previews (settings > appearance) */
@@ -391,6 +762,11 @@
 [data-theme="modern"] .glass-surface ::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.12);
   border-radius: 2px;
+}
+
+[data-theme="modern"] .glass-surface {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
 }
 
 [data-theme="modern"] {
@@ -697,6 +1073,11 @@
 [data-theme="modern"] #settings-panels::-webkit-scrollbar-thumb {
   background: var(--input-border);
   border-radius: 3px;
+}
+
+[data-theme="modern"] #settings-panels {
+  scrollbar-width: thin;
+  scrollbar-color: var(--input-border) transparent;
 }
 
 :root {

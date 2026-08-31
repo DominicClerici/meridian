@@ -12,7 +12,7 @@ PKCE (Proof Key for Code Exchange) is what makes a public client safe without a 
 
 1. Generate a 96-byte random `code_verifier`, base64url-encoded.
 2. `code_challenge = base64url(SHA-256(verifier))`, via `crypto.subtle`.
-3. Open `accounts.spotify.com/authorize` through `browser.identity.launchWebAuthFlow` with `response_type=code`, `code_challenge_method=S256`, and the extension's own redirect URL from `identity.getRedirectURL()`.
+3. Open `accounts.spotify.com/authorize` through `browser.identity.launchWebAuthFlow` with `response_type=code`, `code_challenge_method=S256`, the resolved client ID (below), and the extension's own redirect URL from `identity.getRedirectURL()`.
 4. Pull `code` out of the returned URL.
 5. `POST /api/token` with the code and the original verifier — Spotify hashes the verifier and checks it against the challenge it stored.
 6. Store `access_token`, `refresh_token`, and `Date.now() + expires_in * 1000` in `store.local`.
@@ -21,7 +21,22 @@ Every failure path returns `{ ok: false, error }` with a message naming what act
 
 The token exchange depends on `host_permissions` covering `accounts.spotify.com`; without it the `POST /api/token` is an ordinary CORS request from a `chrome-extension://` origin and can be refused outright. See [architecture.md](architecture.md#manifest).
 
-`CLIENT_ID` is hard-coded at `spotify.ts:4` — public by design in PKCE. Scopes: `user-read-playback-state`, `user-modify-playback-state`, `user-read-currently-playing`, `user-read-private`.
+Scopes: `user-read-playback-state`, `user-modify-playback-state`, `user-read-currently-playing`, `user-read-private`.
+
+### Which client ID
+
+Two, resolved by `getClientId()` on every auth and refresh:
+
+1. **`spotifyClientId`** from `store.sync`, if the user has set one.
+2. **`BUNDLED_CLIENT_ID`** — the extension's own app, public by design in PKCE — but only where `bundledClientUsable()` says the browser's redirect URI could be on its allowlist.
+
+That last test is the whole point. A Spotify app's redirect URIs are fixed at registration and accept no wildcards, and `identity.getRedirectURL()` differs per browser: Chromium hands out `https://<extension-id>.chromiumapp.org/`, which is stable and registered; Firefox hands out `https://<uuid>.extensions.allizom.org/`, where the UUID is regenerated per *installation* and so can never be registered ahead of time. `bundledClientUsable()` checks the redirect URI's host rather than sniffing the browser — that URI is the thing that has to match the registration, so it is the real test.
+
+With neither available, `authenticate()` returns `{ ok: false, needsClientId: true }` and a message pointing at Settings → Advanced, where **Spotify sign-in** offers the client-ID field, the redirect URI with a copy button, and the dashboard link. `summarizeSpotify()` in `capabilities.ts` reports it as *Needs setup* before the user ever presses connect.
+
+Changing `spotifyClientId` calls `clearTokens()` (subscribed in `initSpotify()`). A refresh token belongs to the app that issued it, so pointing at a different client would otherwise fail its next refresh with an opaque 400.
+
+Worth noting this isn't only a Firefox concern: a Spotify app in development mode is capped at 25 manually-listed users, so a shared bundled client ID doesn't scale past a handful of installs regardless of browser.
 
 **Token lifecycle.** `ensureValidToken()` refreshes when the token is within 60s of expiry, or when there's no access token but a refresh token exists. `refreshAccessToken()` also handles rotation (Spotify may return a new refresh token) and calls `clearTokens()` on a 400 or 401, which is what forces a re-login when a refresh token is revoked.
 
@@ -41,7 +56,7 @@ The token exchange depends on `host_permissions` covering `accounts.spotify.com`
 
 ## The card
 
-`buildSpotifyBody()` renders the row itself: 80px album art, track name, artists, and — for premium — previous / play-pause / next.
+`buildSpotifyBody()` renders the row itself: 80px album art, track name, artists, and — for premium — previous / play-pause / next. `buildSpotifyTile()` is the same row at tile scale for the Dashboard's top row — 56px art, tighter type, a capped text column so a long track name widens the tile only so far before it truncates ([layouts.md](layouts.md#the-tile-row)).
 
 Where that row goes depends on the [layout](layouts.md). In **Immersive** it goes in the floating card `renderCard()` creates lazily on the first render with content and removes when there's nothing playing or the widget is disabled — fixed bottom-right, 320px, `bg-page-overlay/70` with a backdrop blur. In the other layouts there is no floating card; the same body is mounted as a registered card, gated on `currentPlayerState !== null`. `renderCard()` branches on `getLayout()` and `initSpotify()` subscribes to `layout`, so a switch moves the player without a reload.
 

@@ -2,6 +2,14 @@ import { icon, getIconSvg } from "./icons/registry"
 
 type ButtonVariant = "primary" | "outline" | "ghost" | "destructive" | "destructive-outline" | "override"
 
+/**
+ * Which surface a control is sitting on. `popover` covers the popover and the
+ * widget card, which share the `--popover` palette (see styles.css) — that
+ * palette is dark in both light and dark mode, so the page-level `--input` /
+ * `--foreground` tokens would render a white box with near-black text on it.
+ */
+export type Tone = "default" | "popover"
+
 const BUTTON_CLASSES: Record<ButtonVariant, string> = {
   primary: "bg-accent text-accent-foreground hover:bg-accent-hover",
   outline: "border border-accent text-accent bg-transparent hover:bg-accent/10",
@@ -11,13 +19,23 @@ const BUTTON_CLASSES: Record<ButtonVariant, string> = {
   override: "",
 }
 
+const POPOVER_BUTTON_CLASSES: Record<ButtonVariant, string> = {
+  primary: "bg-accent text-accent-foreground hover:bg-accent-hover",
+  outline: "border border-popover-foreground/20 text-popover-foreground bg-transparent hover:bg-popover-foreground/[0.08]",
+  ghost: "text-popover-foreground/60 bg-transparent hover:text-popover-foreground hover:bg-popover-foreground/[0.08]",
+  destructive: "bg-danger text-danger-foreground hover:bg-danger-hover",
+  "destructive-outline": "border border-danger/50 text-danger bg-transparent hover:bg-danger/10",
+  override: "",
+}
+
 export function createButton(
   label: string,
   variant: ButtonVariant,
-  opts?: { icon?: string | HTMLElement; onClick?: () => void; className?: string }
+  opts?: { icon?: string | HTMLElement; onClick?: () => void; className?: string; tone?: Tone }
 ): HTMLButtonElement {
+  const palette = opts?.tone === "popover" ? POPOVER_BUTTON_CLASSES : BUTTON_CLASSES
   const btn = document.createElement("button")
-  btn.className = `inline-flex items-center gap-1.5 px-3 py-1.5 rounded-theme text-sm font-medium transition-colors ${BUTTON_CLASSES[variant]} ${opts?.className ?? ""}`.trim()
+  btn.className = `inline-flex items-center gap-1.5 px-3 py-1.5 rounded-theme text-sm font-medium transition-colors ${palette[variant]} ${opts?.className ?? ""}`.trim()
 
   if (opts?.icon) {
     if (opts.icon instanceof HTMLElement) {
@@ -51,12 +69,18 @@ export function createInput(opts: {
   name?: string
   multiline?: boolean
   rows?: number
+  tone?: Tone
+  className?: string
 }): HTMLInputElement | HTMLTextAreaElement {
-  const classes = "w-full text-sm rounded-theme px-2 py-1.5 border border-input-border bg-input text-foreground placeholder:text-muted outline-none focus:border-accent transition-colors"
+  const popover = opts.tone === "popover"
+  const classes = popover
+    ? "w-full text-sm rounded-theme px-2.5 py-2 border border-popover-foreground/[0.08] bg-popover-foreground/[0.06] text-popover-foreground placeholder:text-popover-foreground/30 outline-none focus:border-accent/60 transition-colors"
+    : "w-full text-sm rounded-theme px-2 py-1.5 border border-input-border bg-input text-foreground placeholder:text-muted outline-none focus:border-accent transition-colors"
+  const extra = opts.className ? ` ${opts.className}` : ""
 
   if (opts.multiline) {
     const el = document.createElement("textarea")
-    el.className = `${classes} resize-y`
+    el.className = `${classes} resize-y${extra}`
     el.rows = opts.rows ?? 3
     if (opts.placeholder) el.placeholder = opts.placeholder
     if (opts.value) el.value = opts.value
@@ -66,10 +90,13 @@ export function createInput(opts: {
 
   const el = document.createElement("input")
   el.type = opts.type ?? "text"
-  el.className = classes
+  el.className = classes + extra
   if (opts.placeholder) el.placeholder = opts.placeholder
   if (opts.value) el.value = opts.value
   if (opts.name) el.name = opts.name
+  // Native date/time pickers paint their own chrome from the color scheme, not
+  // from our classes, so a dark popover needs to be declared as such.
+  if (popover) el.style.colorScheme = "dark"
   return el
 }
 
@@ -81,6 +108,8 @@ export function createSelect(opts: {
   value?: string
   name?: string
   width?: string
+  variant?: "input" | "ghost"
+  tone?: Tone
   onChange?: (value: string) => void
 }): SelectElement {
   let currentValue = opts.value ?? opts.options[0]?.value ?? ""
@@ -96,24 +125,33 @@ export function createSelect(opts: {
   container.dataset.value = currentValue
   if (opts.name) container.dataset.name = opts.name
 
+  const ghost = opts.variant === "ghost"
+  const popoverTone = opts.tone === "popover"
+
   const trigger = document.createElement("button")
   trigger.type = "button"
-  trigger.className = "select__trigger flex items-center justify-between gap-2 w-full text-sm rounded-theme px-3 py-1.5 border border-input-border bg-input text-foreground outline-none transition-colors hover:border-accent focus-visible:border-accent cursor-pointer"
+  trigger.className = ghost
+    ? "select__trigger flex items-center justify-start gap-1 min-w-0 text-sm rounded-theme px-1.5 py-0.5 border border-transparent bg-transparent text-current opacity-60 outline-none transition-opacity hover:opacity-100 focus-visible:opacity-100 cursor-pointer"
+    : popoverTone
+      ? "select__trigger flex items-center justify-between gap-2 w-full text-sm rounded-theme px-2.5 py-2 border border-popover-foreground/[0.08] bg-popover-foreground/[0.06] text-popover-foreground outline-none transition-colors hover:border-accent/60 focus-visible:border-accent/60 cursor-pointer"
+      : "select__trigger flex items-center justify-between gap-2 w-full text-sm rounded-theme px-3 py-1.5 border border-input-border bg-input text-foreground outline-none transition-colors hover:border-accent focus-visible:border-accent cursor-pointer"
 
   const valueSpan = document.createElement("span")
   valueSpan.className = "select__value truncate"
 
   const arrow = document.createElement("span")
-  arrow.className = "select__arrow shrink-0 text-muted"
+  arrow.className = `select__arrow shrink-0${ghost ? "" : " text-muted"}`
   arrow.appendChild(icon("chevronDown"))
 
   trigger.appendChild(valueSpan)
   trigger.appendChild(arrow)
 
+  const highlightClass = popoverTone ? "bg-popover-foreground/[0.1]" : "bg-surface"
+
   const list = document.createElement("ul")
   list.setAttribute("role", "listbox")
   list.tabIndex = -1
-  list.className = "select__list absolute left-0 right-0 top-full z-50 border border-input-border border-t-0 bg-popover text-popover-foreground overflow-auto"
+  list.className = `select__list absolute left-0 right-0 top-full z-50 border ${popoverTone ? "border-popover-foreground/[0.08]" : "border-input-border"} bg-popover text-popover-foreground overflow-auto${ghost ? " rounded-theme mt-1" : " border-t-0"}`
   list.style.maxHeight = "192px"
   list.style.display = "none"
   list.style.boxShadow = "0 8px 24px rgba(0,0,0,0.15), 0 2px 8px rgba(0,0,0,0.08)"
@@ -192,11 +230,11 @@ export function createSelect(opts: {
 
   function setHighlight(index: number): void {
     if (highlightIndex >= 0 && highlightIndex < items.length) {
-      items[highlightIndex].classList.remove("bg-surface")
+      items[highlightIndex].classList.remove(highlightClass)
     }
     highlightIndex = index
     if (index >= 0 && index < items.length) {
-      items[index].classList.add("bg-surface")
+      items[index].classList.add(highlightClass)
       items[index].scrollIntoView({ block: "nearest" })
     }
   }
@@ -227,9 +265,11 @@ export function createSelect(opts: {
     expanded = true
     container.setAttribute("aria-expanded", "true")
 
-    trigger.classList.remove("rounded-theme")
-    trigger.classList.add("rounded-t-theme")
-    list.classList.add("rounded-b-theme")
+    if (!ghost) {
+      trigger.classList.remove("rounded-theme")
+      trigger.classList.add("rounded-t-theme")
+      list.classList.add("rounded-b-theme")
+    }
 
     list.style.display = ""
     arrow.style.transform = "rotate(180deg)"
@@ -249,9 +289,11 @@ export function createSelect(opts: {
     arrow.style.transform = ""
     list.style.display = "none"
 
-    trigger.classList.remove("rounded-t-theme")
-    trigger.classList.add("rounded-theme")
-    list.classList.remove("rounded-b-theme")
+    if (!ghost) {
+      trigger.classList.remove("rounded-t-theme")
+      trigger.classList.add("rounded-theme")
+      list.classList.remove("rounded-b-theme")
+    }
 
     setHighlight(-1)
 
@@ -368,31 +410,43 @@ export function createSelect(opts: {
 export function createCheckbox(
   label: string,
   checked: boolean,
-  onChange: (checked: boolean) => void
+  onChange: (checked: boolean) => void,
+  opts?: { tone?: Tone; className?: string; size?: number }
 ): HTMLLabelElement {
+  // Appended, never assigned: the box is a `<span>` sized by width/height, so
+  // dropping the wrapper's `inline-flex` collapses it to a 0px-wide line.
   const wrapper = document.createElement("label")
-  wrapper.className = "inline-flex items-center gap-2 cursor-pointer group"
+  wrapper.className = `inline-flex items-center gap-2 cursor-pointer group${opts?.className ? ` ${opts.className}` : ""}`
 
   const input = document.createElement("input")
   input.type = "checkbox"
   input.checked = checked
   input.className = "sr-only peer"
 
+  const size = opts?.size ?? 18
+  const uncheckedClasses = opts?.tone === "popover"
+    ? ["bg-popover-foreground/[0.06]", "border-popover-foreground/30", "group-hover:border-accent/60"]
+    : ["bg-input", "border-input-border", "group-hover:border-accent/50"]
+
   const box = document.createElement("span")
-  box.className = "relative shrink-0 w-[18px] h-[18px] rounded-[4px] border transition-all duration-150 " +
+  box.className = "relative shrink-0 rounded-[4px] border transition-all duration-150 " +
     "peer-focus-visible:ring-2 peer-focus-visible:ring-accent/50 peer-focus-visible:ring-offset-1 " +
     "peer-disabled:opacity-50 peer-disabled:cursor-not-allowed"
+  box.style.width = `${size}px`
+  box.style.height = `${size}px`
 
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg")
-  svg.setAttribute("width", "12")
-  svg.setAttribute("height", "12")
+  svg.setAttribute("width", String(size - 6))
+  svg.setAttribute("height", String(size - 6))
   svg.setAttribute("viewBox", "0 0 24 24")
   svg.setAttribute("fill", "none")
   svg.setAttribute("stroke", "currentColor")
   svg.setAttribute("stroke-width", "3")
   svg.setAttribute("stroke-linecap", "round")
   svg.setAttribute("stroke-linejoin", "round")
-  svg.classList.add("absolute", "top-[3px]", "left-[3px]", "transition-all", "duration-150")
+  svg.classList.add("absolute", "transition-all", "duration-150")
+  svg.style.top = "3px"
+  svg.style.left = "3px"
 
   const path = document.createElementNS("http://www.w3.org/2000/svg", "path")
   path.setAttribute("d", "M20 6 9 17l-5-5")
@@ -401,13 +455,13 @@ export function createCheckbox(
 
   function applyState(isChecked: boolean) {
     if (isChecked) {
-      box.classList.remove("bg-input", "border-input-border", "group-hover:border-accent/50")
+      box.classList.remove(...uncheckedClasses)
       box.classList.add("bg-accent", "border-accent", "text-accent-foreground")
       svg.style.opacity = "1"
       svg.style.transform = "scale(1)"
     } else {
       box.classList.remove("bg-accent", "border-accent", "text-accent-foreground")
-      box.classList.add("bg-input", "border-input-border", "group-hover:border-accent/50")
+      box.classList.add(...uncheckedClasses)
       svg.style.opacity = "0"
       svg.style.transform = "scale(0.8)"
     }
@@ -559,7 +613,7 @@ export function createCard(opts: {
   }
 
   const title = document.createElement("h2")
-  title.className = "text-xs font-semibold uppercase tracking-wider opacity-60 flex-1 min-w-0 truncate"
+  title.className = "widget-card-title text-xs font-semibold uppercase tracking-wider opacity-60 flex-1 min-w-0 truncate"
   title.textContent = opts.title
   header.appendChild(title)
 
@@ -719,10 +773,16 @@ export function closeAllPopovers(): void {
 export function createPopover(
   anchor: HTMLElement,
   content: HTMLElement,
-  opts?: { onClose?: () => void; modal?: boolean; position?: "below-right" | "above-center" }
+  opts?: {
+    onClose?: () => void
+    modal?: boolean
+    position?: "below-right" | "above-center"
+    padding?: "default" | "none"
+  }
 ): { el: HTMLDivElement; close: () => void } {
   const popover = document.createElement("div")
-  popover.className = "fixed bg-popover text-popover-foreground rounded-theme p-3 flex flex-col gap-2 border border-white/[0.08] glass-surface popover-enter"
+  const pad = opts?.padding === "none" ? "p-1 gap-0" : "p-3 gap-2"
+  popover.className = `fixed bg-popover text-popover-foreground rounded-theme ${pad} flex flex-col border border-popover-foreground/[0.08] glass-surface popover-enter`
   popover.style.zIndex = String(popoverZIndex++)
   popover.appendChild(content)
 
@@ -787,6 +847,83 @@ export function createPopover(
   installFocusTrap()
 
   return { el: popover, close }
+}
+
+export type MenuItem =
+  | "separator"
+  | {
+      label: string
+      icon?: HTMLElement
+      onClick: () => void
+      danger?: boolean
+      disabled?: boolean
+      /** Shown as a `title` when the item is disabled, to explain why. */
+      hint?: string
+    }
+
+/**
+ * A dropdown of actions anchored to a button. Built on `createPopover`, so it
+ * inherits the stack, the focus trap and the click-outside dismissal; picking
+ * an item closes it.
+ */
+export function createMenu(
+  anchor: HTMLElement,
+  items: MenuItem[],
+  opts?: { onClose?: () => void }
+): { close: () => void } {
+  const list = document.createElement("div")
+  list.className = "flex flex-col min-w-[168px]"
+  list.setAttribute("role", "menu")
+
+  // The popover measures itself when it mounts, so it is created last — with
+  // the items already in place — or it would be positioned as an empty box.
+  let closeRef: (() => void) | null = null
+  const close = (): void => closeRef?.()
+
+  for (const item of items) {
+    if (item === "separator") {
+      const sep = document.createElement("div")
+      sep.className = "h-px my-1 bg-popover-foreground/10"
+      list.appendChild(sep)
+      continue
+    }
+
+    const btn = document.createElement("button")
+    btn.type = "button"
+    btn.setAttribute("role", "menuitem")
+    btn.disabled = !!item.disabled
+    btn.className = [
+      "flex items-center gap-2.5 w-full text-left px-2.5 py-1.5 rounded-theme-xs text-[13px] transition-colors",
+      item.disabled
+        ? "opacity-35 cursor-not-allowed"
+        : item.danger
+          ? "text-danger hover:bg-danger/15"
+          : "text-popover-foreground/85 hover:bg-popover-foreground/[0.09] hover:text-popover-foreground",
+    ].join(" ")
+    if (item.disabled && item.hint) btn.title = item.hint
+
+    if (item.icon) {
+      item.icon.classList.add("shrink-0", "opacity-70")
+      btn.appendChild(item.icon)
+    }
+    const label = document.createElement("span")
+    label.className = "truncate"
+    label.textContent = item.label
+    btn.appendChild(label)
+
+    if (!item.disabled) {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation()
+        close()
+        item.onClick()
+      })
+    }
+    list.appendChild(btn)
+  }
+
+  closeRef = createPopover(anchor, list, { padding: "none", onClose: opts?.onClose }).close
+
+  return { close }
 }
 
 export function createTooltip(

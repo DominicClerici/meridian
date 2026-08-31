@@ -75,6 +75,23 @@ function selectTab(tabId: string): void {
   selectTabFn?.(tabId)
 }
 
+let openDialogFn: (() => void) | null = null
+
+/** Accordions that something outside settings can deep-link to, by id. */
+const sectionHooks: Record<string, () => void> = {}
+
+/**
+ * Open the dialog, optionally on a given tab and scrolled to a given section.
+ * Widgets use this to point at their own settings from an inline link.
+ */
+export function openSettings(tabId?: string, sectionId?: string): void {
+  openDialogFn?.()
+  if (tabId) selectTab(tabId)
+  if (sectionId) {
+    requestAnimationFrame(() => sectionHooks[sectionId]?.())
+  }
+}
+
 /** Buttons from `createButton` put the label in the last span; icons come first. */
 function setButtonLabel(btn: HTMLButtonElement, text: string): void {
   const spans = btn.querySelectorAll("span")
@@ -1118,7 +1135,7 @@ function buildWidgetsTab(): void {
   const todoBadges = createCheckbox("", store.sync.get("todoShowBadges"), (v) =>
     store.sync.set("todoShowBadges", v)
   )
-  todoAcc.content.appendChild(settingsRow("Show badges", todoBadges))
+  todoAcc.content.appendChild(settingsRow("Show badges and progress ring", todoBadges))
   store.sync.subscribe("todoShowBadges", (v) => {
     ;(todoBadges as any).setChecked(v)
   })
@@ -1127,7 +1144,7 @@ function buildWidgetsTab(): void {
   clearRow.className = "flex justify-end"
   const clearBtn = createButton("Clear all todos", "destructive", {
     onClick: () => {
-      if (confirm("Are you sure you want to clear all todos?"))
+      if (confirm("Delete every todo, including the archive? This can't be undone."))
         store.local.set("todos", [])
     },
   })
@@ -1166,8 +1183,32 @@ function buildWidgetsTab(): void {
     weatherUnit.value = v
   })
 
+  const weatherMetric = createSelect({
+    options: [
+      { value: "temperature", label: "Real Temperature" },
+      { value: "apparent", label: "Feels Like" },
+      { value: "humidity", label: "Humidity" },
+      { value: "wind", label: "Wind Speed + Gusts" },
+      { value: "uv", label: "UV Index" },
+      { value: "precipitation", label: "Precipitation" },
+      { value: "aqi", label: "Air Quality" },
+    ],
+    value: store.sync.get("weatherMetric"),
+    onChange: (v) =>
+      store.sync.set("weatherMetric", v as SyncSettings["weatherMetric"]),
+  })
+  weatherAcc.content.appendChild(settingsRow("Metric", weatherMetric))
+  store.sync.subscribe("weatherMetric", (v) => {
+    weatherMetric.value = v
+  })
+
   weatherAcc.content.appendChild(buildLocationControls())
   panel.appendChild(weatherAcc.container)
+
+  sectionHooks["weather"] = () => {
+    if (weatherAcc.content.hidden) weatherAcc.toggle()
+    weatherAcc.container.scrollIntoView({ block: "start", behavior: "smooth" })
+  }
 
   // --- Spotify ---
   const spotifyAcc = createAccordion("Spotify", {
@@ -1573,6 +1614,7 @@ function buildAdvancedPanel(): HTMLDivElement {
   wrapper.appendChild(helpText)
 
   wrapper.appendChild(buildGoogleAuthSection())
+  wrapper.appendChild(buildSpotifyAuthSection())
   wrapper.appendChild(buildCapabilityPanel())
 
   panel.appendChild(wrapper)
@@ -1588,23 +1630,29 @@ function sectionHeading(text: string): HTMLElement {
 }
 
 /**
- * Only needed where `identity.getAuthToken` doesn't work — de-Googled Chromium
- * builds, and any non-Chrome browser. Always shown so the setup path is
- * discoverable before sign-in fails rather than only after.
+ * A client-ID field, the extension's redirect URI to register against it, and
+ * the instructions. Both services need exactly this and for the same reason:
+ * the built-in credentials only work on browsers whose redirect URI can be on
+ * their allowlist, so everywhere else the user brings their own app. Always
+ * shown, so the setup path is discoverable before sign-in fails rather than
+ * only after. See `docs/browser-compat.md`.
  */
-function buildGoogleAuthSection(): HTMLElement {
+function buildOAuthSection(opts: {
+  heading: string
+  clientIdKey: "googleClientId" | "spotifyClientId"
+  placeholder: string
+  help: string
+}): HTMLElement {
   const section = document.createElement("div")
-  section.appendChild(sectionHeading("Google Calendar sign-in"))
+  section.appendChild(sectionHeading(opts.heading))
 
-  const clientInput = createInput({
-    placeholder: "…apps.googleusercontent.com",
-  }) as HTMLInputElement
-  clientInput.value = store.sync.get("googleClientId")
+  const clientInput = createInput({ placeholder: opts.placeholder }) as HTMLInputElement
+  clientInput.value = store.sync.get(opts.clientIdKey)
   clientInput.style.width = "220px"
   clientInput.addEventListener("change", () => {
-    store.sync.set("googleClientId", clientInput.value.trim())
+    store.sync.set(opts.clientIdKey, clientInput.value.trim())
   })
-  store.sync.subscribe("googleClientId", (v) => {
+  store.sync.subscribe(opts.clientIdKey, (v) => {
     clientInput.value = v
   })
 
@@ -1618,6 +1666,7 @@ function buildGoogleAuthSection(): HTMLElement {
   clientRow.appendChild(clientInput)
   section.appendChild(clientRow)
 
+  // One URI per browser, not per service — every flow redirects to the same place.
   const redirect = getRedirectUri()
   if (redirect) {
     const redirectRow = document.createElement("div")
@@ -1657,13 +1706,34 @@ function buildGoogleAuthSection(): HTMLElement {
 
   const help = document.createElement("p")
   help.className = "text-xs text-muted mt-2 leading-relaxed"
-  help.innerHTML =
-    `Leave this blank if "Sign in with Google" already works — it's only needed when your browser has no Google account service. ` +
-    `In <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener" class="underline text-accent">Google Cloud Console</a>, ` +
-    `enable the Calendar API, create an OAuth client of type <strong>Web application</strong>, add the redirect URI above, and paste the client ID here.`
+  help.innerHTML = opts.help
   section.appendChild(help)
 
   return section
+}
+
+function buildGoogleAuthSection(): HTMLElement {
+  return buildOAuthSection({
+    heading: "Google Calendar sign-in",
+    clientIdKey: "googleClientId",
+    placeholder: "…apps.googleusercontent.com",
+    help:
+      `Leave this blank if "Sign in with Google" already works — it's only needed when your browser has no Google account service. ` +
+      `In <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener" class="underline text-accent">Google Cloud Console</a>, ` +
+      `enable the Calendar API, create an OAuth client of type <strong>Web application</strong>, add the redirect URI above, and paste the client ID here.`,
+  })
+}
+
+function buildSpotifyAuthSection(): HTMLElement {
+  return buildOAuthSection({
+    heading: "Spotify sign-in",
+    clientIdKey: "spotifyClientId",
+    placeholder: "32-character client ID",
+    help:
+      `Leave this blank if "Connect Spotify" already works — it's only needed on browsers whose redirect URI can't be registered on the built-in app, such as Firefox. ` +
+      `In the <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener" class="underline text-accent">Spotify Developer Dashboard</a>, ` +
+      `create an app, tick <strong>Web API</strong>, add the redirect URI above, and paste the client ID here. Changing this disconnects the current session.`,
+  })
 }
 
 const CAPABILITY_STYLE: Record<Capability["state"], { label: string; className: string }> = {
@@ -1809,11 +1879,13 @@ export function initSettings(): void {
 
   const navResult = buildNav()
 
-  const openBtn = document.getElementById("settings-open") as HTMLButtonElement
-  openBtn.addEventListener("click", () => {
-    open()
+  openDialogFn = () => {
+    if (!dialog.open) open()
     requestAnimationFrame(() => navResult.refreshIndicator())
-  })
+  }
+
+  const openBtn = document.getElementById("settings-open") as HTMLButtonElement
+  openBtn.addEventListener("click", () => openDialogFn!())
 
   buildGeneralTab()
   buildAppearanceTab()

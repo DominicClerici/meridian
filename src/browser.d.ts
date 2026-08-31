@@ -51,15 +51,19 @@ declare global {
     transition: string;
   }
 
+  /**
+   * Both shapes: Chrome passes results to the callback and returns nothing,
+   * Firefox ignores the callback and returns a promise. See `history-api.ts`.
+   */
   interface BrowserHistory {
     search(
       query: { text: string; startTime?: number; endTime?: number; maxResults?: number },
-      callback: (results: HistoryItem[]) => void
-    ): void;
+      callback?: (results: HistoryItem[]) => void
+    ): Promise<HistoryItem[]> | void;
     getVisits(
       details: { url: string },
-      callback: (results: VisitItem[]) => void
-    ): void;
+      callback?: (results: VisitItem[]) => void
+    ): Promise<VisitItem[]> | void;
   }
 
   interface BrowserAPI {

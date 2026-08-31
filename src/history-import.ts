@@ -1,4 +1,5 @@
 import { store } from "./store"
+import { historyGetVisits, historySearch } from "./history-api"
 import { MAX_ITEMS_PER_TAB } from "./shortcuts"
 import type { Tab, Shortcut } from "./shortcuts"
 
@@ -9,36 +10,7 @@ const MAX_RESULTS = 50
 const THREE_MONTHS_MS = 90 * 24 * 60 * 60 * 1000
 const MAX_HOSTNAME_LENGTH = 64
 
-const api = globalThis.browser ?? globalThis.chrome
-
 type HistoryEntry = { url: string; visitCount: number }
-
-function historySearch(query: {
-  text: string
-  startTime?: number
-  endTime?: number
-  maxResults?: number
-}): Promise<HistoryItem[]> {
-  return new Promise((resolve, reject) => {
-    if (!api) return reject(new Error("Browser API unavailable"))
-    api.history.search(query, (results) => {
-      const err = (chrome as any)?.runtime?.lastError
-      if (err) reject(new Error(err.message))
-      else resolve(results)
-    })
-  })
-}
-
-function historyGetVisits(details: { url: string }): Promise<VisitItem[]> {
-  return new Promise((resolve, reject) => {
-    if (!api) return reject(new Error("Browser API unavailable"))
-    api.history.getVisits(details, (results) => {
-      const err = (chrome as any)?.runtime?.lastError
-      if (err) reject(new Error(err.message))
-      else resolve(results)
-    })
-  })
-}
 
 async function fetchHistory(): Promise<HistoryEntry[]> {
   const now = Date.now()

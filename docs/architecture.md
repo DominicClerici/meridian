@@ -13,11 +13,11 @@ Everything happens in `src/index.ts:1`. `dist/index.js` is loaded by a `<script>
 3. `subscribeTheme()` — re-applies those attributes when the settings change.
 4. `applyBackground()` — applies the background image (Unsplash or upload) from IndexedDB, or starts the animated mesh gradient for the `color` source. See [backgrounds.md](backgrounds.md).
 5. `subscribeBackground()`.
-6. `applyLayout()` — reads `layout` from the store, stamps `data-layout` onto `<html>`, builds that mode's frame into `#layout-stage`, moves the shared singletons (search, clock, dock, widget triggers) into their slots, and mounts the widget cards. Runs here, before first paint, so the layout doesn't flash. See [layouts.md](layouts.md).
+6. `applyLayout()` — reads `layout` from the store, stamps `data-layout` onto `<html>`, builds that mode's frame into `#layout-stage`, moves the shared singletons (search, clock, dock, settings button, widget triggers) into their slots, and mounts the widget cards. Runs here, before first paint, so the layout doesn't flash. See [layouts.md](layouts.md).
 7. `subscribeLayout()` — runs the fade-out / pause / fade-in switch when `layout` changes.
 8. Two icons are prepended into the static shell: `#settings-open` gets `settings`, `#todo-trigger` gets `todoList`.
 
-Card registration happens even earlier: `registerCard()` runs in the module bodies of `clock.ts`, `weather.ts`, `todo.ts`, `spotify.ts`, and `calendar.ts`, which ES module evaluation runs before `index.ts`'s own body — so the registry is complete by the time `applyLayout()` builds the first frame.
+Card registration happens even earlier: `registerCard()` runs in the module bodies of `weather.ts`, `todo.ts`, `spotify.ts`, and `calendar.ts`, which ES module evaluation runs before `index.ts`'s own body — so the registry is complete by the time `applyLayout()` builds the first frame.
 
 **Phase 2 — `DOMContentLoaded`, async**
 
@@ -80,6 +80,8 @@ There is no teardown path and no re-init. Modules keep their state in module-lev
 
 Feature modules and what they pull in beyond `store`:
 
+`settings.ts` and `weather.ts` import each other — settings calls `refreshWeather()`, weather calls `openSettings()` to deep-link at its own section. Both are hoisted function declarations called only after boot, so the cycle resolves; nothing either module runs at evaluation time touches the other.
+
 | Module | Depends on |
 |---|---|
 | `settings.ts` | `components`, `icons/registry`, `spotify`, `calendar`, `weather`, `location`, `capabilities`, `google-auth`, `unsplash`, `background`, `idb`, `defaults` |
@@ -87,14 +89,15 @@ Feature modules and what they pull in beyond `store`:
 | `shortcut-settings.ts` | `components`, `icons/registry`, `shortcuts`, `shortcut-drag`, `url`, `defaults` |
 | `shortcut-drag.ts` | `shortcuts` only — no store, no DOM lookups of its own |
 | `search.ts` | its two providers (imported for their registration side effect) |
-| `todo.ts` | `components`, `icons/registry`, `todos` |
-| `weather.ts` | `components`, `icons/registry`, `location` |
+| `todo.ts` | `components`, `icons/registry`, `todos`, `layout`, `store` |
+| `weather.ts` | `components`, `icons/registry`, `layout`, `location`, `settings` |
 | `calendar.ts` | `components`, `icons/registry`, `google-auth` |
 | `spotify.ts` | `icons/registry` |
 | `location.ts` | `timezone-coords` only — plus the store |
 | `google-auth.ts` | the store only; wraps every `identity` call |
 | `capabilities.ts` | `location`, `google-auth` — probes, renders nothing |
-| `history-import.ts` | `shortcuts` |
+| `history-import.ts` | `shortcuts`, `history-api` |
+| `history-api.ts` | nothing — wraps every `history` call for both browsers |
 | `layout.ts` | `components` only — it knows nothing about any widget; widgets register themselves |
 | `background.ts` | `unsplash`, `idb`, `mesh-bg`, `defaults` |
 | `mesh-bg.ts` | `color` only — no store; it reads the resolved `--page-bg` off `<html>` |
@@ -116,13 +119,13 @@ The shell holds **no positioning**. Every element that a layout places lives ins
 | Element | Created in | Owned by |
 |---|---|---|
 | `#layout-stage`, `#layout-parking` | `index.html` | `layout.ts` |
-| `#settings-open` | `index.html` | icon by `index.ts`, click handler by `settings.ts` — fixed chrome, outside the stage so it never fades |
+| `#settings-open` | `index.html` | icon by `index.ts`, click handler by `settings.ts`; positioned by `layout.ts` — a corner icon in Default and Immersive, an icon-plus-label at the foot of the main column in Dashboard |
 | `#widgets` | `index.html` | container only; children owned individually |
 | `#calendar-trigger` | `index.html` | `calendar.ts` |
 | `#weather-trigger` | `index.html` | `weather.ts` |
 | `#todo-trigger`, `#todo-badge-count`, `#todo-badge-overdue` | `index.html` | icon by `index.ts`, rest by `todo.ts` |
 | `#search-wrapper`, `#search-input`, `#search-results` | `index.html` | `search.ts`; positioned by `layout.ts` |
-| `#clock` | `index.html` | `clock.ts`; positioned by `layout.ts`, adopted into a card in Dashboard |
+| `#clock` | `index.html` | `clock.ts`; positioned by `layout.ts` |
 | `#dock-wrapper`, `#dock`, `#dock-scroll`, `#dock-suggestions`, `#dock-divider`, `#dock-items`, `#dock-tabs` | `index.html` | `dock.ts`; positioned by `layout.ts` |
 | `#history-import-dialog` and children | `index.html` | `history-import.ts` — **currently unreachable** |
 
@@ -147,6 +150,9 @@ The cross-module handoffs (`settings.ts` builds containers that `shortcut-settin
 
 `./build.sh` — one-shot build into `dist/`.
 `./build.sh --watch` — same, then starts watchers and re-copies static files every second.
+`./build.sh --firefox` — the Firefox build, into `dist-firefox/`. Combines with `--watch`.
+
+The two targets differ in exactly one file: the manifest. Everything else — bundle, CSS, fonts, HTML — is byte-identical.
 
 **Requires two standalone binaries in `bin/`:**
 
@@ -157,14 +163,14 @@ The cross-module handoffs (`settings.ts` builds containers that `shortcut-settin
 
 If either is missing, `build.sh` prints the exact `curl` command for the current platform and exits 1. Platform is detected from `uname -s`; Windows shells get a `.exe` suffix.
 
-**What a build does** (`build.sh:66`):
+**What a build does:**
 
-1. `rm -rf dist && mkdir -p dist`
-2. Copy static: `manifest.json`, `src/index.html`, `src/fonts/` → `dist/`
-3. `tailwindcss -i src/styles.css -o dist/styles.css --minify`
-4. `esbuild src/index.ts --bundle --outfile=dist/index.js --minify`
+1. `rm -rf $OUT && mkdir -p $OUT`
+2. Copy static: `$MANIFEST` → `$OUT/manifest.json`, plus `src/index.html` and `src/fonts/`
+3. `tailwindcss -i src/styles.css -o $OUT/styles.css --minify`
+4. `esbuild src/index.ts --bundle --outfile=$OUT/index.js --minify`
 
-Output is exactly four things: `dist/manifest.json`, `dist/index.html`, `dist/index.js`, `dist/styles.css`, plus `dist/fonts/`.
+Output is exactly four things: `manifest.json`, `index.html`, `index.js`, `styles.css`, plus `fonts/`.
 
 **Type-checking is not part of the build.** esbuild strips types without checking them, so a type error will happily ship. Run `npx tsc --noEmit` (or lean on your editor's `tsconfig.json` integration) separately.
 
@@ -172,13 +178,15 @@ There is no test suite, no linter, and no CI.
 
 ### Loading it
 
-1. `chrome://extensions`
-2. Enable Developer mode
-3. Load unpacked → select `dist/`
+**Chrome:** `chrome://extensions` → enable Developer mode → Load unpacked → select `dist/`.
+
+**Firefox:** `about:debugging#/runtime/this-firefox` → Load Temporary Add-on → select `dist-firefox/manifest.json`. It's removed on browser restart; a permanently installed copy has to be signed.
+
+Firefox keys each add-on's `moz-extension://` UUID to its add-on ID in the `extensions.webextensions.uuids` pref, so `browser_specific_settings.gecko.id` also makes `identity.getRedirectURL()` stable across reloads — an OAuth client registered against it keeps matching. The UUID is still per *profile*, so a second machine or a fresh profile needs its own registration.
 
 ## Manifest
 
-`manifest.json` — Manifest V3.
+Two literal manifests, one per target — Manifest V3 both.
 
 | Field | Value | Why |
 |---|---|---|
@@ -187,16 +195,21 @@ There is no test suite, no linter, and no CI.
 | | `geolocation` | Weather coordinates, where the browser can supply them |
 | | `identity` | OAuth for Spotify and Google Calendar (`launchWebAuthFlow`, `getAuthToken`) |
 | | `history` | Recommendations heatmap + history import |
-| `host_permissions` | the nine API hosts the app calls | Lets extension-page `fetch` bypass CORS instead of depending on each third party's headers |
+| `host_permissions` | the ten API hosts the app calls | Lets extension-page `fetch` bypass CORS instead of depending on each third party's headers |
 | `oauth2.client_id` | a Google OAuth client | Calendar via `getAuthToken`. Only used where the browser has a Google account service |
 | `oauth2.scopes` | `calendar.readonly` | |
-| `key` | a fixed public key | Pins the extension ID, which pins the OAuth redirect URI |
+| `key` | a fixed public key | Chrome only. Pins the extension ID, which pins the OAuth redirect URI |
+| `browser_specific_settings.gecko.id` | `startpage@meridian` | Firefox only. Firefox refuses `storage.sync` for an add-on with no explicit ID |
 
 **`host_permissions` is load-bearing, not belt-and-braces.** Without it every cross-origin call from the page is an ordinary CORS request carrying a `chrome-extension://` origin, and succeeds only if the remote host happens to allow it. Adding a host here is part of adding an API call.
 
 The `oauth2` block is now a fast path rather than the mechanism: when `identity.getAuthToken` doesn't work, `google-auth.ts` falls back to a redirect flow driven by the `googleClientId` setting. See [browser-compat.md](browser-compat.md#google-sign-in).
 
-No background service worker and no content scripts — the commented-out `cp src/service-worker.js` line in `build.sh:71` is a leftover from a design that was never shipped.
+### Why two files rather than one generated
+
+`manifest.firefox.json` drops `key` and `oauth2`, which Firefox doesn't implement and AMO's linter flags as unknown properties, and adds `browser_specific_settings`, which Chrome warns about in turn. Generating the variant at build time would mean parsing JSON in `build.sh`, and the build is deliberately free of anything but bash and the two vendored binaries — it supports Windows shells where `python3`/`jq` aren't a safe assumption. Two short files that sit side by side make the drift visible instead. **Change one, check the other.**
+
+No background service worker and no content scripts — the commented-out `cp src/service-worker.js` line in `build.sh` is a leftover from a design that was never shipped.
 
 ## Refactor candidates
 

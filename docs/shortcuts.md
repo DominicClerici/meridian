@@ -82,7 +82,11 @@ Every limit is enforced by **silently returning the input unchanged**. Nothing s
 
 **Item icons** (`renderItemIcon`): a `color` icon renders as a filled 24px tile with the item's first character; otherwise a shortcut gets a Google favicon `<img>` and a folder gets the `folder` glyph. Favicon load errors swap in the `link` icon.
 
-**Labels.** Names aren't rendered inline — `attachLabel()` creates a `.dock-item-label` span **appended to `document.body`**, positioned above the tile on `mouseenter` with `getBoundingClientRect`. Every label is tracked in a module-level `labelEls` array and cleared at the top of each `render()`; the fixed positioning is what lets the label escape the dock's `overflow-x: auto`.
+**Item structure.** `itemShell()` gives every item two children: a `.dock-item-glyph` holding the favicon or colour chip, and a `.dock-item-name` carrying the name. The split exists for the Dashboard, where CSS promotes the glyph to a standing 54px circle and prints the name underneath it; everywhere else `.dock-item-name` is `display: none` and the glyph fills the 48px tile.
+
+**Labels.** Outside Dashboard, names aren't rendered inline — `attachLabel()` creates a `.dock-item-label` span **appended to `document.body`**, positioned above the tile on `mouseenter` with `getBoundingClientRect`. Every label is tracked in a module-level `labelEls` array and cleared at the top of each `render()`; the fixed positioning is what lets the label escape the dock's `overflow-x: auto`. In Dashboard the tooltip is suppressed in CSS, since the name is already printed under the icon.
+
+**The Dashboard treatment.** `[data-layout="dashboard"]` rules in `styles.css` strip the `.dock-surface` pill — no background, border, shadow or padding — and turn each item into a labelled circle, left-aligned under the search bar. The dock's own markup and JS are untouched by the switch, which is what keeps element identity across a layout change. See [layouts.md](layouts.md).
 
 **Folders** open a modal, `above-center` popover containing a 3-column `.dock-folder-grid`. Clicking a child navigates and closes.
 

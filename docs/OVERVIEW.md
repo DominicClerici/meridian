@@ -14,19 +14,19 @@ Everything renders into one page (`src/index.html`) from one bundle (`dist/index
 |---|---|---|
 | [architecture.md](architecture.md) | Boot sequence, module graph, DOM ownership, build pipeline, manifest | `index.ts`, `index.html`, `build.sh`, `manifest.json` |
 | [storage.md](storage.md) | The reactive store, every settings key, IndexedDB, raw localStorage caches | `store.ts`, `defaults.ts`, `idb.ts`, `browser.d.ts` |
-| [layouts.md](layouts.md) | The three view modes, the slot/card system, and the switch transition | `layout.ts`, `index.html` |
+| [layouts.md](layouts.md) | The three view modes, the slot/card system, the Default layout's column packer, the Dashboard's tile row and side carousel, and the switch transition | `layout.ts`, `card-grid.ts`, `card-carousel.ts`, `index.html` |
 | [design-system.md](design-system.md) | Design tokens, theme cascade, color palettes, squircles, fonts, icons | `styles.css`, `theme.ts`, `squircle.ts`, `icons/` |
 | [components.md](components.md) | The UI kit — buttons, inputs, selects, dialogs, popovers, tooltips | `components.ts` |
 | [settings-ui.md](settings-ui.md) | The settings dialog, and how to add a new setting end to end | `settings.ts` |
 | [shortcuts.md](shortcuts.md) | Shortcut data model, CRUD, the dock, the shortcuts settings panel | `shortcuts.ts`, `dock.ts`, `shortcut-settings.ts` |
-| [drag-and-drop.md](drag-and-drop.md) | The pointer-based drag engine for shortcuts and todos | `shortcut-drag.ts` |
+| [drag-and-drop.md](drag-and-drop.md) | The pointer-based drag engine for shortcuts (todos use plain HTML5 DnD) | `shortcut-drag.ts` |
 | [search.md](search.md) | The search bar, the provider registry, and its two providers | `search.ts`, `search-provider-*.ts`, `url.ts` |
 | [widgets.md](widgets.md) | The shared widget pattern (trigger + popover + cache), and the clock | `clock.ts` |
-| [todos.md](todos.md) | Todo data model, pure operations, and the todo popover | `todos.ts`, `todo.ts` |
-| [weather.md](weather.md) | Open-Meteo fetching, caching, and the hourly SVG chart | `weather.ts`, `location.ts`, `timezone-coords.ts` |
+| [todos.md](todos.md) | Todo data model, pure operations, the widget body, and the calendar cross-link | `todos.ts`, `todo.ts` |
+| [weather.md](weather.md) | Open-Meteo fetching, caching, the metric selector, the container-responsive body, and the 24-hour SVG chart | `weather.ts`, `location.ts`, `timezone-coords.ts` |
 | [spotify.md](spotify.md) | PKCE OAuth, player polling, playback controls | `spotify.ts` |
-| [calendar.md](calendar.md) | Google OAuth, event fetching, the 1d/1w/1m views | `calendar.ts`, `google-auth.ts` |
-| [browser-compat.md](browser-compat.md) | What de-Googled Chromium breaks, how it's detected, how it degrades | `location.ts`, `google-auth.ts`, `capabilities.ts` |
+| [calendar.md](calendar.md) | Google OAuth, event fetching, the compressed 1d/1w timelines | `calendar.ts`, `google-auth.ts` |
+| [browser-compat.md](browser-compat.md) | What de-Googled Chromium and Firefox break, how it's detected, how it degrades | `location.ts`, `google-auth.ts`, `capabilities.ts`, `history-api.ts` |
 | [recommendations.md](recommendations.md) | The browsing-history heatmap, scoring, and history import | `recommendations.ts`, `history-import.ts` |
 | [backgrounds.md](backgrounds.md) | Background sources — mesh gradient, Unsplash, upload — and blob storage | `background.ts`, `mesh-bg.ts`, `color.ts`, `unsplash.ts`, `idb.ts` |
 
@@ -37,6 +37,9 @@ Everything renders into one page (`src/index.html`) from one bundle (`dist/index
 | A setting that won't persist, or syncs wrong across devices | [storage.md](storage.md) |
 | Adding a brand new setting | [settings-ui.md](settings-ui.md#adding-a-setting) |
 | Where a widget shows up in a given view mode | [layouts.md](layouts.md) |
+| How many card columns show at a given window width, or a card landing in the wrong column | [layouts.md](layouts.md#the-packed-card-region) |
+| Cycling widgets in the Dashboard's right-hand column, or which one it opens on | [layouts.md](layouts.md#the-side-carousel) |
+| A widget looking cramped in the Dashboard's top row | [layouts.md](layouts.md#the-tile-row) |
 | The fade when switching view modes, or a layout flashing on load | [layouts.md](layouts.md#the-switch) |
 | Colors, spacing, or radii looking wrong | [design-system.md](design-system.md) |
 | Light/dark mode, accent color, or `data-*` attributes on `<html>` | [design-system.md](design-system.md#the-theme-cascade) |
@@ -73,6 +76,8 @@ src/
   browser.d.ts        Ambient types for the browser/chrome extension APIs
   theme.ts            Applies data-theme/accent/bg/mode to <html>
   layout.ts           The three view modes: frames, singleton slots, card registry
+  card-grid.ts        Responsive column packer for the Default layout's card region
+  card-carousel.ts    One-at-a-time card region for the Dashboard's side column
   squircle.ts         Apple-style continuous corner geometry (currently unused)
   idb.ts              Tiny IndexedDB blob store for background images
   url.ts              URL prettifier
@@ -101,6 +106,7 @@ src/
   capabilities.ts     Browser capability probes for the Advanced settings report
   recommendations.ts  History heatmap + scoring
   history-import.ts   Bulk-import shortcuts from browser history
+  history-api.ts      history.search/getVisits over Chrome's and Firefox's conventions
   background.ts       Background source switching + image application
   mesh-bg.ts          WebGL mesh-gradient background for the "color" source
   color.ts            sRGB ⇄ OKLCH conversion and gamut fitting

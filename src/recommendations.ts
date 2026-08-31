@@ -1,4 +1,5 @@
 import { store } from "./store"
+import { historySearch } from "./history-api"
 import type { DomainHeatmap, RecommendationData } from "./defaults"
 
 const BATCH_SIZE = 150
@@ -9,26 +10,8 @@ const SIGMA = 2
 const ADJACENT_DAY_WEIGHT = 0.3
 const BLOCKED_SCHEMES = ["chrome:", "chrome-extension:", "edge:", "about:", "moz-extension:", "brave:"]
 
-const api = globalThis.browser ?? globalThis.chrome
-
 let analyzing = false
 let cachedRecommendations: { name: string; url: string }[] = []
-
-function historySearch(query: {
-  text: string
-  startTime?: number
-  endTime?: number
-  maxResults?: number
-}): Promise<HistoryItem[]> {
-  return new Promise((resolve, reject) => {
-    if (!api?.history) return reject(new Error("History API unavailable"))
-    api.history.search(query, (results) => {
-      const err = (chrome as any)?.runtime?.lastError
-      if (err) reject(new Error(err.message))
-      else resolve(results)
-    })
-  })
-}
 
 function extractDomain(url: string): string | null {
   if (BLOCKED_SCHEMES.some((s) => url.startsWith(s))) return null

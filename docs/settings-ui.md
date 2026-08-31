@@ -25,9 +25,24 @@ Five tabs, defined in the `TABS` array (`settings.ts:33`):
 | Shortcuts | `buildShortcutsPanel()` | Empty containers for `shortcut-settings.ts`, plus the recommendations toggle and open-in select |
 | Appearance | `buildAppearanceTab()` | Theme, layout, accent, mode, and the three background accordions |
 | Widgets | `buildWidgetsTab()` | Search, Todo, Weather, Spotify, Calendar accordions |
-| Advanced | `buildAdvancedPanel()` | Unsplash API key, Google OAuth client ID, browser-capability report |
+| Advanced | `buildAdvancedPanel()` | Unsplash API key, Google and Spotify OAuth client IDs, browser-capability report |
 
 Two construction styles coexist. `buildShortcutsPanel()` and `buildAdvancedPanel()` **return** a panel element that `initSettings()` appends; `buildGeneralTab()`, `buildAppearanceTab()`, and `buildWidgetsTab()` **query** for their already-appended panel via `document.querySelector('[data-settings-tab="…"]')` and fill it. That's why the first two run inline in `initSettings()` while the other three are called afterward.
+
+### Deep-linking into a section
+
+`openSettings(tabId?, sectionId?)` is the exported way in from anywhere else in the app. It opens the dialog, switches to the tab, then runs a hook registered under `sectionId` in `sectionHooks` — the weather widget uses `openSettings("widgets", "weather")` from its "Set a location" states and from the inline *settings* link in its approximate-location notice.
+
+A section registers itself where it is built:
+
+```ts
+sectionHooks["weather"] = () => {
+  if (weatherAcc.content.hidden) weatherAcc.toggle()
+  weatherAcc.container.scrollIntoView({ block: "start", behavior: "smooth" })
+}
+```
+
+Only the weather accordion registers one today. The hook runs inside a `requestAnimationFrame` so the panel it lives in has been laid out before anything scrolls.
 
 ### Navigation
 
@@ -119,7 +134,7 @@ Spotify and Calendar connection state is derived from the store — `spotifyAcce
 
 Both connect buttons render failures rather than swallowing them: `authenticate()` returns `{ ok: false, error }`, and `showStatus()` puts the string under the button in `text-danger`. When the Calendar failure carries `needsClientId`, the message gets an inline button that calls `selectTab("advanced")` — a module-level hook `buildNav()` assigns, since `switchTab` is otherwise closed over.
 
-Weather's location controls come from `buildLocationControls()`. A "Use device location" button (which shows a `Locating…` state and reports the specific `GEO_FAILURE_TEXT` on failure), a 300ms-debounced city search against Open-Meteo's geocoder with an `AbortController` per keystroke, and a summary line reading e.g. `Boulder, CO, US · set manually`. The manual path is always visible, not revealed on failure. Both paths call `refreshWeather()` so the widget updates without a reload — the old row wrote `weatherLat` and left the widget stale until the next page load.
+Weather's rows are an enable checkbox, a temperature unit, a **Metric** select mirroring the one inside the widget body ([weather.md](weather.md#metrics)), and then the location controls from `buildLocationControls()`. A "Use device location" button (which shows a `Locating…` state and reports the specific `GEO_FAILURE_TEXT` on failure), a 300ms-debounced city search against Open-Meteo's geocoder with an `AbortController` per keystroke, and a summary line reading e.g. `Boulder, CO, US · set manually`. The manual path is always visible, not revealed on failure. Both paths call `refreshWeather()` so the widget updates without a reload — the old row wrote `weatherLat` and left the widget stale until the next page load.
 
 ### Shortcuts
 
@@ -130,7 +145,7 @@ Weather's location controls come from `buildLocationControls()`. A "Use device l
 Three sections, separated by `sectionHeading()` rules:
 
 1. **Unsplash API key** — a password-type `createInput` with a Show/Hide toggle, saved on `change` (blur), plus a link to unsplash.com/developers.
-2. **Google Calendar sign-in** (`buildGoogleAuthSection()`) — the `googleClientId` field, the extension's redirect URI with a copy button, and setup instructions. Always shown, so the path is discoverable before sign-in fails rather than only after.
+2. **Google Calendar sign-in** and **Spotify sign-in** — both are `buildOAuthSection()` with different copy: a client-ID field, the extension's redirect URI with a copy button, and setup instructions. Always shown, so the path is discoverable before sign-in fails rather than only after. The redirect URI is one value per browser, not per service. See [browser-compat.md](browser-compat.md#the-redirect-uri).
 3. **Browser capabilities** (`buildCapabilityPanel()`) — renders `probeCapabilities()` as label / state badge / detail rows with a Re-check button. Runs cached on open; the button forces a live probe. See [browser-compat.md](browser-compat.md#detection).
 
 ## Refactor candidates
@@ -143,5 +158,5 @@ Three sections, separated by `sectionHeading()` rules:
 - **Conditional-row visibility is manual and duplicated.** Each dependent row is toggled in both the change handler and the subscriber. A declarative `dependsOn` on the row helper would halve it.
 - **Inline styles for state.** Selected swatches, mode buttons, the active background accordion, and disabled states are all driven by direct `style.*` assignment rather than classes or data attributes, so none of it is inspectable from CSS or overridable by a theme.
 - **Brand buttons use placeholder squares.** `createSpotifyButton` and `createGoogleButton` draw a colored `div` where a logo should be, and hard-code their hover colors in JS.
-- **`confirm()` for destructive actions.** "Clear all todos" (`settings.ts:884`) uses the native browser dialog while the rest of the app has a themed confirmation flow (`shortcut-settings.ts:815`).
+- **`confirm()` for destructive actions.** "Clear all todos" uses the native browser dialog while the rest of the app has a themed confirmation flow (`shortcut-settings.ts:815`). The todo widget itself can't use `confirm()` at all — a native dialog eats the click its popover is listening for — so its Clear archive button is a two-click arm instead.
 - **The General tab is really the Clock tab.** Either rename it or move the clock settings under Widgets alongside every other widget.

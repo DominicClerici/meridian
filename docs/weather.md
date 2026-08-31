@@ -1,6 +1,6 @@
 # Weather
 
-**Files:** `src/weather.ts` (641 lines), `src/location.ts` (211 lines), `src/timezone-coords.ts` (157 lines). **Trigger:** `#weather-trigger`. **API:** [Open-Meteo](https://open-meteo.com/) — free, no key.
+**Files:** `src/weather.ts`, `src/location.ts`, `src/timezone-coords.ts`. **Trigger:** `#weather-trigger`. **API:** [Open-Meteo](https://open-meteo.com/) — free, no key.
 
 Follows the trigger/popover pattern in [widgets.md](widgets.md).
 
@@ -9,13 +9,15 @@ Follows the trigger/popover pattern in [widgets.md](widgets.md).
 ```
 initWeather()
    └─ fetchWeather()
-        ├─ cooldown active + cached?  → render from cache, done
-        ├─ resolveLocation()          → manual, else device, else stored, else timezone estimate
-        ├─ GET /v1/forecast?current=… → { temperature, weatherCode }
-        └─ shouldRefetchHourly()?     → fetchHourlyData() (25-hour series for the chart)
+        ├─ cooldown active + series fresh? → render from cache, done
+        ├─ resolveLocation()               → manual, else device, else stored, else timezone estimate
+        ├─ GET /v1/forecast                → current + 72h hourly + 3d daily, every variable, one request
+        └─ metric == Air Quality?          → GET /v1/air-quality on the separate host
 ```
 
-Two separate endpoints. The **current** call drives the trigger button; the **hourly** call (`past_hours=12&forecast_hours=13`, 25 points, `timezone=auto`) drives the chart and only runs when needed.
+One forecast request covers every metric. `current=` drives the trigger and the headline, `hourly=` with `past_days=1&forecast_days=2` gives a 72-hour span the chart window slides inside, and `daily=` gives each metric's high and low. `timezone=auto` means every timestamp comes back in the **forecast location's** timezone, and the whole module reasons in that zone rather than the browser's — the two only differ when a city was picked by hand.
+
+Three unit parameters ride along, all derived from the single `weatherUnit` setting: `temperature_unit`, `wind_speed_unit`, and `precipitation_unit`. Fahrenheit implies mph and inches, Celsius implies km/h and mm. The API converts server-side, so changing the unit clears every cache.
 
 ### Coordinates
 
@@ -24,10 +26,11 @@ Coordinates come from `location.ts`, not from this module. `resolveLocation()` t
 What the widget adds on top:
 
 - `currentLocation` holds the resolved location for the current render, seeded from `getStoredLocation()` in `initWeather()` so a cache-only render on page load still knows where it came from.
-- `approximateNote()` appends a one-line "Approximate — estimated from your timezone (…)" caption whenever the source is `timezone`.
-- `refreshWeather()` is the exported entry point settings calls after the user grants access or picks a city. It clears all three caches first, because the cached reading belongs to the old coordinates.
+- `locationLabel()` picks the display name: the manual label, else `Current location` for a device fix, else the city half of the API's `timezone` field.
+- When the source is `timezone`, two things say so — `approximateNote()` under the chart, and a warning triangle on the trigger (below).
+- `refreshWeather()` is the exported entry point settings calls after the user grants access or picks a city. It clears every cache first, because the cached readings belong to the old coordinates.
 
-State `no-location` — reached only when the timezone is unmapped *and* nothing is stored — renders a "Set location" trigger that **opens the settings dialog** on click, where the location controls live (see [settings-ui.md](settings-ui.md#widgets)).
+State `no-location` — reached only when the timezone is unmapped *and* nothing is stored — renders a "Set location" trigger that **opens the settings dialog on the weather section** via `openSettings("widgets", "weather")` (see [settings-ui.md](settings-ui.md#deep-linking-into-a-section)).
 
 `fetchWeather()` guards re-entry with `fetchInFlight` around the resolve step. Location writes fire store subscribers, and without the guard a device-location refresh could re-enter the fetch it was triggered by.
 
@@ -35,51 +38,152 @@ State `no-location` — reached only when the timezone is unmapped *and* nothing
 
 | Key | Contents |
 |---|---|
-| `sp:weather:cachedData` | Last current-conditions result |
+| `sp:weather:cachedData` | Last current-conditions result: `weatherCode`, `isDay`, and a `values` map keyed by API variable |
 | `sp:weather:lastFetch` | Timestamp for the 120s cooldown |
-| `sp:weather:hourlyData` | The 25-point series plus `currentIndex` and `fetchedAtHour` |
+| `sp:weather:hourlyData` | The 72-point series for every variable, the daily aggregates, `utcOffset`, `timezone`, and `fetchedAtHour` |
+| `sp:weather:aqiData` | The 72-point US AQI series plus its current reading and `utcOffset` |
 
-`shouldRefetchHourly(currentTemp)` refetches when there's no cache, when the hour bucket (`Date.now() / 3_600_000`) has rolled over, or when the cached temperature at `currentIndex` disagrees with the freshly-fetched current temperature — the last one catches a forecast revision within the same hour.
+The cooldown is skipped when `seriesStale()` is true — the hour bucket (`Date.now() / 3_600_000`) rolled over since the series was fetched, so the chart window has moved and the data behind it has to move with it.
 
-A failed current-conditions fetch falls back to the cached reading and stays in `loaded` rather than showing an error, so a brief network blip is invisible.
+Each getter validates the shape it reads and returns `null` on a mismatch, which is how caches written by earlier versions get discarded instead of throwing: `getCachedSeries()` requires a keyed `hourly` map, `getCachedData()` requires a `values` map.
 
-Changing `weatherUnit` clears **all three** cache keys and refetches, because the API returns already-converted values rather than a canonical unit.
+A failed forecast fetch falls back to the cached reading and stays in `loaded` rather than showing an error, so a brief network blip is invisible.
+
+## Metrics
+
+`weatherMetric` (sync) picks what the body charts. It is changed from a ghost [`createSelect`](components.md#createselect) at the top of the body — which doubles as the body's heading — or from the matching row in the settings dialog; the two stay in sync through the store.
+
+| Label | Charted variable | Corner block | Notes |
+|---|---|---|---|
+| Real Temperature | `temperature_2m` | H / L | |
+| **Feels Like** (default) | `apparent_temperature` | H / L | |
+| Humidity | `relative_humidity_2m` | H / L | |
+| Wind Speed + Gusts | `wind_speed_10m` | Gust (hovered hour) · H (day's peak) | Replaces the condition icon with a compass |
+| UV Index | `uv_index` | H | Caption: Low → Extreme |
+| Precipitation | `precipitation_probability` | Hr (hovered hour's amount) · Day (total) | The amount stands in for a high/low |
+| Air Quality | `us_aqi` | H / L | Separate host; caption: Good → Hazardous |
+
+Each metric is one `MetricDef` in the `METRICS` array — its API variable, any companion series it needs (`aux`), how to format the headline and the trigger, an optional caption word, and a `detail()` that returns the corner rows for whichever hour is hovered. Adding a metric means adding an entry and, if the variable isn't requested yet, a name in `HOURLY_VARS` / `DAILY_VARS`.
+
+`buildView()` turns the selected def plus the cached series into a `MetricView`: the 24 windowed values, the companion series sliced to match, today's row of daily aggregates, and the live current reading. It returns `null` when the data isn't there, and the body says so instead of drawing an empty chart.
+
+### Air quality
+
+`us_aqi` comes from `air-quality-api.open-meteo.com/v1/air-quality`, which needs its own `host_permissions` entry ([architecture.md](architecture.md#manifest)). It is fetched **lazily** — only while Air Quality is the selected metric — so the other six metrics still cost exactly one request. The response has the same shape as the forecast's hourly block, so the same window logic drives it.
+
+The endpoint has no daily aggregates, so the metric sets `derivedExtremes` and the high/low are computed from the day's own hourly values.
 
 ## Trigger
 
 | State | Renders |
 |---|---|
-| `no-location` | `locationOff` icon + "Set location" |
-| `loading` | "Loading..." |
-| `error` | `refresh` icon (clicking does nothing — the state check only opens the popover when `loaded`) |
-| `loaded` | Emoji + `72°F Partly cloudy` |
+| `no-location` | `locationOff` icon + "Set location" — click opens settings |
+| `loading` | "Loading…" |
+| `error` | `refresh` icon — click retries |
+| `loaded` | Condition icon + the selected metric, e.g. `93°F Clear sky`, `12 mph Clear sky`, `AQI 46 Clear sky` |
 
-`WEATHER_MAP` (`weather.ts:22`) maps the 28 WMO weather codes Open-Meteo returns to an emoji and a condition string, defaulting to ❓/"Unknown".
+The trigger follows the metric selection, because in Immersive it is the only part of the widget that is visible without a click. Each metric's `compact()` names its own unit, since a bare `41%` beside a sun icon says nothing.
 
-## The chart
+`WEATHER_MAP` maps the 28 WMO weather codes to an icon name in the theme registry and a condition string, defaulting to `wxUnknown`/"Unknown". Codes 0–2 carry an `iconNight` as well, chosen by the `is_day` flag.
 
-`buildChart()` (`weather.ts:243`) builds a 280×96 SVG by hand — no library.
+When the location came from a timezone estimate, `appendApproximateBadge()` overlays an `alertTriangle` in the trigger's top-right corner, tinted `var(--warning)` with a drop shadow so it reads over any background, and sets the button's `title`. The trigger element carries `relative` in `index.html` for it.
 
-- **Scale.** Y spans `min(temps) - 1` to `max(temps) + 1` so the line never touches the edges; X is evenly spaced across the 25 points.
+## The tile
+
+`buildWeatherTile()` is the Dashboard top row's form: the condition glyph, the
+selected metric's reading at 30px, and one caption line naming the metric and
+the condition. No chart and no metric picker — a tile is 118px tall and sized by
+its own content, so anything that needs room belongs in the body instead. The
+tile's card header is the location rather than the word "Weather", via
+`tileTitle` ([layouts.md](layouts.md#the-tile-row)).
+
+## The body
+
+`buildWeatherBody()` is the single builder for two of the three hosts — the 280px popover in Immersive and the Default layout's card ([layouts.md](layouts.md)). Layout, top to bottom:
+
+```
+Feels Like ⌄
+Boulder, CO, US                       H 94°   ☀
+93°  ⟨hovered hour⟩                   L 61°
+────────────── 24-hour chart ──────────────
+Approximate — estimated from your timezone (Denver). Set an exact location in settings.
+```
+
+**Everything is sized from the host's measured width, never the viewport.** A `ResizeObserver` on the body root updates `hostWidth` and calls `render()`, which sets the selector, caption, corner, icon, and chart dimensions from that one number, so the same body is correct at 200px and at 600px. The first `render()` runs at a placeholder 280px; the observer corrects it on the first frame.
+
+`render()` and `showHovered()` split the work: `render()` rebuilds the view and the chart (on a resize or a metric change), `showHovered()` updates only the headline, caption, corner rows, and compass (on every pointer move). The condition icon is deliberately left out of the hover path — it carries no per-hour information, and rebuilding it on every pointer move would be pure churn.
+
+Each body registers itself in `liveBodies` alongside its observer. The set is pruned by `root.isConnected` on every rebuild, because `refreshCard` discards the old body without telling anyone, and it is what a metric change or a fresh fetch iterates to update every mounted instance in place.
+
+### The chart window
+
+24 hourly points, chosen two ways depending on the local hour at the location:
+
+| Local hour | Window | `currentIndex` |
+|---|---|---|
+| 03:00 – 20:59 | That calendar day, 00:00 → 23:00 | The current hour |
+| 21:00 – 02:59 | Rolling: 11 hours behind now, 12 ahead | 11 |
+
+The daytime rule shows the day you are actually living in; late at night that day is nearly over, so the window rolls forward into tomorrow instead. `windowIndices()` finds "now" by matching a formatted `YYYY-MM-DDTHH:00` key against the series times, then returns a start offset, clamped so the window never runs off either end of the 72-hour span. Because the whole span is cached, the window moves with the clock without another request.
+
+### Drawing
+
+`renderChart()` builds the SVG at the host's **measured pixel size** rather than a fixed viewBox that gets stretched, so stroke weight and label size stay constant at any width. Chart height is `clamp(88, width * 0.36, 180)`.
+
+- **Scale.** The y domain is the data's own range plus 6% padding, so the line never touches the edges. Metrics that mean nothing below zero (wind, UV, precipitation, AQI) set `zeroFloor` and get a domain anchored at 0 instead, which is what keeps a rainless day reading as *no rain* rather than as mid-range. A perfectly flat series is given a one-unit band above it rather than around it, for the same reason.
+- **Gaps.** `fillNulls()` carries the nearest reading into any `null` at the edge of a model's range; a window that is entirely null means the metric has no data and the body says so instead.
 - **Line.** `smoothPath()` draws a cubic Bézier through the points using the horizontal midpoint between neighbors as both control points — a monotone-ish smoothing that can't overshoot horizontally.
-- **Fill.** The same path closed to the baseline, filled with a vertical gradient from 15% accent to transparent.
-- **Grid.** Six horizontal rules at 6% opacity.
-- **Now marker.** A dashed vertical line and a solid dot at `currentIndex` (always 12 — twelve hours of history precede it).
-- **Hover.** A full-size transparent `<rect>` catches `mousemove`, finds the nearest point by X distance, and moves a highlight dot and vertical line to it while the header above swaps to that hour's time and temperature. `mouseleave` restores "Now".
+- **Fill.** The same path closed to the baseline, filled with a vertical gradient from 18% accent to transparent. Each chart gets its own gradient id from `gradientSeq`, so two mounted bodies can't collide.
+- **Grid.** Five horizontal rules at 6% opacity.
+- **Axis.** Hour labels every 3 / 4 / 6 hours depending on width, dropped near the edges where they would clip. `formatAxisHour()` gives `6a` / `18` per the clock's `clock24Hour` setting.
+- **Now marker.** A dashed vertical line and a solid dot at `currentIndex`.
+- **Hover.** A full-size transparent `<rect>` catches `pointermove` (so a touch drag works too), finds the nearest point by X distance, and moves a highlight dot and vertical line to it. The **headline** swaps to that hour's reading, a muted time label appears beside it, and the corner rows and compass follow; `pointerleave` restores the live reading. Hovering the current hour shows the live current reading rather than the hourly forecast for it, which can differ slightly.
 
-Colors come from `var(--accent)` inside SVG attributes, so the chart follows the theme without any JS.
+Colors come from `var(--accent)` and `currentColor` inside SVG attributes, so the chart follows the theme without any JS.
 
-`formatHour()` respects the **clock's** `clock24Hour` setting rather than having its own.
+### The compass
 
-`buildWeatherBody()` shows the chart when hourly data exists, and falls back to a single line of text (`⛅ 72°F · Partly cloudy`) when it doesn't; before either it renders the current state (a settings link for `no-location`, a retry button for `error`). The immersive popover wraps it at 280px, and the card in the other layouts hosts the same builder — `renderTrigger()` calls `refreshCard("weather")`, so both stay current. See [layouts.md](layouts.md).
+Wind replaces the condition icon with `renderCompass()` — a ring, four ticks with north emphasized, a needle, and the cardinal abbreviation beneath. It is a **weather vane**: the needle points *into* the wind, at the direction the wind is coming from, which is what `wind_direction_10m` reports, and the label names that same direction.
+
+The needle's length runs from 50% to 92% of the radius, scaled by the hour's speed against the window's peak, so moving along the chart shows the wind turning and strengthening at once. It is drawn at the same measured size as the icon it replaces, and redrawn on every hover.
+
+## Candidate metrics
+
+Everything below comes back from the same `api.open-meteo.com/v1/forecast` call already being made — adding a metric costs no extra request as long as it is appended to the existing `hourly=` / `daily=` / `current=` lists. The seven that ship are marked ✅.
+
+**Has a current value, a 24-hour series, and a daily high/low — the full shape the selector wants:**
+
+| Metric | `hourly` / `current` | `daily` extremes | |
+|---|---|---|---|
+| Temperature | `temperature_2m` | `temperature_2m_max` / `_min` | ✅ |
+| Feels like | `apparent_temperature` | `apparent_temperature_max` / `_min` | ✅ |
+| Humidity | `relative_humidity_2m` | `relative_humidity_2m_max` / `_min` | ✅ |
+| Wind speed | `wind_speed_10m` | `wind_speed_10m_max`, `wind_speed_10m_mean` | ✅ |
+| Wind gusts | `wind_gusts_10m` | `wind_gusts_10m_max` | ✅ |
+| UV index | `uv_index` | `uv_index_max` | ✅ |
+
+**Has a current value and a series, with a daily total or single figure instead of a high/low:**
+
+| Metric | `hourly` / `current` | `daily` | |
+|---|---|---|---|
+| Precipitation | `precipitation`, `rain`, `showers`, `snowfall` | `precipitation_sum`, `rain_sum`, `showers_sum`, `snowfall_sum`, `precipitation_hours` | ✅ (amount only) |
+| Chance of precipitation | `precipitation_probability` | `precipitation_probability_max` / `_min` / `_mean` | ✅ |
+| Cloud cover | `cloud_cover` (+ `_low` / `_mid` / `_high`) | `cloud_cover_mean` | |
+| Pressure | `pressure_msl`, `surface_pressure` | `pressure_msl_mean` | |
+| Dew point | `dew_point_2m` | `dew_point_2m_mean` | |
+
+**Series only, no daily counterpart:** `visibility`, `snow_depth`, `wet_bulb_temperature_2m`, `surface_temperature`, `soil_temperature_0cm`, `soil_moisture_0_to_1cm`, `freezing_level_height`, `vapour_pressure_deficit`, `evapotranspiration`, `et0_fao_evapotranspiration`, `shortwave_radiation`, `direct_radiation`, `diffuse_radiation`, `sunshine_duration`, `is_day`, and the convective set `cape` / `lifted_index` / `convective_inhibition` / `boundary_layer_height` / `total_column_integrated_water_vapour`.
+
+**Daily only, no series:** `sunrise`, `sunset`, `daylight_duration`, `wind_direction_10m_dominant`, `shortwave_radiation_sum`, `uv_index_clear_sky_max`.
+
+**On the air-quality host** (`air-quality-api.open-meteo.com/v1/air-quality`, already in `host_permissions`): `us_aqi` ✅, plus `european_aqi`, `pm2_5`, `pm10`, `ozone`, `nitrogen_dioxide`, `sulphur_dioxide`, `carbon_monoxide`, `ammonia`, `dust`, `aerosol_optical_depth`, `uv_index`, and the pollen set (`alder` / `birch` / `grass` / `ragweed`, Europe only). These share one request, so a second air-quality metric is free once that fetch is already happening.
 
 ## Refactor candidates
 
-- **Weather codes map to emoji.** `WEATHER_MAP` renders ☀️ 🌤️ ⛅ ☁️ straight into `innerHTML`, so the widget's visual identity is whatever the OS emoji font decides — inconsistent across platforms and unstylable. Every other icon in the app goes through the theme-aware registry ([design-system.md](design-system.md#icons)).
-- **The trigger is built with `innerHTML` string concatenation** (`weather.ts:481`) interpolating live API values. `condition` is from a fixed local map so it's not injectable today, but it's the one place in this file that writes unescaped data into markup.
-- **Error state is a dead end.** `renderTrigger` shows a refresh icon, but the click handler only acts on `loaded` and `no-location` — clicking the refresh icon does nothing. Calendar handles the same state by retrying.
-- **The gradient uses a fixed `id="wg"`.** Two charts on the page would collide; harmless today because only one weather body — popover or card — exists at a time.
+- **The trigger still shows a condition string next to the metric**, which makes its width jump between "Clear sky" and "Thunderstorm with hail".
 - **Cooldown and interval logic is duplicated from `calendar.ts`** almost line for line — see [widgets.md](widgets.md#refactor-candidates).
 - **The refresh interval runs in hidden tabs.** Every open new tab polls Open-Meteo every 5 minutes forever.
-- **Hourly data is fetched for a fixed 25-hour window** with `currentIndex` hard-coded to 12, so any change to `past_hours` silently breaks the marker.
-- **Chart interaction is mouse-only** — `mousemove`/`mouseleave`, no touch or keyboard equivalent.
+- **Chart interaction has no keyboard equivalent.** `pointermove` covers mouse and touch, but there is no way to step through hours from the keyboard.
+- **The chart is rebuilt from scratch on every resize tick**, rather than rescaling the paths it already has.
+- **The air-quality fetch has no error surface.** A failed request leaves the body saying air quality isn't available here, with no retry and no way to tell a dead network from an unsupported location.
+- **Precipitation charts probability but names itself "Precipitation"**, and its corner shows amounts — one metric doing two jobs because neither is worth a row on its own.

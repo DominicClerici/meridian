@@ -35,6 +35,9 @@ The build requires two standalone binaries in `bin/` — the Tailwind CSS CLI an
 # one-shot build → dist/
 ./build.sh
 
+# Firefox build → dist-firefox/
+./build.sh --firefox
+
 # watch mode for development
 ./build.sh --watch
 ```
@@ -44,6 +47,8 @@ Then load the extension:
 1. Open `chrome://extensions`
 2. Enable **Developer mode** (toggle in the top right)
 3. Click **Load unpacked** and select the `dist/` folder
+
+For Firefox: run `./build.sh --firefox`, then load `dist-firefox/manifest.json` as a temporary add-on from `about:debugging#/runtime/this-firefox`.
 
 Open a new tab.
 
