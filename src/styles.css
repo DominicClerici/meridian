@@ -97,10 +97,320 @@
   corner-shape: round;
 }
 
-/* Dock */
+/* ---------------------------------------------------------------- Dock ---
+   One element population, three presentations. Sizes come from the two
+   variables `dock.ts` writes onto `#dock` (`--dock-tile`, `--dock-gap`) — the
+   row is measured in JS, so the stylesheet must never contradict them.
+   Everything else is keyed off `[data-layout]`. */
 
-[data-theme="modern"] .dock-surface {
-  background: var(--page-overlay, rgba(0, 0, 0, 0.25));
+.dock-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: 100%;
+  min-width: 0;
+}
+
+#dock {
+  position: relative;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* The glass is a pseudo-element rather than a background on `#dock` so the
+   magnified tiles can rise clear of the shelf they sit on: the plate starts
+   below the headroom the scroller reserves for them. */
+#dock::before {
+  content: "";
+  position: absolute;
+  inset: var(--dock-headroom, 0) 0 0;
+  border-radius: calc(18px * var(--corner-reach));
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 220ms ease;
+}
+
+.dock-scroll {
+  position: relative;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  padding-top: var(--dock-headroom, 0);
+}
+
+/* Firefox has no ::-webkit-scrollbar; `scrollbar-width` is the only knob it
+   offers, and it is inherited, so `.dock-scroll` covers its subtree. */
+.dock-scroll::-webkit-scrollbar,
+.dock-tabs::-webkit-scrollbar {
+  height: 0;
+  display: none;
+}
+
+/* Edge fades are the only cue that the row is cut off — there is no scrollbar
+   and, past `maxRows`, no wrap either. */
+#dock[data-fade] .dock-scroll {
+  --fade: 44px;
+  transition: mask-image 200ms ease;
+}
+
+#dock[data-fade="right"] .dock-scroll {
+  mask-image: linear-gradient(to right, #000 calc(100% - var(--fade)), transparent);
+}
+
+#dock[data-fade="left"] .dock-scroll {
+  mask-image: linear-gradient(to right, transparent, #000 var(--fade));
+}
+
+#dock[data-fade="both"] .dock-scroll {
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 var(--fade),
+    #000 calc(100% - var(--fade)),
+    transparent
+  );
+}
+
+/* `position: relative` makes this the offsetParent for every tile, which is the
+   coordinate space the fisheye measures the pointer in. */
+.dock-groups {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  gap: calc(var(--dock-gap, 10px) * 0.8);
+  width: max-content;
+  min-width: 100%;
+  padding: 0 var(--dock-spread, 0);
+  transition: opacity 130ms ease, transform 130ms ease;
+}
+
+.dock-group {
+  display: grid;
+  gap: var(--dock-gap, 10px);
+  justify-content: start;
+  align-content: start;
+}
+
+.dock-divider {
+  width: 1px;
+  align-self: stretch;
+  background: color-mix(in srgb, var(--page-foreground) 22%, transparent);
+  flex-shrink: 0;
+}
+
+/* `--page-foreground` is white in both modes, so on a light wallpaper a white
+   hairline is no line at all. */
+[data-mode="light"] .dock-divider {
+  background: rgba(0, 0, 0, 0.13);
+}
+
+/* Tab swap. The pills and their indicator move on the press; the icons leave
+   in the direction the new tab lies and the replacements arrive from the far
+   side, so the row reads as one movement rather than a crossfade. */
+.dock-groups.is-out-left {
+  opacity: 0;
+  transform: translateX(-14px);
+}
+
+.dock-groups.is-out-right {
+  opacity: 0;
+  transform: translateX(14px);
+}
+
+.dock-groups.is-in-left,
+.dock-groups.is-in-right {
+  animation: dock-swap-in 260ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.dock-groups.is-in-left {
+  --dock-swap-from: -14px;
+}
+
+.dock-groups.is-in-right {
+  --dock-swap-from: 14px;
+}
+
+@keyframes dock-swap-in {
+  from {
+    opacity: 0;
+    transform: translateX(var(--dock-swap-from, 0));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ------------------------------------------------------------------ tiles */
+
+.dock-item {
+  position: relative;
+  width: var(--dock-tile, 54px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.dock-item-glyph {
+  width: var(--dock-glyph, 46px);
+  height: var(--dock-glyph, 46px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: calc(var(--dock-glyph-radius, 14px) * var(--corner-reach));
+  background: color-mix(in srgb, var(--page-foreground) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--page-foreground) 12%, transparent);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12);
+  transition:
+    transform 180ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    background 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+[data-mode="light"] .dock-item-glyph {
+  background: rgba(255, 255, 255, 0.5);
+  border-color: rgba(255, 255, 255, 0.45);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.07);
+}
+
+.dock-item:hover .dock-item-glyph {
+  transform: translateY(-3px);
+  background: color-mix(in srgb, var(--page-foreground) 20%, transparent);
+  border-color: color-mix(in srgb, var(--page-foreground) 24%, transparent);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.2);
+}
+
+[data-mode="light"] .dock-item:hover .dock-item-glyph {
+  background: rgba(255, 255, 255, 0.78);
+  border-color: rgba(255, 255, 255, 0.7);
+}
+
+.dock-item:active .dock-item-glyph {
+  transform: translateY(-1px) scale(0.94);
+  transition-duration: 90ms;
+}
+
+.dock-item:focus-visible {
+  outline: none;
+}
+
+.dock-item:focus-visible .dock-item-glyph {
+  outline: 2px solid var(--page-foreground);
+  outline-offset: 3px;
+}
+
+.dock-item .sc-icon {
+  width: var(--dock-icon, 24px);
+  height: var(--dock-icon, 24px);
+  font-size: calc(var(--dock-icon, 24px) * 0.45);
+}
+
+/* A suggestion is a guess, not a bookmark — it reads one step quieter than the
+   shortcuts beside it and comes forward on hover like the rest. */
+.dock-suggestion .dock-item-glyph {
+  background: color-mix(in srgb, var(--page-foreground) 5%, transparent);
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--page-foreground) 16%, transparent);
+  box-shadow: none;
+}
+
+.dock-suggestion .sc-icon {
+  opacity: 0.75;
+  transition: opacity 180ms ease;
+}
+
+.dock-suggestion:hover .sc-icon {
+  opacity: 1;
+}
+
+.dock-item-name {
+  display: none;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.2;
+  color: var(--page-foreground);
+  opacity: 0.78;
+  /* `--page-foreground` is white in every mode, so these sit on whatever the
+     wallpaper happens to be. The shadow is what keeps them readable on a light
+     photo. */
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+  transition: opacity 180ms ease;
+}
+
+.dock-item:hover .dock-item-name {
+  opacity: 1;
+}
+
+/* Shared by the dock, the settings grid and the import preview — every icon in
+   the shortcuts system is one of these three shapes. See shortcut-icon.ts. */
+.sc-icon {
+  flex-shrink: 0;
+  pointer-events: none;
+}
+
+.sc-icon-img {
+  border-radius: calc(4px * var(--corner-reach));
+  object-fit: contain;
+  background: rgba(127, 127, 127, 0.08);
+}
+
+.sc-icon-tile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: calc(6px * var(--corner-reach));
+  font-weight: 600;
+  line-height: 1;
+  color: #fff;
+  text-transform: uppercase;
+}
+
+.sc-icon-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sc-icon-glyph > svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* ------------------------------------------------------------- immersive */
+
+[data-layout="immersive"] #dock {
+  --dock-glyph: 50px;
+  --dock-icon: 34px;
+  --dock-glyph-radius: 13px;
+  /* Room for a tile at full magnification to stand clear of the shelf. */
+  --dock-headroom: 30px;
+  padding-bottom: 10px;
+}
+
+[data-layout="immersive"] #dock::before {
+  opacity: 1;
+  /* `--page-overlay` is an opaque colour (black in every mode), so the shelf has
+     to dilute it itself — reading it straight through would paint a solid slab
+     and the backdrop-filter under it would never show. */
+  background: color-mix(in srgb, var(--page-overlay) 34%, transparent);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
   backdrop-filter: blur(20px) saturate(180%);
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -108,10 +418,9 @@
     0 8px 40px rgba(0, 0, 0, 0.18),
     0 2px 12px rgba(0, 0, 0, 0.1),
     inset 0 0.5px 0 rgba(255, 255, 255, 0.1);
-  padding: 6px;
 }
 
-[data-theme="modern"][data-mode="light"] .dock-surface {
+[data-mode="light"][data-layout="immersive"] #dock::before {
   background: rgba(255, 255, 255, 0.55);
   border-color: rgba(255, 255, 255, 0.4);
   box-shadow:
@@ -120,275 +429,450 @@
     inset 0 0.5px 0 rgba(255, 255, 255, 0.6);
 }
 
-.dock-surface::-webkit-scrollbar,
-.dock-scroll::-webkit-scrollbar {
-  height: 0;
-  display: none;
-}
-
-/* Firefox has no ::-webkit-scrollbar; `scrollbar-width`/`-color` are the only
-   knobs, and `thin` is the narrowest it offers — the px widths below are the
-   WebKit side only. Both are inherited, so one rule covers the subtree. */
-.dock-surface,
-.dock-scroll {
-  scrollbar-width: none;
-}
-
-.dock-item {
-  position: relative;
-  width: 48px;
-  height: 48px;
-  border-radius: calc(12px * var(--corner-reach));
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: background 150ms ease, transform 150ms ease;
-  flex-shrink: 0;
-}
-
-.dock-item:hover {
-  background: var(--page-foreground, rgba(255, 255, 255, 0.15));
-  background-color: rgba(255, 255, 255, 0.1);
-  transform: translateY(-2px);
-}
-
-[data-mode="light"] .dock-item:hover {
-  background-color: rgba(0, 0, 0, 0.06);
-}
-
-.dock-item:active {
-  transform: translateY(0) scale(0.95);
-}
-
-.dock-item-favicon {
-  width: 24px;
-  height: 24px;
-  border-radius: calc(4px * var(--corner-reach));
-  object-fit: contain;
-  pointer-events: none;
-}
-
-.dock-item-color {
-  width: 24px;
-  height: 24px;
-  border-radius: calc(6px * var(--corner-reach));
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 600;
-  font-size: 11px;
-  color: white;
-  text-transform: uppercase;
-  pointer-events: none;
-}
-
-.dock-item-label {
-  position: fixed;
-  white-space: nowrap;
-  font-size: 11px;
-  font-weight: 500;
-  padding: 3px 8px;
-  border-radius: calc(6px * var(--corner-reach));
-  background: rgba(0, 0, 0, 0.75);
-  color: #fff;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 120ms ease;
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
-  z-index: 999;
-}
-
-.dock-suggestion {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-[data-mode="light"] .dock-suggestion {
-  background: rgba(0, 0, 0, 0.03);
-  border-color: rgba(0, 0, 0, 0.04);
-}
-
-/* The glyph is its own box so the Dashboard can promote it to a standing circle
-   with the name printed underneath, while every other layout keeps the compact
-   48px tile and its hover tooltip. */
-.dock-item-glyph {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 100%;
-}
-
-.dock-item-name {
-  display: none;
-}
-
-/* Matches the specificity of the light-mode `.dock-surface` rule above, which
-   would otherwise put the pill back. */
-[data-theme="modern"][data-layout="dashboard"] .dock-surface {
+/* On the shelf a tile is the icon and nothing else: the plate behind it is
+   already the surface, so a second one on every favicon would read as a grid of
+   buttons rather than a dock. A glyph or a monogram still gets one — it is a
+   mark, not a logo, and has nothing of its own to sit on. */
+[data-layout="immersive"] .dock-item-glyph,
+[data-layout="immersive"] .dock-item:hover .dock-item-glyph {
   background: none;
-  border: none;
+  border-color: transparent;
   box-shadow: none;
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-  padding: 0;
-}
-
-[data-layout="dashboard"] #dock-items,
-[data-layout="dashboard"] #dock-suggestions {
-  gap: 1.125rem;
-  align-items: flex-start;
-}
-
-[data-layout="dashboard"] #dock-scroll {
-  align-items: flex-start;
-  padding: 2px 2px 4px;
-}
-
-[data-layout="dashboard"] #dock-divider {
-  margin: 6px 0.5rem 0;
-  height: 44px;
-  align-self: flex-start;
-}
-
-[data-layout="dashboard"] .dock-item,
-[data-layout="dashboard"] .dock-item:hover,
-[data-layout="dashboard"] .dock-suggestion {
-  width: auto;
-  height: auto;
-  padding: 0;
-  gap: 7px;
-  flex-direction: column;
-  background: none;
-  border: none;
   transform: none;
 }
 
+[data-layout="immersive"] .dock-item-glyph[data-icon="mark"],
+[data-layout="immersive"] .dock-item:hover .dock-item-glyph[data-icon="mark"] {
+  background: color-mix(in srgb, var(--page-foreground) 13%, transparent);
+  border-color: color-mix(in srgb, var(--page-foreground) 10%, transparent);
+}
+
+[data-mode="light"][data-layout="immersive"] .dock-item-glyph[data-icon="mark"],
+[data-mode="light"][data-layout="immersive"] .dock-item:hover .dock-item-glyph[data-icon="mark"] {
+  background: rgba(255, 255, 255, 0.62);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+/* A mark reads at a smaller optical size than a logo that fills its own square. */
+[data-layout="immersive"] .dock-item-glyph[data-icon="mark"] .sc-icon {
+  width: calc(var(--dock-icon) * 0.68);
+  height: calc(var(--dock-icon) * 0.68);
+}
+
+/* The fisheye owns `transform` on the tile itself, so hover feedback has to be
+   something else — here, the icon lifting inside its own box. */
+[data-layout="immersive"] .dock-item {
+  transform-origin: bottom center;
+  align-items: center;
+  justify-content: flex-end;
+  height: var(--dock-glyph);
+  will-change: transform;
+}
+
+[data-layout="immersive"] .dock-item:active .dock-item-glyph {
+  transform: scale(0.9);
+}
+
+/* Only while entering or leaving the row — during a sweep the tiles track the
+   pointer frame by frame and any transition would drag behind it. */
+[data-layout="immersive"] .dock-groups.is-settling .dock-item,
+[data-layout="immersive"] .dock-groups.is-settling .dock-divider {
+  transition: transform 220ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+[data-layout="immersive"] .dock-divider {
+  margin: 0 3px;
+  align-self: center;
+  height: 34px;
+}
+
+/* --------------------------------------------------------------- default */
+
+[data-layout="default"] #dock {
+  --dock-glyph: 46px;
+  --dock-icon: 26px;
+  --dock-glyph-radius: 14px;
+}
+
+/* Nothing contains this row — it sits in the page's own composition between the
+   search bar and the cards. So the tiles have to stay quiet at rest and earn
+   their weight on hover, or a row of filled squares reads as a second toolbar. */
+[data-layout="default"] .dock-item-glyph {
+  background: color-mix(in srgb, var(--page-foreground) 8%, transparent);
+  border-color: transparent;
+  box-shadow: none;
+}
+
+[data-mode="light"][data-layout="default"] .dock-item-glyph {
+  background: rgba(255, 255, 255, 0.38);
+  border-color: transparent;
+}
+
+[data-layout="default"] .dock-divider {
+  margin: 0 4px;
+}
+
+/* ------------------------------------------------------------- dashboard */
+
+[data-layout="dashboard"] #dock {
+  --dock-glyph: 52px;
+  --dock-icon: 25px;
+}
+
+/* The tile is wider than the circle inside it, so a left-aligned row would sit
+   a few pixels inboard of the search bar above it. Pulling back by the
+   difference lines the circles up with the column's edge. */
+[data-layout="dashboard"] .dock-groups {
+  margin-left: calc((var(--dock-glyph) - var(--dock-tile)) / 2);
+}
+
 [data-layout="dashboard"] .dock-item-glyph {
-  width: 54px;
-  height: 54px;
   border-radius: 9999px;
   corner-shape: round;
-  background: var(--page-overlay, rgba(0, 0, 0, 0.28));
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  -webkit-backdrop-filter: blur(18px) saturate(180%);
-  backdrop-filter: blur(18px) saturate(180%);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.16);
-  transition:
-    transform 160ms ease,
-    background 160ms ease;
 }
 
-[data-mode="light"][data-layout="dashboard"] .dock-item-glyph {
-  background: rgba(255, 255, 255, 0.55);
-  border-color: rgba(255, 255, 255, 0.45);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
-}
-
-[data-layout="dashboard"] .dock-item:hover .dock-item-glyph {
-  transform: translateY(-3px);
-}
-
-[data-layout="dashboard"] .dock-item:active .dock-item-glyph {
-  transform: translateY(0) scale(0.94);
-}
-
-[data-layout="dashboard"] .dock-item-favicon,
-[data-layout="dashboard"] .dock-item-color {
-  width: 26px;
-  height: 26px;
-}
-
+/* The only layout with room under the tile, so the only one that prints the
+   name there instead of floating it. */
 [data-layout="dashboard"] .dock-item-name {
   display: block;
-  max-width: 66px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  text-align: center;
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--page-foreground);
-  opacity: 0.75;
-  /* `--page-foreground` is white in every mode, so these sit on whatever the
-     wallpaper happens to be. The shadow is what keeps them readable on a light
-     photo. */
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
 }
 
-/* The name is already under the icon; the floating tooltip would only cover it. */
-[data-layout="dashboard"] .dock-item-label {
-  display: none;
+[data-layout="dashboard"] .dock-groups {
+  justify-content: flex-start;
+}
+
+[data-layout="dashboard"] .dock-divider {
+  margin: 0 6px;
+  height: var(--dock-glyph);
+  align-self: flex-start;
+}
+
+/* ------------------------------------------------------------ the tooltip */
+
+.dock-tip {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 999;
+  white-space: nowrap;
+  font-size: 11.5px;
+  font-weight: 500;
+  padding: 4px 9px;
+  border-radius: calc(7px * var(--corner-reach));
+  background: rgba(0, 0, 0, 0.78);
+  color: #fff;
+  pointer-events: none;
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  opacity: 0;
+  transform: translateY(3px) scale(0.96);
+  transition: opacity 130ms ease, transform 130ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.dock-tip[data-show="true"] {
+  opacity: 1;
+  transform: none;
+}
+
+/* --------------------------------------------------------------- dragging */
+
+.dock-drag-clone {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 1000;
+  pointer-events: none;
+  opacity: 0.95;
+  transform-origin: center;
+}
+
+.dock-drag-clone .dock-item-glyph {
+  transform: scale(1.12);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+}
+
+.dock-drag-clone.is-landing {
+  transition:
+    transform 240ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    opacity 240ms ease;
+}
+
+.dock-drag-clone.is-landing .dock-item-glyph {
+  transform: none;
+  transition: transform 240ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.dock-item.is-dock-dragging {
+  opacity: 0;
+}
+
+/* The tiles being shoved aside are moved with transforms against a snapshot
+   taken at pick-up, so this transition is the whole animation. */
+html.is-dock-dragging-active .dock-item,
+html.is-dock-dragging-active .dock-divider {
+  transition: transform 190ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+html.is-dock-dragging-active .dock-item .dock-item-glyph {
+  transition: none;
+}
+
+html.is-dock-dragging-active .dock-item:hover .dock-item-glyph {
+  transform: none;
+  background: color-mix(in srgb, var(--page-foreground) 10%, transparent);
+}
+
+/* A drop target — a folder tile, or a tab pill the shortcut would move to. */
+.dock-item.is-dock-drop .dock-item-glyph {
+  background: color-mix(in srgb, var(--accent) 55%, transparent);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent);
+  transform: scale(1.1);
+}
+
+.dock-tab-btn.is-dock-drop {
+  opacity: 1;
+  background: color-mix(in srgb, var(--accent) 45%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+/* ------------------------------------------------------------- tab pills */
+
+/* Six tabs with long names outrun the dock they sit under, so the pill row
+   scrolls too. The indicator is absolutely positioned inside it and therefore
+   scrolls with the pills rather than sliding off them. */
+.dock-tabs {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  max-width: 100%;
+  padding: 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.dock-tab-indicator {
+  position: absolute;
+  left: 0;
+  top: 2px;
+  bottom: 2px;
+  border-radius: 9999px;
+  corner-shape: round;
+  background: color-mix(in srgb, var(--page-foreground) 16%, transparent);
+  transition:
+    transform 320ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    width 320ms cubic-bezier(0.22, 0.61, 0.36, 1);
+  pointer-events: none;
+}
+
+[data-mode="light"] .dock-tab-indicator {
+  background: rgba(0, 0, 0, 0.16);
 }
 
 .dock-tab-btn {
-  font-size: 11px;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
   font-weight: 500;
-  padding: 2px 10px;
+  padding: 3px 11px;
   border-radius: 9999px;
   corner-shape: round;
   color: var(--page-foreground);
-  opacity: 0.4;
+  opacity: 0.6;
   cursor: pointer;
-  transition: opacity 150ms ease, background 150ms ease;
+  transition: opacity 180ms ease, background 180ms ease;
   border: none;
   background: transparent;
+  white-space: nowrap;
+  /* `--page-foreground` is white in both modes — these pills sit on whatever the
+     wallpaper is, so the shadow is what keeps them off a bright photo. */
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
 }
 
 .dock-tab-btn:hover {
-  opacity: 0.7;
+  opacity: 0.85;
 }
 
 .dock-tab-btn[aria-selected="true"] {
-  opacity: 0.9;
-  background: var(--page-foreground, rgba(255, 255, 255, 0.12));
-  background-color: rgba(255, 255, 255, 0.12);
+  opacity: 0.95;
 }
 
-[data-mode="light"] .dock-tab-btn[aria-selected="true"] {
-  background-color: rgba(0, 0, 0, 0.08);
+[data-layout="dashboard"] .dock-tabs {
+  align-self: flex-start;
+}
+
+/* ---------------------------------------------------------- folder popover */
+
+.dock-folder {
+  min-width: 268px;
+}
+
+.dock-folder-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 2px 8px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--popover-foreground);
+  border-bottom-color: color-mix(in srgb, var(--popover-foreground) 12%, transparent);
+}
+
+.dock-folder-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--popover-foreground);
+}
+
+.dock-folder-count {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  padding: 1px 7px;
+  border-radius: 9999px;
+  corner-shape: round;
+  color: color-mix(in srgb, var(--popover-foreground) 65%, transparent);
+  background: color-mix(in srgb, var(--popover-foreground) 10%, transparent);
 }
 
 .dock-folder-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   grid-auto-rows: min-content;
   align-content: start;
-  gap: 4px;
-  max-height: 320px;
+  gap: 2px;
+  max-height: 296px;
   overflow-y: auto;
   padding: 2px;
-  min-width: calc(3 * 80px + 2 * 4px);
-  min-height: calc(3 * 52px + 2 * 4px);
+}
+
+.dock-folder-empty {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28px 0;
+  font-size: 12px;
+  color: color-mix(in srgb, var(--popover-foreground) 45%, transparent);
 }
 
 .dock-folder-item {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-  padding: 8px 4px;
-  border-radius: calc(8px * var(--corner-reach));
+  gap: 5px;
+  padding: 8px 4px 7px;
+  border: none;
+  background: transparent;
+  border-radius: calc(10px * var(--corner-reach));
   cursor: pointer;
-  transition: background 120ms ease;
+  transition: background 140ms ease;
   text-align: center;
   min-width: 0;
 }
 
+.dock-folder-item-glyph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: calc(11px * var(--corner-reach));
+  background: color-mix(in srgb, var(--popover-foreground) 8%, transparent);
+  transition: transform 160ms cubic-bezier(0.22, 0.61, 0.36, 1), background 140ms ease;
+}
+
 .dock-folder-item:hover {
-  background: var(--surface);
+  background: color-mix(in srgb, var(--popover-foreground) 8%, transparent);
+}
+
+.dock-folder-item:hover .dock-folder-item-glyph {
+  transform: translateY(-2px);
+  background: color-mix(in srgb, var(--popover-foreground) 14%, transparent);
+}
+
+.dock-folder-item:active .dock-folder-item-glyph {
+  transform: scale(0.93);
 }
 
 .dock-folder-item-name {
-  font-size: 10px;
-  line-height: 1.2;
-  color: var(--foreground);
-  max-width: 72px;
+  font-size: 10.5px;
+  line-height: 1.25;
+  color: color-mix(in srgb, var(--popover-foreground) 80%, transparent);
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* ------------------------------------------------------- the inline editor */
+
+/* The picker is built for the settings dialog's palette. Remapping the four
+   tokens it draws from is what lets it be reused verbatim on a dark popover. */
+.dock-edit {
+  --surface: color-mix(in srgb, var(--popover-foreground) 9%, transparent);
+  --panel: color-mix(in srgb, var(--popover-foreground) 18%, transparent);
+  --foreground: var(--popover-foreground);
+  --muted: color-mix(in srgb, var(--popover-foreground) 55%, transparent);
+  --input: color-mix(in srgb, var(--popover-foreground) 6%, transparent);
+  --input-border: color-mix(in srgb, var(--popover-foreground) 14%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 272px;
+}
+
+.dock-edit-heading {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--popover-foreground) 50%, transparent);
+}
+
+.dock-edit-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.dock-edit-label {
+  font-size: 11px;
+  color: color-mix(in srgb, var(--popover-foreground) 60%, transparent);
+}
+
+.dock-edit input.is-invalid {
+  border-color: color-mix(in srgb, var(--danger) 70%, transparent);
+}
+
+.dock-edit-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dock-item-glyph,
+  .dock-groups,
+  .dock-tab-indicator,
+  .dock-tip,
+  .dock-folder-item-glyph {
+    transition-duration: 1ms;
+  }
+
+  .dock-groups.is-in-left,
+  .dock-groups.is-in-right {
+    animation: none;
+  }
 }
 
 /* Layout stage + widget cards */
@@ -422,6 +906,155 @@
 
 @media (prefers-reduced-motion: reduce) {
   .card-grid-item-placed {
+    transition: none;
+  }
+}
+
+/* Rearrange mode: the Default layout's grid becomes editable, everything else
+   steps back. See docs/layouts.md and src/layout-edit.ts. */
+
+[data-edit-dim] {
+  transition:
+    opacity 220ms ease,
+    filter 220ms ease;
+}
+
+html[data-editing="layout"] [data-edit-dim] {
+  opacity: 0.3;
+  filter: saturate(0.6);
+  pointer-events: none;
+}
+
+html[data-editing="layout"] #settings-open {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* The whole card is the handle, so nothing inside it may take the pointer. */
+html[data-editing="layout"] .card-grid-item {
+  cursor: grab;
+  touch-action: none;
+}
+
+html[data-editing="layout"] .card-grid-item > * {
+  pointer-events: none;
+}
+
+html[data-editing="layout"] .card-grid-item::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
+  opacity: 0;
+  transition: opacity 180ms ease;
+  pointer-events: none;
+}
+
+html[data-editing="layout"] .card-grid-item:hover::after {
+  opacity: 1;
+}
+
+html[data-card-dragging] {
+  cursor: grabbing;
+  user-select: none;
+}
+
+html[data-card-dragging] .card-grid-item {
+  cursor: grabbing;
+}
+
+/* The lifted card keeps its slot in the packing order — that is what makes the
+   others slide aside — but the floating clone is what the user sees. */
+.card-grid-item.is-card-dragging {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.card-drag-ghost {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 60;
+  opacity: 0.25;
+  pointer-events: none;
+  will-change: transform;
+  transform-origin: top left;
+}
+
+.card-drag-ghost.is-dropping {
+  transition:
+    transform 280ms cubic-bezier(0.2, 0, 0, 1),
+    opacity 280ms ease;
+  opacity: 1;
+}
+
+.card-drop-outline {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+  border-radius: var(--radius-lg);
+  border: 2px dashed color-mix(in srgb, var(--accent) 65%, transparent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  pointer-events: none;
+  opacity: 0;
+  transform-origin: top left;
+  transition:
+    transform 280ms cubic-bezier(0.2, 0, 0, 1),
+    width 280ms cubic-bezier(0.2, 0, 0, 1),
+    height 280ms cubic-bezier(0.2, 0, 0, 1),
+    opacity 160ms ease;
+}
+
+.card-drop-outline.is-visible {
+  opacity: 1;
+}
+
+.layout-edit-bar {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  border: 1px solid color-mix(in srgb, var(--foreground) 10%, transparent);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.18),
+    0 2px 8px rgba(0, 0, 0, 0.08);
+  opacity: 0;
+  transform: translateY(-12px);
+  transition:
+    opacity 200ms ease,
+    transform 200ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.layout-edit-bar.is-in {
+  opacity: 1;
+  transform: none;
+}
+
+.layout-edit-hint {
+  font-size: 12px;
+  color: var(--muted);
+  padding: 0 6px 0 4px;
+  white-space: nowrap;
+}
+
+.layout-edit-action {
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card-drop-outline,
+  .card-drag-ghost.is-dropping,
+  .layout-edit-bar,
+  [data-edit-dim] {
     transition: none;
   }
 }
@@ -473,6 +1106,32 @@
 .widget-tile .widget-card-body {
   flex: 1;
   justify-content: center;
+}
+
+/* Notepad. The editor carries no chrome of its own — the card is the paper —
+   so the focus cue is the hairline above the footer picking up the accent,
+   which also ties the caret to the status it is about to change. */
+.notepad-editor {
+  caret-color: var(--accent);
+}
+
+.notepad-editor::selection {
+  background: color-mix(in srgb, var(--accent) 38%, transparent);
+}
+
+.notepad-footer {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  transition: border-color var(--transition-speed) ease;
+}
+
+.notepad:focus-within .notepad-footer {
+  border-top-color: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .notepad-footer {
+    transition: none;
+  }
 }
 
 /* Dashboard side column: one widget at a time. */
@@ -634,6 +1293,517 @@
   .card-carousel-dot {
     transition: none;
   }
+}
+
+/* World clocks. A strip of compact chips under the main clock in Default and
+   Immersive, one tile per clock in the Dashboard's top row, and a hover card
+   over either chip form. See docs/world-clocks.md. */
+
+.world-clock-row[hidden] {
+  display: none;
+}
+
+.world-clock-chip {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 108px;
+  padding: 8px 12px 9px;
+  border-radius: var(--radius);
+  text-align: left;
+  cursor: default;
+  transition:
+    transform 180ms cubic-bezier(0.2, 0, 0, 1),
+    background-color 180ms ease,
+    border-color 180ms ease;
+}
+
+/* Default and Dashboard put the chips on the page, where they need their own
+   surface; the popover palette is dark in both modes, so one set of colours
+   reads correctly against any background. */
+[data-theme="modern"] .world-clock-chip {
+  background: var(--popover);
+  color: var(--popover-foreground);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  backdrop-filter: blur(16px) saturate(180%);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.12),
+    0 2px 8px rgba(0, 0, 0, 0.06),
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.08);
+}
+
+[data-theme="modern"] .world-clock-chip:hover,
+[data-theme="modern"] .world-clock-chip:focus-visible {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.16);
+  outline: none;
+}
+
+/* Immersive is the wallpaper layout: the clock has no card, so neither do the
+   clocks beside it. The text carries itself on --page-foreground instead. */
+[data-layout="immersive"] .world-clock-chip {
+  background: none;
+  border-color: transparent;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  color: var(--page-foreground);
+  padding: 4px 10px;
+  min-width: 92px;
+}
+
+[data-layout="immersive"] .world-clock-chip:hover,
+[data-layout="immersive"] .world-clock-chip:focus-visible {
+  background: color-mix(in srgb, var(--page-foreground) 12%, transparent);
+  border-color: transparent;
+}
+
+.wc-chip-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.wc-chip-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  opacity: 0.62;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wc-chip-offset {
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.4;
+  flex-shrink: 0;
+}
+
+.wc-chip-time {
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 19px;
+  line-height: 1.1;
+}
+
+.wc-chip-day {
+  font-size: 9px;
+  font-weight: 600;
+  padding: 1px 4px;
+  border-radius: 999px;
+  align-self: flex-start;
+  margin-top: 1px;
+  background: color-mix(in srgb, currentColor 16%, transparent);
+  opacity: 0.75;
+}
+
+.wc-chip-day[hidden] {
+  display: none;
+}
+
+.wc-meridiem {
+  font-size: 0.55em;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  opacity: 0.55;
+}
+
+.wc-meridiem[hidden] {
+  display: none;
+}
+
+/* Dashboard tile: the dial does the work a chart does in the weather tile. */
+
+.wc-tile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.wc-tile-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.wc-tile-time {
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 22px;
+  line-height: 1.1;
+}
+
+.wc-tile-meta {
+  font-size: 11px;
+  opacity: 0.5;
+  white-space: nowrap;
+}
+
+/* The dial. Colours come from currentColor so one face works on the dark chip
+   surface, on the wallpaper in Immersive, and inside a tile. */
+
+.wc-face {
+  flex-shrink: 0;
+  overflow: visible;
+}
+
+.wc-face-rim {
+  fill: color-mix(in srgb, currentColor 6%, transparent);
+  stroke: color-mix(in srgb, currentColor 22%, transparent);
+  stroke-width: 2;
+  transition: fill 600ms ease;
+}
+
+/* Night reads cooler and a shade deeper, so a glance at the face says roughly
+   what a glance out of the window there would. */
+.wc-face[data-daylight="false"] .wc-face-rim {
+  fill: color-mix(in srgb, #0b1220 45%, transparent);
+}
+
+.wc-tick {
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  opacity: 0.22;
+}
+
+.wc-tick-major {
+  opacity: 0.42;
+  stroke-width: 2.5;
+}
+
+.wc-hand {
+  stroke: currentColor;
+  stroke-linecap: round;
+}
+
+.wc-hand-hour {
+  stroke-width: 6;
+  opacity: 0.9;
+}
+
+.wc-hand-minute {
+  stroke-width: 4;
+  opacity: 0.7;
+}
+
+.wc-hand-second {
+  stroke: var(--accent);
+  stroke-width: 1.8;
+}
+
+.wc-face-pin {
+  fill: currentColor;
+  opacity: 0.9;
+}
+
+/* The hover card. Not a popover: it never takes the pointer, so moving onto it
+   can't steal the hover that opened it. */
+
+.world-clock-hovercard {
+  position: fixed;
+  z-index: 60;
+  width: 246px;
+  padding: 14px;
+  border-radius: var(--radius-lg);
+  background: var(--popover);
+  color: var(--popover-foreground);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(4px) scale(0.97);
+  transition:
+    opacity 140ms ease,
+    transform 140ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.world-clock-hovercard[data-placement="below"] {
+  transform: translateY(-4px) scale(0.97);
+}
+
+.world-clock-hovercard.is-visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.wc-hover-top {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+}
+
+.wc-hover-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.wc-hover-time {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 27px;
+  line-height: 1.05;
+}
+
+.wc-hover-date {
+  font-size: 11px;
+  opacity: 0.55;
+}
+
+.wc-hover-rule {
+  height: 1px;
+  margin: 12px 0 10px;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+
+.wc-hover-place {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.wc-hover-zone {
+  font-size: 11px;
+  opacity: 0.5;
+  margin-top: 1px;
+  overflow-wrap: anywhere;
+}
+
+.wc-hover-relative {
+  font-size: 11px;
+  font-weight: 500;
+  margin-top: 6px;
+  color: var(--accent);
+}
+
+/* Settings: the world-clock list and its inline timezone picker. */
+
+.wc-settings-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 8px;
+  margin: 0 -8px;
+  border-radius: var(--radius);
+  transition: background-color 140ms ease;
+}
+
+.wc-settings-row:hover {
+  background: var(--surface);
+}
+
+.wc-settings-row.is-dragging {
+  opacity: 0.4;
+}
+
+.wc-settings-row.is-drop-target {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+.wc-settings-grip {
+  cursor: grab;
+  opacity: 0.3;
+  flex-shrink: 0;
+  transition: opacity 140ms ease;
+}
+
+.wc-settings-row:hover .wc-settings-grip {
+  opacity: 0.6;
+}
+
+.wc-settings-grip:active {
+  cursor: grabbing;
+}
+
+/* Reads as plain text until it is hovered or focused, so the list looks like a
+   list rather than a form. */
+.wc-settings-label {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  color: var(--foreground);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 3px 6px;
+  margin-left: -6px;
+  outline: none;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease;
+}
+
+.wc-settings-row:hover .wc-settings-label {
+  border-color: var(--input-border);
+}
+
+.wc-settings-label:focus {
+  background: var(--input);
+  border-color: var(--accent);
+}
+
+.wc-settings-zone {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.wc-settings-time {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+  color: var(--foreground);
+  opacity: 0.75;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.wc-settings-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  opacity: 0;
+  flex-shrink: 0;
+  transition:
+    opacity 140ms ease,
+    background-color 140ms ease,
+    color 140ms ease;
+}
+
+.wc-settings-row:hover .wc-settings-remove,
+.wc-settings-remove:focus-visible {
+  opacity: 1;
+}
+
+.wc-settings-remove:hover {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  color: var(--danger);
+}
+
+.wc-picker {
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius);
+  background: var(--input);
+  overflow: hidden;
+}
+
+/* The field is the picker's own top edge, so it drops the input chrome the kit
+   gives it rather than drawing a box inside a box. */
+.wc-picker-search {
+  border: none;
+  background: transparent;
+  border-radius: 0;
+  padding: 9px 10px;
+}
+
+.wc-picker-search:focus {
+  border: none;
+}
+
+.wc-picker-results {
+  max-height: 216px;
+  overflow-y: auto;
+  padding: 4px;
+  border-top: 1px solid color-mix(in srgb, var(--input-border) 60%, transparent);
+}
+
+.wc-picker-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  text-align: left;
+  transition: background-color 120ms ease;
+}
+
+.wc-picker-option[aria-selected="true"] {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.wc-picker-option:disabled {
+  opacity: 0.4;
+}
+
+.wc-picker-names {
+  flex: 1;
+  min-width: 0;
+}
+
+.wc-picker-city {
+  font-size: 13px;
+  color: var(--foreground);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wc-picker-region {
+  font-size: 11px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wc-picker-side {
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.wc-picker-time {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  color: var(--foreground);
+}
+
+.wc-picker-offset {
+  font-size: 10px;
+  color: var(--muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .world-clock-chip,
+  .world-clock-hovercard,
+  .wc-face-rim {
+    transition: none;
+  }
+}
+
+/* Dashboard vertical placement. The whole block should read as sitting high on
+   the page rather than flush to the top: its midpoint lands at 2/5 of the
+   viewport height. Centring inside a box that spans the top 4/5 of the screen
+   does exactly that with no measuring — the centre of the top 4/5 is 2/5. Once
+   the content outgrows that box the aligner grows with it and `safe center`
+   keeps the block from overflowing off the top edge, so it falls back to
+   flowing from the top and scrolling. */
+.dash-aligner {
+  min-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: safe center;
 }
 
 /* Dashboard lower row. The side column collapses out of the grid entirely when
@@ -1275,4 +2445,714 @@
 
 #mesh-bg[hidden] {
   display: none;
+}
+
+/* ------------------------------------------------------------------ toasts */
+
+/* `.dialog-surface` has a backdrop-filter, which makes an open dialog the
+   containing block for its fixed-position descendants. A toast parented there
+   is therefore offset from the dialog, not the viewport, and 24px would put it
+   on top of the settings footer. */
+.toast-host {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: center;
+  gap: 8px;
+  z-index: 2000;
+  pointer-events: none;
+}
+
+dialog .toast-host {
+  bottom: 64px;
+}
+
+.toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(440px, calc(100vw - 32px));
+  padding: 8px 8px 8px 14px;
+  border-radius: calc(10px * var(--corner-reach));
+  /* `--popover` is dark in both modes, which is why the border, the text and
+     the close button are all white-alpha regardless of theme. */
+  background: var(--popover);
+  color: var(--popover-foreground);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3), 0 2px 8px rgba(0, 0, 0, 0.18);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  backdrop-filter: blur(16px) saturate(180%);
+  font-size: 13px;
+  animation: toast-in 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.toast-danger {
+  border-color: rgba(239, 68, 68, 0.45);
+}
+
+.toast-message {
+  flex: 1;
+  min-width: 0;
+}
+
+.toast-action {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border-radius: calc(7px * var(--corner-reach));
+  background: var(--accent);
+  color: var(--accent-foreground);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: filter 120ms ease;
+}
+
+.toast-action:hover {
+  filter: brightness(1.12);
+}
+
+.toast-close {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 9999px;
+  corner-shape: round;
+  border: none;
+  background: transparent;
+  color: currentColor;
+  opacity: 0.45;
+  cursor: pointer;
+  transition: opacity 120ms ease, background 120ms ease;
+}
+
+.toast-close:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.toast-leaving {
+  animation: toast-out 160ms ease forwards;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes toast-out {
+  to {
+    opacity: 0;
+    transform: translateY(6px) scale(0.97);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast,
+  .toast-leaving {
+    animation-duration: 1ms;
+  }
+}
+
+/* ------------------------------------------------- shortcuts settings panel */
+
+.sc-rail {
+  position: relative;
+  width: 152px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 8px;
+  overflow-y: auto;
+  border-right: 1px solid var(--input-border);
+  border-color: color-mix(in srgb, var(--input-border) 45%, transparent);
+}
+
+.sc-rail-heading {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 2px 8px 6px;
+}
+
+.sc-rail-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: calc(8px * var(--corner-reach));
+  font-size: 13px;
+  color: var(--foreground);
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  text-align: left;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.sc-rail-item:hover {
+  background: var(--surface);
+}
+
+.sc-rail-item[aria-selected="true"] {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.sc-rail-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: inherit;
+  font: inherit;
+  padding: 0;
+  cursor: inherit;
+}
+
+.sc-rail-name:read-write:focus {
+  cursor: text;
+}
+
+.sc-rail-count {
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.5;
+  flex-shrink: 0;
+}
+
+.sc-rail-add {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 6px 8px;
+  border-radius: calc(8px * var(--corner-reach));
+  font-size: 13px;
+  color: var(--muted);
+  border: 1px dashed var(--input-border);
+  background: transparent;
+  cursor: pointer;
+  transition: color 120ms ease, border-color 120ms ease;
+}
+
+.sc-rail-add:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.sc-rail-add:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* --- grid --- */
+
+.sc-grid {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 4px;
+  align-content: start;
+  padding: 4px 0 16px;
+}
+
+.sc-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  padding: 12px 6px 10px;
+  border-radius: calc(10px * var(--corner-reach));
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  text-align: center;
+  transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
+}
+
+.sc-tile:hover {
+  background: var(--surface);
+}
+
+.sc-tile:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.sc-tile[aria-selected="true"] {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+/* Space picks a tile up; arrows then move it. The lift is the only signal that
+   the keyboard is in grab mode. */
+.sc-tile[data-grabbed="true"] {
+  transform: translateY(-3px) scale(1.04);
+  border-color: var(--accent);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
+  z-index: 1;
+}
+
+.sc-tile-name {
+  font-size: 11px;
+  line-height: 1.25;
+  color: var(--foreground);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.sc-tile-menu {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: calc(6px * var(--corner-reach));
+  background: var(--panel);
+  color: var(--muted);
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 120ms ease, color 120ms ease;
+}
+
+.sc-tile:hover .sc-tile-menu,
+.sc-tile:focus-within .sc-tile-menu,
+.sc-tile-menu:focus-visible {
+  opacity: 1;
+}
+
+.sc-tile-menu:hover {
+  color: var(--foreground);
+}
+
+.sc-tile-badge {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 4px;
+  border-radius: 9999px;
+  corner-shape: round;
+  background: color-mix(in srgb, var(--foreground) 12%, transparent);
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.sc-tile-add {
+  border: 1px dashed var(--input-border);
+  color: var(--muted);
+}
+
+.sc-tile-add:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: transparent;
+}
+
+/* --- detail pane --- */
+
+.sc-detail {
+  width: 264px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  overflow-y: auto;
+  border-left: 1px solid color-mix(in srgb, var(--input-border) 45%, transparent);
+}
+
+.sc-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.sc-field-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+/* --- icon picker --- */
+
+.sc-icon-preview {
+  width: 46px;
+  height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: calc(10px * var(--corner-reach));
+  background: var(--surface);
+}
+
+.sc-segment {
+  display: flex;
+  padding: 2px;
+  gap: 2px;
+  border-radius: calc(8px * var(--corner-reach));
+  background: var(--surface);
+}
+
+.sc-segment-btn {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 2px;
+  border: none;
+  border-radius: calc(6px * var(--corner-reach));
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.sc-segment-btn:hover {
+  color: var(--foreground);
+}
+
+.sc-segment-btn[aria-pressed="true"] {
+  background: var(--panel);
+  color: var(--foreground);
+  font-weight: 500;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.sc-swatch-row {
+  display: flex;
+  gap: 5px;
+}
+
+.sc-swatch {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  corner-shape: round;
+  border: none;
+  cursor: pointer;
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+
+.sc-swatch:hover {
+  transform: scale(1.15);
+}
+
+.sc-swatch[aria-pressed="true"] {
+  box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px currentColor;
+  transform: none;
+}
+
+.sc-glyph-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 3px;
+}
+
+.sc-glyph-btn {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: calc(6px * var(--corner-reach));
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.sc-glyph-btn:hover {
+  background: var(--surface);
+  color: var(--foreground);
+}
+
+.sc-glyph-btn[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.sc-file-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: calc(8px * var(--corner-reach));
+  border: 1px dashed var(--input-border);
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 120ms ease, border-color 120ms ease;
+}
+
+.sc-file-label:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.sc-file-input {
+  display: none;
+}
+
+/* --- header, breadcrumb, selection bar --- */
+
+.sc-crumb {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  font-size: 13px;
+}
+
+.sc-crumb-btn {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  padding: 2px 4px;
+  border-radius: calc(6px * var(--corner-reach));
+  cursor: pointer;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color 120ms ease, background 120ms ease;
+}
+
+.sc-crumb-btn:hover {
+  color: var(--foreground);
+  background: var(--surface);
+}
+
+.sc-crumb-current {
+  font-weight: 600;
+  color: var(--foreground);
+  padding: 2px 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sc-selection-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 24px;
+  border-top: 1px solid color-mix(in srgb, var(--input-border) 45%, transparent);
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  font-size: 13px;
+}
+
+.sc-empty {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 44px 16px;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sc-tile,
+  .sc-swatch {
+    transition-duration: 1ms;
+  }
+}
+
+/* ------------------------------------------------------ drag and drop */
+
+body.sc-dragging {
+  cursor: grabbing;
+  user-select: none;
+}
+
+.sc-dragging-source {
+  opacity: 0.35;
+}
+
+.sc-drag-clone {
+  position: fixed;
+  z-index: 3000;
+  pointer-events: none;
+  opacity: 0.92;
+  border-radius: calc(10px * var(--corner-reach));
+  background: var(--panel);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
+  transform: scale(0.96);
+  transition: transform 130ms ease;
+}
+
+/* Shrinks when the drop would go *into* something rather than between. */
+.sc-drag-clone-into {
+  transform: scale(0.82);
+}
+
+.sc-drag-count {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 9999px;
+  corner-shape: round;
+  background: var(--accent);
+  color: var(--accent-foreground);
+  font-size: 10px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sc-drop-caret {
+  position: absolute;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+  pointer-events: none;
+  transition: left 110ms ease, top 110ms ease, height 110ms ease;
+  z-index: 2;
+}
+
+.sc-drop-into {
+  background: color-mix(in srgb, var(--accent) 22%, transparent) !important;
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.sc-drop-blocked {
+  background: color-mix(in srgb, var(--danger) 20%, transparent) !important;
+  border-color: var(--danger) !important;
+}
+
+.sc-drop-tab {
+  background: color-mix(in srgb, var(--accent) 22%, transparent) !important;
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.sc-rail-caret {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+  pointer-events: none;
+  transition: top 110ms ease;
+}
+
+/* --- import dialog --- */
+
+.sc-source-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: calc(10px * var(--corner-reach));
+  border: 1px solid color-mix(in srgb, var(--input-border) 60%, transparent);
+  background: transparent;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.sc-source-card:hover:not(:disabled) {
+  background: var(--surface);
+  border-color: var(--accent);
+}
+
+.sc-source-card:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.sc-import-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: calc(8px * var(--corner-reach));
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.sc-import-row:hover {
+  background: var(--surface);
+}
+
+.sc-import-dupe {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: 9999px;
+  corner-shape: round;
+  background: color-mix(in srgb, var(--warning) 20%, transparent);
+  color: var(--foreground);
+  font-size: 10px;
+}
+
+.sc-dest-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: calc(10px * var(--corner-reach));
+  border: 1px solid color-mix(in srgb, var(--input-border) 60%, transparent);
+  cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.sc-dest-option:has(input:checked) {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sc-drag-clone,
+  .sc-drop-caret,
+  .sc-rail-caret {
+    transition-duration: 1ms;
+  }
 }

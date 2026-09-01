@@ -8,9 +8,9 @@ Three arrangements of the same page — Default, Dashboard, Immersive — plus t
 
 | Mode | Value | Shape |
 |---|---|---|
-| **Default** | `"default"` (the default) | Clock and search bar at the top, a responsive masonry card region beneath (4/3/2/1 columns), dock pinned bottom-center. |
-| **Dashboard** | `"dashboard"` | A row of compact tiles across the top; below it two columns — the left holds clock, search, shortcuts and the settings button, the right is a one-at-a-time widget carousel. |
-| **Immersive** | `"immersive"` | The original layout: clock and search centered, dock pinned at the bottom, every widget behind a trigger button in the top-right corner. No cards. |
+| **Default** | `"default"` (the default) | Clock and search bar at the top, the dock directly beneath the search bar, then a responsive masonry card region (4/3/2/1 columns). The dock is in-flow and scrolls away with the content. |
+| **Dashboard** | `"dashboard"` | A row of compact tiles across the top; below it two columns — the left holds clock, search, shortcuts and the settings button, the right is a one-at-a-time widget carousel. The whole block sits high on the page rather than flush to the top — see *Vertical placement*. |
+| **Immersive** | `"immersive"` | The original layout: clock and search on the page's 2/5 line, a magnifying glass dock pinned at the bottom, every widget behind a trigger button in the top-right corner. No cards. |
 
 The mode lives in `store.sync.layout` and is stamped onto `<html>` as `data-layout`, alongside `data-theme` / `data-mode` / `data-accent`.
 
@@ -30,7 +30,8 @@ Everything on the page is one of two things, and the distinction is the whole de
 |---|---|---|
 | `search` | `#search-wrapper` | all three |
 | `clock` | `#clock` | all three (centred in Default and Immersive, left-aligned in Dashboard) |
-| `dock` | `#dock-wrapper` | all three |
+| `worldClocks` | `#world-clocks` (the chip row) | Default and Immersive; parked in Dashboard, which shows tiles instead |
+| `dock` | `#dock-wrapper` | all three — bottom-centre in Immersive, under the search bar in Default and Dashboard. It reads the layout back out of the store and re-presents itself; see [shortcuts.md](shortcuts.md#three-presentations-one-element). |
 | `settings` | `#settings-open` | all three |
 | `widgets` | `#widgets` (the trigger cluster) | Immersive only |
 
@@ -69,6 +70,19 @@ registerCard({
 | `actions` | Optional control for the card header. Called after `render()`, so it can close over what `render` just built. No card uses it today — the todo card moved its `+` into a toolbar inside the body, so the immersive popover gets it too. |
 | `onUnmount` | Called before the card is discarded. |
 
+### Registering at runtime
+
+Most widgets register once and stay registered. The world clocks don't: the user
+adds and removes them, so `layout.ts` also exports
+
+- **`unregisterCard(id)`** — drops the definition and releases the `enabledKey`
+  subscription `registerCard` took out for it.
+- **`batchCards(fn)`** — suppresses the rebuild each register/unregister would
+  otherwise trigger and does one at the end. Replacing five world clocks would
+  otherwise rebuild every card on the page ten times.
+
+See [world-clocks.md](world-clocks.md#the-dashboard-tiles).
+
 ### Regions
 
 | Region | Exists in | Shape | Where |
@@ -90,10 +104,37 @@ Current assignment:
 | Card | Default | Dashboard | Immersive |
 |---|---|---|---|
 | Clock | — (slot above search) | — (slot in the main column) | — (slot above search) |
+| World clocks | — (slot under the clock) | one `top` tile each | — (slot under the clock) |
 | Now Playing | `grid` | `top` | floating card, bottom-right |
 | Weather | `grid` | `top` | popover |
 | Calendar | `grid` (spans 2) | `side` | popover |
 | Todos | `grid` | `side` | popover |
+| Notepad | `grid` | `side` | popover |
+
+## Vertical placement
+
+Dashboard and Immersive both place their content block off top-dead-centre: its
+**midpoint sits at 2/5 of the viewport height**, so the page reads as balanced
+without drifting into the dead centre.
+
+Both do it the same way, with no measuring — centre a box that spans the top 4/5
+of the screen and its centre *is* 2/5 of the screen:
+
+- **Dashboard** — `.dash-aligner` (`styles.css`) wraps the whole block: it is
+  `min-height: 80vh` with `justify-content: center`. The padded wrapper inside is
+  symmetric, so its padding doesn't shift the midpoint.
+- **Immersive** — the clock/search column is centred in an absolutely positioned
+  box inset `top-0 bottom-[20%]` rather than the full stage. The dock and the
+  widget triggers keep their own corners and are unaffected.
+
+Once the Dashboard block outgrows 80vh the aligner grows with it, `safe center`
+degrades to `start` rather than letting the top overflow off-screen, and the
+block flows from the top of the (scrollable) root as it did before. The carousel
+transitions its own height between slides, so cycling widgets slides the whole block smoothly
+rather than jumping.
+
+Note that the `min-height: 26rem` floor on `.dash-lower` is part of the block
+being centred, so it also acts as a floor on how high the tile row can sit.
 
 ## The tile row
 
@@ -159,11 +200,22 @@ A card's span is clamped to the column count, so Calendar still spans the full w
 
 Cards are placed in order into the position whose top edge is highest; for a spanning card that top is the lowest point of the columns it covers. Ties go leftmost. This is a per-column height cursor, which is why the region can't be a flex row of column elements — a spanning card has to advance two cursors at once.
 
-### Collapsing to fewer columns
+### Card order
 
-The arrangement at N columns is derived by packing at 4 and folding down one column at a time. Each fold flattens the current placement into a linear order — **highest top edge first, and on a tie the rightmost card first**, so a card from a disappearing right-hand column lands above its left-hand neighbour — then repacks that order at N-1.
+The region's cards are **one linear list**, packed directly at whatever column
+count the viewport calls for. There is no separate per-width arrangement and
+nothing is derived from a wider one: 4 → 2 → 4 returns to the original layout
+because every pass re-packs the same list.
 
-Nothing is stored between folds: every layout pass re-derives from the widest arrangement, so 4 → 2 → 4 returns to exactly the original 4-column layout. Once drag-and-drop lands, the user's own arrangement replaces the registration order as the input to that fold.
+That is what makes drag-to-rearrange honest. The arrangement a user drags at
+three columns *is* what the stored order produces at three columns, so nothing
+shifts under them the moment they hit Save.
+
+The list comes from `store.sync.cardOrder`, applied by `applyCardOrder()` in
+`layout.ts` before `setItems()`. A card the stored list doesn't name — a widget
+added since the last rearrange — keeps its registration `order` and sorts after
+every hand-placed card, so a new widget appears at the end instead of displacing
+anything.
 
 ### Staying current
 
@@ -183,6 +235,75 @@ Two update paths, and the choice matters:
 - **A rebuild closure** the widget holds onto. Right when the body owns view state that a re-render would throw away: `calendar.ts` keeps `cardBody.rebuild()` so a refresh doesn't reset the 1d/1w view and the nav offset.
 
 `refreshCards()` (plural) rebuilds the whole set — use it when a card's *visibility* changes, not its contents.
+
+## Rearranging
+
+The user's own arrangement of the packed region, dragged on the real page.
+
+**Source:** `src/layout-edit.ts`, the drag API on `createCardGrid()`, the
+`html[data-editing="layout"]` rules in `styles.css`, and the Rearrange button in
+`buildLayoutSelector()` (`settings.ts`).
+
+### Entering and leaving
+
+The Appearance tab's Layout section carries a **Rearrange widgets** button under
+the three previews. It is hidden unless the layout is Default, and disabled
+unless there are at least two cards to swap (`canEditLayout()`, re-checked every
+time the dialog opens — which widgets are on is settled two tabs away).
+
+Pressing it closes the settings dialog, because the thing being edited is the
+page behind it. `startLayoutEdit()` then stamps `data-editing="layout"` on
+`<html>`, which is the whole visual mode:
+
+- `#settings-open` fades out — there is nowhere to go but Save or Cancel.
+- Everything marked `data-edit-dim` (the whole head — clock, search bar and the
+  dock beneath it — tagged in `frameDefault()`) drops to 30% and goes
+  `pointer-events: none`.
+- Every card's children go `pointer-events: none`, so the whole card is a
+  handle and no widget control can swallow the grab.
+
+A fixed Save / Cancel pair sits in the top-right corner. Save writes
+`grid.getOrder()` to `store.sync.cardOrder`; Cancel calls `grid.setOrder()` with
+the snapshot taken on entry. **Escape backs out one level** — an in-flight drag
+first, then the mode. A layout change from another tab exits the mode, since the
+switch takes the grid with it.
+
+### The drag
+
+Pointer Events, not HTML5 DnD, for the same reasons as
+[drag-and-drop.md](drag-and-drop.md): the drag image has to be a live element,
+and the grid has to animate while it moves. A `DRAG_THRESHOLD` of 3px separates
+a drag from a click.
+
+Three things move at once:
+
+| | What | Owner |
+|---|---|---|
+| **The floating card** | A clone of the card at 25% opacity, `position: fixed`, pinned to the cursor at the offset it was grabbed by | `layout-edit.ts` |
+| **The outline** | A dashed accent box marking the slot it would drop into, transitioned as the slot changes | `card-grid.ts` |
+| **The other cards** | Slide aside, because the packer re-runs with the dragged card at its previewed index | `card-grid.ts` |
+
+The lifted card **stays in the packing order** — that is what makes the others
+move — and is only rendered invisible (`.is-card-dragging`). Its height still
+feeds the packer, so the outline is always the size of the real thing.
+
+**Choosing the slot.** `hover(x, y)` doesn't hit-test rectangles. For every
+insertion index it re-packs the whole list with the dragged card at that index
+and measures how far the card *would* land from the floating clone's centre;
+closest wins. Spanning cards and the reflow they cause are therefore accounted
+for by construction rather than by special cases. A `SNAP_STICKINESS` bonus of
+28px on the index it is already at is what keeps it from flickering between two
+equidistant slots.
+
+**Dropping.** The clone flies to the outline's slot over 280ms while fading up
+to full opacity; the real card is revealed and the clone removed at the end of
+the flight, so the handoff is invisible. Escape mid-drag flies it back instead.
+A second pickup during that flight settles the first one early rather than being
+refused.
+
+Near the top or bottom edge of the scrolling frame the drag scrolls the page,
+and re-aims after each step, so the outline keeps tracking a cursor that is
+holding still at the edge.
 
 ## The switch
 
@@ -216,5 +337,7 @@ Card registration happens in the widget modules' **module bodies**, which ES mod
 - **Cards are only in the top-level regions.** There's no nesting and no per-card size preference. Empty regions hide themselves in Dashboard, but Default's packed grid still leaves a blank area when every widget is off.
 - **`span` only means something in a packed region.** Dashboard's `main` is the one plain region left, so `SPAN_CLASSES` exists for a case no card uses; `top` and `side` ignore `span` outright.
 - **Dashboard's `main` region is empty.** Nothing mounts there. It is kept as the place a full-width panel under the shortcuts would go, and hides itself when unused.
-- **Region assignment is hardcoded, and so is form.** `regions` is a literal in each widget, and `renderTile` fixes what it looks like there. Making placement user-configurable means moving that map into the store, adding drag-to-rearrange, and letting either form appear in either region — the carousel would have to accept a tile and the top row a full panel.
-- **The packer has no drag-and-drop yet.** Card order comes from `order`, and the fold rule runs over that. The absolute positioning and transform-based placement are in place for it.
+- **Region assignment is hardcoded, and so is form.** `regions` is a literal in each widget, and `renderTile` fixes what it looks like there. Rearranging moves cards within Default's grid, but which *region* a card lives in — and whether it renders as a tile or a panel — is still fixed in code. Making that user-configurable means moving the map into the store and letting either form appear in either region: the carousel would have to accept a tile and the top row a full panel.
+- **Only the Default grid can be rearranged.** Dashboard's `top` row and `side` carousel still order themselves by the registration `order`, and `cardOrder` doesn't apply to them.
+- **No keyboard path to rearranging.** The drag is pointer-only. There is no way to move a card with the keyboard, and no screen-reader announcement of where a card would land.
+- **A card's span is fixed.** The user can move Calendar but can't make it one column wide, or Weather two.

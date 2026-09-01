@@ -82,7 +82,7 @@ Standalone surface and text tokens:
 | `--page-foreground` | `text-page-foreground` | Text over the wallpaper — always white |
 | `--page-overlay` | `bg-page-overlay` | Scrims over the wallpaper — always black |
 | `--page-bg` | — | The page background color on `html`; also the seed for the mesh gradient |
-| `--swatch-*` | `bg-swatch-teal` | The ten palette colors, for settings swatches |
+| `--swatch-*` | `bg-swatch-teal` | The ten palette colors, for settings swatches and shortcut icons |
 | `--dialog` / `--dialog-border` / `--dialog-blur` | — | Consumed by `.dialog-surface`, not exposed as utilities |
 | `--mode-light-*` / `--mode-dark-*` | — | Colors for the light/dark buttons in settings |
 
@@ -153,7 +153,9 @@ When `bgSource` is `color`, this token is no longer painted directly — it is t
 
 ### Swatches (`--swatch-*`)
 
-The circles in the settings color pickers. Light-mode swatches match the light accents; dark-mode swatches are pushed brighter than the dark accents (teal is `#5eead4` as a swatch versus `#20b8a6` as an accent) so they stay legible as small dots on a dark panel.
+The circles in the settings color pickers, and the fill behind every colored shortcut, folder and tab icon. Light-mode swatches match the light accents; dark-mode swatches are pushed brighter than the dark accents (teal is `#5eead4` as a swatch versus `#20b8a6` as an accent) so they stay legible as small dots on a dark panel.
+
+**These tokens are the only definition.** `shortcut-icon.ts` emits `var(--swatch-<name>)` rather than resolving to hex in JS, so light and dark stay separate for free. Four JS copies of this palette used to exist — in `dock.ts`, `shortcut-settings.ts`, `settings.ts` and `search-provider-shortcuts.ts` — with values that disagreed both with each other and with these tokens, so the same shortcut rendered one color in the dock and another in settings.
 
 ## Component CSS
 
@@ -161,11 +163,18 @@ Most styling lives in Tailwind utility strings, but effects Tailwind can't expre
 
 | Class | Used by | What it is |
 |---|---|---|
-| `.dock-surface` | `dock.ts` | The dock's glass slab: 20px blur, 180% saturate, layered shadow, inset highlight. Separate light-mode rule swaps to a white translucent fill. |
-| `.dock-item`, `.dock-item-glyph`, `.dock-item-name`, `.dock-item-favicon`, `.dock-item-color`, `.dock-item-label` | `dock.ts` | 48px tiles, hover lift, active squash, fixed-position hover label. A `[data-layout="dashboard"]` block re-cuts the same markup into standing labelled circles with no surrounding pill — see [shortcuts.md](shortcuts.md#the-dock). |
-| `.dock-suggestion` | `dock.ts` | Fainter fill marking recommendation tiles |
-| `.dock-tab-btn` | `dock.ts` | Pill tab selector; forces `corner-shape: round` |
-| `.dock-folder-grid`, `.dock-folder-item` | `dock.ts` | 3-column folder popover grid |
+| `--dock-tile`, `--dock-gap`, `--dock-spread` | `dock.ts` writes them onto `#dock` | The row's measurements. JS owns them because JS lays the row out; the stylesheet reads them so it can never contradict the pass that placed the tiles. |
+| `--dock-glyph`, `--dock-icon`, `--dock-glyph-radius`, `--dock-headroom` | `styles.css`, per `[data-layout]` | The row's proportions. Set alongside each layout's block, so one rule changes a mode's whole feel. |
+| `#dock::before` | `styles.css` | The Immersive glass shelf: 20px blur, 180% saturate, layered shadow, inset highlight, and a diluted `--page-overlay` fill (that token is opaque, so reading it straight paints a solid slab). A pseudo-element rather than a background, and inset by `--dock-headroom`, so magnified tiles rise clear of the shelf they sit on. |
+| `.dock-item`, `.dock-item-glyph`, `.dock-item-name` | `dock.ts` | Hover lift, active squash. `[data-layout]` blocks re-cut the same markup three ways: bare icons on a shelf, quiet plates in Default, standing labelled circles in Dashboard — see [shortcuts.md](shortcuts.md#three-presentations-one-element). |
+| `.dock-item-glyph[data-icon="mark"]` | `dock.ts` via `mount()` | A favicon is a logo on its own ground; a glyph or monogram is a mark that needs one. The attribute publishes which of the three `renderIcon` produced so only the second kind gets a plate on the Immersive shelf. |
+| `.dock-suggestion` | `dock.ts` | Dashed, fainter tile marking a recommendation as a guess rather than a bookmark |
+| `.dock-tip` | `dock.ts` | One reused, body-parented hover tooltip. Body-parented because the scroller clips its overflow and, in Immersive, the tile it labels is being scaled out from under it. |
+| `.dock-tab-btn`, `.dock-tab-indicator` | `dock.ts` | Pill tab selector; the active underline is one sliding element, not a border per pill |
+| `.dock-drag-clone`, `.is-dock-dragging`, `.is-dock-drop` | `dock-drag.ts` | The floating copy, the emptied slot, and a lit drop target |
+| `.dock-folder`, `.dock-folder-grid`, `.dock-folder-item` | `dock.ts` | 4-column folder popover with a counted header |
+| `.dock-edit` | `dock-menu.ts` | The inline editor. Remaps `--surface` / `--panel` / `--foreground` / `--muted` / `--input*` locally, which is what lets `createIconPicker` — built for the settings dialog's palette — be reused verbatim on a dark popover. |
+| `.sc-icon` + `.sc-icon-img` / `.sc-icon-tile` / `.sc-icon-glyph` | `shortcut-icon.ts` via `renderIcon()` | Every shortcut, folder and tab icon in the app. The variant class is the whole styling contract: consumers either size it inline or let CSS do it (`.dock-item .sc-icon` reads `--dock-icon`, which each layout sets). |
 | `.widget-card`, `.widget-tile` | `layout.ts` via `createCard()` | The card surface, on the **popover** palette so a body lifted out of a popover needs no restyling. `.widget-tile` is its Dashboard top-row variant: fixed 118px height, intrinsic width. |
 | `.card-grid-item` | `card-grid.ts` | Absolute placement plus the transform transition the packer animates |
 | `.card-carousel*` | `card-carousel.ts` | The one-at-a-time side region — height-tracking viewport, directional crossfade, hover chevrons, dot indicators |
@@ -229,19 +238,19 @@ const raw = getIconSvg("check")              // → the SVG source string
 
 **Adding a theme.** Call `registerTheme(name, map)` from a new module, import it for side effect in `index.ts`, and add the name to the `theme` union in `defaults.ts`. There's no fallback: if the active theme's map lacks a name, `icon()` renders an empty span silently (`registry.ts:71`).
 
-The `modern` set has 63 icons: UI chrome (settings, close, check, chevrons, plus, edit, trash, alertTriangle), settings-nav tabs (`tab*`), mode toggles (`mode*`), media controls (play, pause, skip*, musicNote), weather conditions (`wx*` — clear, clearNight, partly, partlyNight, cloudy, fog, drizzle, rain, sleet, snow, thunder, unknown), and feature icons (calendar, folder, globe, link, sparkle, spinner, locationOff, spotify, bgImage, bgUpload, todoList, todoEmpty, dragHandle, externalLink, refresh), plus the todo widget's
+The `modern` set has 67 icons: UI chrome (settings, close, check, chevrons, plus, edit, trash, alertTriangle), settings-nav tabs (`tab*`), mode toggles (`mode*`), media controls (play, pause, skip*, musicNote), weather conditions (`wx*` — clear, clearNight, partly, partlyNight, cloudy, fog, drizzle, rain, sleet, snow, thunder, unknown) and the two solar events (`wxSunrise`, `wxSunset`), and feature icons (calendar, folder, globe, link, sparkle, spinner, locationOff, spotify, bgImage, bgUpload, todoList, todoEmpty, dragHandle, externalLink, refresh), plus the todo widget's
 row of actions (moreVertical, pin, pinFilled, repeat, archive, archiveRestore,
 checkCircle, subtasks, flag).
 
-The `wx*` set is mapped from WMO weather codes in `weather.ts`; codes 0–2 have a night variant picked by the API's `is_day` flag.
+The condition half of the `wx*` set is mapped from WMO weather codes in `weather.ts`; codes 0–2 have a night variant picked by the API's `is_day` flag. `wxSunrise` / `wxSunset` are not condition icons — they mark the next solar crossing and are chosen by which one is next, not by any code.
 
 ## Refactor candidates
 
 - **Four palettes maintained by hand.** Every color exists in the light block, the dark block, the `:root` fallback, and (for the ten) the accent/bg/swatch tables — around 90 lines of near-duplicate hex. Nothing checks that they agree. Generating the accent/bg/swatch rules from one source, or deriving dark from light programmatically, would remove a whole class of drift.
-- **`--special`, `--neutral`, `--success` are dead.** All three triplets are declared in three places each and mapped into `@theme`, and no utility referencing them appears anywhere in `src/`. `warning` is used exactly twice (`shortcut-drag.ts`), `secondary` three times.
+- **`--special`, `--neutral`, `--success` are dead.** All three triplets are declared in three places each and mapped into `@theme`, and no utility referencing them appears anywhere in `src/`. `warning` is used once (the import dialog's duplicate badge), `secondary` three times.
 - **The `:root` fallback duplicates the light palette** with no mechanism keeping them in sync. Since `theme.ts` stamps `data-theme` before paint, it's arguably unnecessary — or it should be the single definition that `[data-mode="light"]` inherits from.
 - **`--radius-2xl` is declared but never mapped into `@theme`**, so no `rounded-theme-2xl` utility exists. Either map it or drop it.
 - **Three unread tokens:** `--panel-opacity`, `--border-width`, `--transition-speed`.
-- **`.dock-item:hover` sets `background` twice** (`styles.css:147`) — a `var(--page-foreground, …)` line immediately overridden by a literal `rgba`. The first declaration does nothing.
+- **The dock's `[data-layout]` blocks each restate the tile's resting fill.** Immersive clears it, Default softens it, Dashboard rounds it — three overrides of one base rule. A `--dock-tile-fill` token set per layout would say the same thing once.
 - **`squircle.ts` has no call sites.** Decide whether the geometric path is needed anywhere; if not, delete it rather than leaving a second, divergent definition of the app's corner shape.
 - **Icon sizing is imperative.** `opts.size` rewrites SVG attributes after render instead of the SVGs carrying `width="100%"` and taking their size from CSS, which is why every call site has to pass a pixel number.

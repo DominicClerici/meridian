@@ -15,7 +15,7 @@ initWeather()
         └─ metric == Air Quality?          → GET /v1/air-quality on the separate host
 ```
 
-One forecast request covers every metric. `current=` drives the trigger and the headline, `hourly=` with `past_days=1&forecast_days=2` gives a 72-hour span the chart window slides inside, and `daily=` gives each metric's high and low. `timezone=auto` means every timestamp comes back in the **forecast location's** timezone, and the whole module reasons in that zone rather than the browser's — the two only differ when a city was picked by hand.
+One forecast request covers every metric. `current=` drives the trigger and the headline, `hourly=` with `past_days=1&forecast_days=2` gives a 72-hour span the chart window slides inside, and `daily=` gives each metric's high and low plus the three days of sunrise/sunset times behind [the sun row](#sunrise-and-sunset). The daily block is requested in two halves — `DAILY_VARS` for the numeric aggregates and `DAILY_TIME_VARS` for `sunrise`/`sunset`, which come back as wall-clock strings and so cannot ride in the same numeric map. `timezone=auto` means every timestamp comes back in the **forecast location's** timezone, and the whole module reasons in that zone rather than the browser's — the two only differ when a city was picked by hand.
 
 Three unit parameters ride along, all derived from the single `weatherUnit` setting: `temperature_unit`, `wind_speed_unit`, and `precipitation_unit`. Fahrenheit implies mph and inches, Celsius implies km/h and mm. The API converts server-side, so changing the unit clears every cache.
 
@@ -40,12 +40,12 @@ State `no-location` — reached only when the timezone is unmapped *and* nothing
 |---|---|
 | `sp:weather:cachedData` | Last current-conditions result: `weatherCode`, `isDay`, and a `values` map keyed by API variable |
 | `sp:weather:lastFetch` | Timestamp for the 120s cooldown |
-| `sp:weather:hourlyData` | The 72-point series for every variable, the daily aggregates, `utcOffset`, `timezone`, and `fetchedAtHour` |
+| `sp:weather:hourlyData` | The 72-point series for every variable, the daily aggregates, the daily `sun` times, `utcOffset`, `timezone`, and `fetchedAtHour` |
 | `sp:weather:aqiData` | The 72-point US AQI series plus its current reading and `utcOffset` |
 
 The cooldown is skipped when `seriesStale()` is true — the hour bucket (`Date.now() / 3_600_000`) rolled over since the series was fetched, so the chart window has moved and the data behind it has to move with it.
 
-Each getter validates the shape it reads and returns `null` on a mismatch, which is how caches written by earlier versions get discarded instead of throwing: `getCachedSeries()` requires a keyed `hourly` map, `getCachedData()` requires a `values` map.
+Each getter validates the shape it reads and returns `null` on a mismatch, which is how caches written by earlier versions get discarded instead of throwing: `getCachedSeries()` requires a keyed `hourly` map, `getCachedData()` requires a `values` map. `sun` is deliberately *not* required — a cache written before sun times were requested stays usable and simply renders no sun row until the next fetch fills it in.
 
 A failed forecast fetch falls back to the cached reading and stays in `loaded` rather than showing an error, so a brief network blip is invisible.
 
@@ -73,6 +73,25 @@ Each metric is one `MetricDef` in the `METRICS` array — its API variable, any 
 
 The endpoint has no daily aggregates, so the metric sets `derivedExtremes` and the high/low are computed from the day's own hourly values.
 
+## Sunrise and sunset
+
+One line under the chart, naming whichever crossing comes **next** — sunset through the day, sunrise once it is dark — with its wall-clock time and how far off it is:
+
+```
+────────────── 24-hour chart ──────────────
+ ☀↓  Sunset  7:42 PM                in 3h 12m
+```
+
+`nextSolarEvent()` scans both daily arrays for the earliest timestamp still ahead of now and returns the winner. It reasons in the forecast location's zone like everything else here: sun times carry no UTC offset, so `parseWallClock()` reads them as UTC and compares them against a "now" shifted into the same frame — the same trick as `wallClock()`, and for the same reason. Because the series spans yesterday through tomorrow, tomorrow's sunrise is already in hand long before midnight.
+
+It returns `null` at polar latitudes, where the API reports no crossing for the day, and the row hides itself rather than inventing one.
+
+`formatWallTime()` is the minute-precision counterpart to `formatHour()` — both follow the clock's `clock24Hour` setting, but the chart's hour labels are always on the hour and a sunset is not. `formatCountdown()` gives `in 42m`, `in 3h 12m`, `in 3h`, or `any moment` under a minute.
+
+**Keeping the countdown honest.** The forecast only comes round every five minutes, which is far too coarse for a number reading in minutes, so `SUN_TICK_INTERVAL` (60s) drives `tickBodies()` alongside the refresh interval — both start and stop together with `weatherEnabled`. A tick calls each live body's `tick`, which is `showSun()` alone: it rewrites four bits of text and redraws one icon, touching neither the chart nor the headline, so a pointer resting on the chart is undisturbed. That is why `LiveBody` carries `tick` as well as `refresh`.
+
+The tile deliberately shows **no** countdown. It is only rebuilt on a fetch, and a countdown frozen five minutes behind is worse than a clock time that simply stays true.
+
 ## Trigger
 
 | State | Renders |
@@ -91,8 +110,9 @@ When the location came from a timezone estimate, `appendApproximateBadge()` over
 ## The tile
 
 `buildWeatherTile()` is the Dashboard top row's form: the condition glyph, the
-selected metric's reading at 30px, and one caption line naming the metric and
-the condition. No chart and no metric picker — a tile is 118px tall and sized by
+selected metric's reading at 30px, one caption line naming the metric and
+the condition, and the next sun time — 118px leaves room for the third line, and
+it is the one fact worth a glance that the reading itself cannot carry. No chart and no metric picker — a tile is 118px tall and sized by
 its own content, so anything that needs room belongs in the body instead. The
 tile's card header is the location rather than the word "Weather", via
 `tileTitle` ([layouts.md](layouts.md#the-tile-row)).
@@ -106,8 +126,11 @@ Feels Like ⌄
 Boulder, CO, US                       H 94°   ☀
 93°  ⟨hovered hour⟩                   L 61°
 ────────────── 24-hour chart ──────────────
+☀↓ Sunset  7:42 PM                        in 3h 12m
 Approximate — estimated from your timezone (Denver). Set an exact location in settings.
 ```
+
+The sun row sits below the chart, behind a hairline rule: it is a fact about the day rather than part of the reading, and it does not move when the metric changes. Its icon is tinted `text-accent`, tying it to the chart line drawn in the same colour.
 
 **Everything is sized from the host's measured width, never the viewport.** A `ResizeObserver` on the body root updates `hostWidth` and calls `render()`, which sets the selector, caption, corner, icon, and chart dimensions from that one number, so the same body is correct at 200px and at 600px. The first `render()` runs at a placeholder 280px; the observer corrects it on the first frame.
 
@@ -174,7 +197,7 @@ Everything below comes back from the same `api.open-meteo.com/v1/forecast` call 
 
 **Series only, no daily counterpart:** `visibility`, `snow_depth`, `wet_bulb_temperature_2m`, `surface_temperature`, `soil_temperature_0cm`, `soil_moisture_0_to_1cm`, `freezing_level_height`, `vapour_pressure_deficit`, `evapotranspiration`, `et0_fao_evapotranspiration`, `shortwave_radiation`, `direct_radiation`, `diffuse_radiation`, `sunshine_duration`, `is_day`, and the convective set `cape` / `lifted_index` / `convective_inhibition` / `boundary_layer_height` / `total_column_integrated_water_vapour`.
 
-**Daily only, no series:** `sunrise`, `sunset`, `daylight_duration`, `wind_direction_10m_dominant`, `shortwave_radiation_sum`, `uv_index_clear_sky_max`.
+**Daily only, no series:** `sunrise` ✅ and `sunset` ✅ (not metrics — see [Sunrise and sunset](#sunrise-and-sunset)), `daylight_duration`, `wind_direction_10m_dominant`, `shortwave_radiation_sum`, `uv_index_clear_sky_max`.
 
 **On the air-quality host** (`air-quality-api.open-meteo.com/v1/air-quality`, already in `host_permissions`): `us_aqi` ✅, plus `european_aqi`, `pm2_5`, `pm10`, `ozone`, `nitrogen_dioxide`, `sulphur_dioxide`, `carbon_monoxide`, `ammonia`, `dust`, `aerosol_optical_depth`, `uv_index`, and the pollen set (`alder` / `birch` / `grass` / `ragweed`, Europe only). These share one request, so a second air-quality metric is free once that fetch is already happening.
 

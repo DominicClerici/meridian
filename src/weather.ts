@@ -24,6 +24,12 @@ type Series = {
   hourly: Record<string, (number | null)[]>
   daily: Record<string, (number | null)[]>
   dailyDates: string[]
+  /**
+   * Sunrise and sunset wall clocks, parallel to `dailyDates`. Optional because a
+   * cache written before they were requested has to stay readable until the next
+   * fetch fills it in — and because polar latitudes report no crossing at all.
+   */
+  sun?: { sunrise: (string | null)[]; sunset: (string | null)[] }
   utcOffset: number
   timezone: string
   fetchedAtHour: number
@@ -90,6 +96,8 @@ const LS_HOURLY = "sp:weather:hourlyData"
 const LS_AQI = "sp:weather:aqiData"
 const COOLDOWN = 120_000
 const REFRESH_INTERVAL = 300_000
+/** How often the "in 3h 12m" beside the next sun time is rewritten. */
+const SUN_TICK_INTERVAL = 60_000
 
 /** Hours in the chart, and the local-time band that gets the calendar-day window. */
 const WINDOW_HOURS = 24
@@ -124,6 +132,9 @@ const DAILY_VARS = [
   "precipitation_probability_max",
 ]
 
+/** Daily fields that come back as wall clocks rather than numbers. */
+const DAILY_TIME_VARS = ["sunrise", "sunset"]
+
 type State = "no-location" | "loading" | "loaded" | "error"
 
 let currentState: State = "loading"
@@ -132,12 +143,19 @@ let currentLocation: ResolvedLocation | null = null
 let seriesCache: Series | null = null
 let aqiCache: AqiData | null = null
 let refreshIntervalId: ReturnType<typeof setInterval> | null = null
+let sunTickId: ReturnType<typeof setInterval> | null = null
 let openPopoverClose: (() => void) | null = null
 let fetchInFlight = false
 let aqiInFlight = false
 
 /** Live body instances, pruned on every rebuild so detached bodies can't pile up. */
-type LiveBody = { root: HTMLElement; ro: ResizeObserver; refresh: () => void }
+type LiveBody = {
+  root: HTMLElement
+  ro: ResizeObserver
+  refresh: () => void
+  /** Rewrites only the countdown text, so it can run while the chart is hovered. */
+  tick: () => void
+}
 const liveBodies = new Set<LiveBody>()
 
 function pruneBodies(): void {
@@ -151,6 +169,16 @@ function pruneBodies(): void {
 function refreshBodies(): void {
   pruneBodies()
   for (const entry of liveBodies) entry.refresh()
+}
+
+/**
+ * The forecast only comes round every five minutes, which is far too coarse for
+ * a countdown reading in minutes. This redraws the sun row alone — no rebuild,
+ * so a pointer resting on the chart is undisturbed.
+ */
+function tickBodies(): void {
+  pruneBodies()
+  for (const entry of liveBodies) entry.tick()
 }
 
 function hourBucket(): number {
@@ -517,7 +545,8 @@ async function fetchWeather(): Promise<void> {
     const res = await fetch(
       `https://api.open-meteo.com/v1/forecast?latitude=${coords.lat}&longitude=${coords.lon}` +
         `&current=${[...HOURLY_VARS, "weather_code", "is_day"].join(",")}` +
-        `&hourly=${HOURLY_VARS.join(",")}&daily=${DAILY_VARS.join(",")}` +
+        `&hourly=${HOURLY_VARS.join(",")}` +
+        `&daily=${[...DAILY_VARS, ...DAILY_TIME_VARS].join(",")}` +
         `&past_days=1&forecast_days=2` +
         `&temperature_unit=${imperial ? "fahrenheit" : "celsius"}` +
         `&wind_speed_unit=${imperial ? "mph" : "kmh"}` +
@@ -553,6 +582,10 @@ async function fetchWeather(): Promise<void> {
         hourly,
         daily,
         dailyDates: json.daily?.time ?? [],
+        sun: {
+          sunrise: Array.isArray(json.daily?.sunrise) ? json.daily.sunrise : [],
+          sunset: Array.isArray(json.daily?.sunset) ? json.daily.sunset : [],
+        },
         utcOffset: json.utc_offset_seconds ?? 0,
         timezone: json.timezone ?? "",
         fetchedAtHour: hourBucket(),
@@ -760,6 +793,76 @@ function formatAxisHour(iso: string): string {
 
 function clamp(min: number, value: number, max: number): number {
   return Math.max(min, Math.min(value, max))
+}
+
+// ---------------------------------------------------------------- the sun
+
+type SolarEvent = {
+  kind: "sunrise" | "sunset"
+  /** The location's own wall clock, `YYYY-MM-DDTHH:MM`. */
+  iso: string
+  minutesAway: number
+}
+
+/**
+ * Sun times carry no offset, like every other timestamp here — they are the
+ * forecast location's wall clock. Reading them as UTC and comparing against a
+ * "now" shifted into the same frame keeps the browser's zone out of it, which is
+ * what makes a hand-picked city report its own sunset rather than yours.
+ */
+function parseWallClock(iso: string): number {
+  return Date.parse(iso.length === 16 ? `${iso}:00Z` : `${iso}Z`)
+}
+
+/**
+ * Whichever crossing comes first from now: sunset through the day, sunrise once
+ * it is dark. The forecast spans yesterday through tomorrow, so tomorrow's
+ * sunrise is already in hand well before midnight. Null inside a polar day or
+ * night, where the API reports no crossing at all.
+ */
+function nextSolarEvent(): SolarEvent | null {
+  const series = seriesCache ?? getCachedSeries()
+  if (!series?.sun) return null
+
+  const now = Date.now() + series.utcOffset * 1000
+  let best: SolarEvent | null = null
+  let bestMs = Infinity
+
+  for (const kind of ["sunrise", "sunset"] as const) {
+    for (const iso of series.sun[kind] ?? []) {
+      if (typeof iso !== "string") continue
+      const ms = parseWallClock(iso)
+      if (!Number.isFinite(ms) || ms <= now || ms >= bestMs) continue
+      bestMs = ms
+      best = { kind, iso, minutesAway: Math.round((ms - now) / 60_000) }
+    }
+  }
+
+  return best
+}
+
+function solarIconName(kind: SolarEvent["kind"]): string {
+  return kind === "sunrise" ? "wxSunrise" : "wxSunset"
+}
+
+function solarLabel(kind: SolarEvent["kind"]): string {
+  return kind === "sunrise" ? "Sunrise" : "Sunset"
+}
+
+/** Wall clock to the minute, unlike `formatHour()`, which only ever shows :00. */
+function formatWallTime(iso: string): string {
+  const h = Number(iso.slice(11, 13))
+  const m = iso.slice(14, 16)
+  if (store.sync.get("clock24Hour")) return `${String(h).padStart(2, "0")}:${m}`
+  return `${h % 12 || 12}:${m} ${h >= 12 ? "PM" : "AM"}`
+}
+
+function formatCountdown(minutes: number): string {
+  if (minutes < 1) return "any moment"
+  if (minutes < 60) return `in ${minutes}m`
+  const h = Math.floor(minutes / 60)
+  const m = minutes % 60
+  return m === 0 ? `in ${h}h` : `in ${h}h ${m}m`
 }
 
 // ---------------------------------------------------------------- the chart
@@ -1234,6 +1337,30 @@ export function buildWeatherBody(): HTMLElement {
   emptyEl.hidden = true
   root.appendChild(emptyEl)
 
+  const sunRow = document.createElement("div")
+  sunRow.className =
+    "flex items-center gap-1.5 min-w-0 pt-2 border-t border-popover-foreground/10"
+  sunRow.hidden = true
+
+  const sunGlyph = document.createElement("span")
+  sunGlyph.className = "flex items-center text-accent shrink-0"
+  sunRow.appendChild(sunGlyph)
+
+  const sunLabel = document.createElement("span")
+  sunLabel.className = "text-popover-foreground/55 whitespace-nowrap"
+  sunRow.appendChild(sunLabel)
+
+  const sunTime = document.createElement("span")
+  sunTime.className = "font-medium tabular-nums truncate"
+  sunRow.appendChild(sunTime)
+
+  const sunAway = document.createElement("span")
+  sunAway.className =
+    "ml-auto pl-2 text-popover-foreground/40 tabular-nums whitespace-nowrap"
+  sunRow.appendChild(sunAway)
+
+  root.appendChild(sunRow)
+
   const note = approximateNote()
   if (note) root.appendChild(note)
 
@@ -1264,6 +1391,21 @@ export function buildWeatherBody(): HTMLElement {
     glyph.setAttribute("aria-label", info.condition)
     glyph.title = info.condition
     glyphHost.replaceChildren(glyph)
+  }
+
+  function showSun(): void {
+    const next = nextSolarEvent()
+    sunRow.hidden = next === null
+    if (!next) return
+
+    sunGlyph.replaceChildren(
+      icon(solarIconName(next.kind), {
+        size: Math.round(clamp(14, hostWidth * 0.055, 20)),
+      })
+    )
+    sunLabel.textContent = solarLabel(next.kind)
+    sunTime.textContent = formatWallTime(next.iso)
+    sunAway.textContent = formatCountdown(next.minutesAway)
   }
 
   function showHovered(index: number | null): void {
@@ -1327,6 +1469,7 @@ export function buildWeatherBody(): HTMLElement {
     captionEl.style.fontSize = small
     detailEl.style.fontSize = small
     if (selectTrigger) selectTrigger.style.fontSize = small
+    sunRow.style.fontSize = small
     if (note) note.style.fontSize = `${clamp(10, hostWidth * 0.038, 12.5).toFixed(2)}px`
     valueEl.style.fontSize = `${clamp(30, hostWidth * 0.145, 60).toFixed(2)}px`
 
@@ -1347,6 +1490,8 @@ export function buildWeatherBody(): HTMLElement {
             : "Air quality isn't available for this location."
       showHovered(null)
     }
+
+    showSun()
   }
 
   render()
@@ -1359,7 +1504,7 @@ export function buildWeatherBody(): HTMLElement {
     render()
   })
   observer.observe(root)
-  liveBodies.add({ root, ro: observer, refresh: render })
+  liveBodies.add({ root, ro: observer, refresh: render, tick: showSun })
 
   return root
 }
@@ -1415,6 +1560,18 @@ export function buildWeatherTile(): HTMLElement {
     .filter(Boolean)
     .join(" · ")
   col.appendChild(sub)
+
+  const next = nextSolarEvent()
+  if (next) {
+    const sun = document.createElement("div")
+    sun.className =
+      "flex items-center gap-1 text-[11px] text-popover-foreground/45 whitespace-nowrap"
+    sun.appendChild(
+      icon(solarIconName(next.kind), { size: 12, class: "text-accent" })
+    )
+    sun.append(`${solarLabel(next.kind)} ${formatWallTime(next.iso)}`)
+    col.appendChild(sun)
+  }
 
   root.appendChild(col)
   return root
@@ -1609,12 +1766,17 @@ export function initWeather(): void {
 function startRefreshInterval(): void {
   stopRefreshInterval()
   refreshIntervalId = setInterval(() => fetchWeather(), REFRESH_INTERVAL)
+  sunTickId = setInterval(() => tickBodies(), SUN_TICK_INTERVAL)
 }
 
 function stopRefreshInterval(): void {
   if (refreshIntervalId !== null) {
     clearInterval(refreshIntervalId)
     refreshIntervalId = null
+  }
+  if (sunTickId !== null) {
+    clearInterval(sunTickId)
+    sunTickId = null
   }
 }
 

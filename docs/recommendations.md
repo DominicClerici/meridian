@@ -2,7 +2,7 @@
 
 Two features built on the `history` permission: a time-of-day model that suggests sites in the dock, and a bulk importer that turns frequently-visited sites into shortcuts.
 
-**Files:** `src/recommendations.ts` · `src/history-import.ts` · `src/history-api.ts`
+**Files:** `src/recommendations.ts` · `src/history-api.ts` · `src/ext-call.ts`
 
 Neither module calls `history` directly. Both go through `history-api.ts`, which
 papers over the fact that Chrome's `history.search` is callback-first while
@@ -48,11 +48,11 @@ Scoring runs once per page load into `cachedRecommendations`, not on every dock 
 
 Intended as a bulk way to seed shortcuts from what you already visit.
 
-`fetchHistory()` scans **90 days** in batches of 150, deduping by URL and keeping the highest `visitCount`. There's a `USE_VISIT_COUNT` flag at `history-import.ts:5` — when `false`, it instead calls `history.getVisits` per URL and counts visits inside the window, which is more accurate and dramatically slower. It ships as `true`.
+The equivalent scan for the import dialog lives in `shortcut-import.ts`'s `fromHistory()` — **90 days** in batches of 150, deduped by URL, keeping the highest `visitCount`. See [shortcut-import.md](shortcut-import.md).
 
 `getTopEntries()` drops URLs already saved as shortcuts and blocked schemes, sorts by visit count, and keeps the top **50**.
 
-The dialog (`#history-import-dialog`, static in `index.html`) lists each candidate — hostname, full URL, visit count — with an Add button that **prepends** a shortcut to the selected tab and removes the row. Add buttons disable when the tab reaches `MAX_ITEMS_PER_TAB`.
+History is now one of five import sources in the shortcuts settings panel, with a pick step and a destination step rather than a per-row Add button. See [shortcut-import.md](shortcut-import.md).
 
 Two DOM dependencies are the reason the feature is dead: `#sc-import-history` (the button that opens the dialog) and `#sc-tab-select` (the destination-tab picker that `getSelectedTabId()` reads). Neither exists. Restoring the feature means re-adding both to the shortcuts settings panel — see [shortcuts.md](shortcuts.md#the-settings-panel).
 
@@ -63,7 +63,7 @@ Both features read the full browsing history through the `history` permission. E
 ## Refactor candidates
 
 - **History import is dead code.** 244 lines plus orphaned markup in `index.html` reachable by nothing. Restore the two missing controls or delete the feature.
-- **The heatmap undercounts by design.** `history.search` returns one `lastVisitTime` per URL, so a site visited 200 times contributes a single point in one bucket. `history.getVisits` returns the real distribution — which is exactly what the disabled `USE_VISIT_COUNT` path in `history-import.ts` does. The scoring model deserves the real data.
+- **The heatmap undercounts by design.** `history.search` returns one `lastVisitTime` per URL, so a site visited 200 times contributes a single point in one bucket. `history.getVisits` returns the real distribution, at a large cost in time. The scoring model deserves the real data.
 - **Two near-identical history scanners.** Both files implement the same paged `historySearch` wrapper, the same batching loop, and the same `BLOCKED_SCHEMES` list, separately.
 - **Recommended URLs are guessed.** A domain becomes `https://${domain}`, which misses sites that need a path or redirect from bare domain.
 - **The domain is the label.** Suggestions show `mail.google.com`, not "Gmail" — the history item's `title` is available and unused.

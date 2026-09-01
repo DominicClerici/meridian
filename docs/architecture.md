@@ -15,9 +15,9 @@ Everything happens in `src/index.ts:1`. `dist/index.js` is loaded by a `<script>
 5. `subscribeBackground()`.
 6. `applyLayout()` — reads `layout` from the store, stamps `data-layout` onto `<html>`, builds that mode's frame into `#layout-stage`, moves the shared singletons (search, clock, dock, settings button, widget triggers) into their slots, and mounts the widget cards. Runs here, before first paint, so the layout doesn't flash. See [layouts.md](layouts.md).
 7. `subscribeLayout()` — runs the fade-out / pause / fade-in switch when `layout` changes.
-8. Two icons are prepended into the static shell: `#settings-open` gets `settings`, `#todo-trigger` gets `todoList`.
+8. Icons are prepended into the static shell: `#settings-open` gets `settings`, `#todo-trigger` gets `todoList`, `#notepad-trigger` gets `notepad`, `#github-trigger` gets `github`, `#linear-trigger` gets `linear`, `#mail-trigger` gets `mail`.
 
-Card registration happens even earlier: `registerCard()` runs in the module bodies of `weather.ts`, `todo.ts`, `spotify.ts`, and `calendar.ts`, which ES module evaluation runs before `index.ts`'s own body — so the registry is complete by the time `applyLayout()` builds the first frame.
+Card registration happens even earlier: `registerCard()` runs in the module bodies of `weather.ts`, `todo.ts`, `notepad.ts`, `spotify.ts`, `calendar.ts`, `github.ts`, `linear.ts` and `mail.ts` (the last three twice each — a card and a Dashboard tile), which ES module evaluation runs before `index.ts`'s own body — so the registry is complete by the time `applyLayout()` builds the first frame.
 
 **Phase 2 — `DOMContentLoaded`, async**
 
@@ -28,10 +28,10 @@ Card registration happens even earlier: `registerCard()` runs in the module bodi
    initSettings()          creates the settings dialog + all its panels
    initDock()              renders the shortcut dock
    initShortcutSettings()  binds the shortcuts panel, starts the drag engine
-   initHistoryImport()     binds the history-import dialog
    initSearch()            binds the search bar, registers providers
    initClock()
    initTodo()
+   initNotepad()
    initWeather()
    initSpotify()
    initRecommendations()
@@ -42,7 +42,7 @@ Card registration happens even earlier: `registerCard()` runs in the module bodi
 
 Most of that list is order-independent, but two edges are real:
 
-- **`initSettings()` must precede `initShortcutSettings()`.** `buildShortcutsPanel()` (`settings.ts:1203`) creates `#sc-tab-bar`, `#sc-item-list`, and `#sc-control-bar`; `initShortcutSettings()` looks all three up with a non-null assertion and will throw if they don't exist.
+- **`initSettings()` must precede `initShortcutSettings()`.** `buildShortcutsPanel()` creates `#sc-panel`; `initShortcutSettings()` looks it up with a non-null assertion and will throw if it doesn't exist. It then builds the rail, grid and detail pane inside it itself, so `#sc-panel` is the only ID crossing the two modules.
 - **`initSettings()` must precede its own tail.** `initSettings()` builds the shortcuts panel (which contains `#settings-recommendations-enabled`) before wiring that checkbox at the end of the same function.
 
 `initHistoryImport()` nominally depends on `initShortcutSettings()` having rendered a control bar containing `#sc-import-history` — but that button no longer exists anywhere in the codebase, so the function early-returns on every load. See *Refactor candidates*.
@@ -85,18 +85,23 @@ Feature modules and what they pull in beyond `store`:
 | Module | Depends on |
 |---|---|
 | `settings.ts` | `components`, `icons/registry`, `spotify`, `calendar`, `weather`, `location`, `capabilities`, `google-auth`, `unsplash`, `background`, `idb`, `defaults` |
-| `dock.ts` | `components`, `icons/registry`, `recommendations`, `shortcuts` |
-| `shortcut-settings.ts` | `components`, `icons/registry`, `shortcuts`, `shortcut-drag`, `url`, `defaults` |
+| `dock.ts` | `components`, `recommendations`, `shortcuts`, `shortcut-icon`, `dock-drag`, `dock-magnify`, `dock-menu` |
+| `dock-drag.ts` | `components`, `shortcuts` |
+| `dock-magnify.ts` | — (leaf) |
+| `dock-menu.ts` | `components`, `icons/registry`, `shortcuts`, `shortcut-icon-picker`, `settings`, `url` |
+| `shortcut-settings.ts` | `components`, `icons/registry`, `shortcuts`, `shortcut-icon`, `shortcut-icon-picker`, `shortcut-drag`, `shortcut-import`, `idb`, `url`, `store` |
+| `shortcut-icon.ts` | `icons/registry`, `idb`, `url` — no store |
+| `shortcut-import.ts` | `components`, `shortcuts`, `shortcut-icon`, `history-api`, `bookmarks-api`, `url`, `store` |
 | `shortcut-drag.ts` | `shortcuts` only — no store, no DOM lookups of its own |
 | `search.ts` | its two providers (imported for their registration side effect) |
 | `todo.ts` | `components`, `icons/registry`, `todos`, `layout`, `store` |
+| `notepad.ts` | `components`, `icons/registry`, `layout`, `defaults`, `store` |
 | `weather.ts` | `components`, `icons/registry`, `layout`, `location`, `settings` |
 | `calendar.ts` | `components`, `icons/registry`, `google-auth` |
 | `spotify.ts` | `icons/registry` |
 | `location.ts` | `timezone-coords` only — plus the store |
 | `google-auth.ts` | the store only; wraps every `identity` call |
 | `capabilities.ts` | `location`, `google-auth` — probes, renders nothing |
-| `history-import.ts` | `shortcuts`, `history-api` |
 | `history-api.ts` | nothing — wraps every `history` call for both browsers |
 | `layout.ts` | `components` only — it knows nothing about any widget; widgets register themselves |
 | `background.ts` | `unsplash`, `idb`, `mesh-bg`, `defaults` |
@@ -124,10 +129,13 @@ The shell holds **no positioning**. Every element that a layout places lives ins
 | `#calendar-trigger` | `index.html` | `calendar.ts` |
 | `#weather-trigger` | `index.html` | `weather.ts` |
 | `#todo-trigger`, `#todo-badge-count`, `#todo-badge-overdue` | `index.html` | icon by `index.ts`, rest by `todo.ts` |
+| `#notepad-trigger`, `#notepad-badge` | `index.html` | icon by `index.ts`, rest by `notepad.ts` |
+| `#github-trigger`, `#github-badge` | `index.html` | icon by `index.ts`, rest by `github.ts` |
+| `#linear-trigger`, `#linear-badge` | `index.html` | icon by `index.ts`, rest by `linear.ts` |
+| `#mail-trigger`, `#mail-badge` | `index.html` | icon by `index.ts`, rest by `mail.ts` |
 | `#search-wrapper`, `#search-input`, `#search-results` | `index.html` | `search.ts`; positioned by `layout.ts` |
 | `#clock` | `index.html` | `clock.ts`; positioned by `layout.ts` |
-| `#dock-wrapper`, `#dock`, `#dock-scroll`, `#dock-suggestions`, `#dock-divider`, `#dock-items`, `#dock-tabs` | `index.html` | `dock.ts`; positioned by `layout.ts` |
-| `#history-import-dialog` and children | `index.html` | `history-import.ts` — **currently unreachable** |
+| `#dock-wrapper`, `#dock`, `#dock-scroll`, `#dock-groups`, `#dock-suggestions`, `#dock-divider`, `#dock-items`, `#dock-tabs`, `#dock-tabs-indicator` | `index.html` | `dock.ts`; positioned by `layout.ts`, laid out row-by-row by `dock.ts` itself |
 
 ### Runtime-created
 
@@ -140,11 +148,11 @@ The shell holds **no positioning**. Every element that a layout places lives ins
 | `#settings-dialog` | `settings.ts:1333` via `createDialog()` | `settings.ts` |
 | `#settings-nav`, `#settings-title`, `#settings-panels` | `settings.ts:1339`–`1372` | `settings.ts` |
 | `[data-settings-tab="…"]` panels (general, shortcuts, appearance, widgets, advanced) | `settings.ts` | the matching `buildXTab()` |
-| `#sc-tab-bar`, `#sc-item-list`, `#sc-control-bar` | `settings.ts:1203` `buildShortcutsPanel()` | `shortcut-settings.ts:875` |
+| `#sc-panel` | `settings.ts` `buildShortcutsPanel()` | `shortcut-settings.ts` `initShortcutSettings()` |
 | `#settings-recommendations-enabled` | `settings.ts:1229` | wired at `settings.ts:1410` |
 | Popovers | `components.ts` `createPopover()` | appended to the nearest `<dialog>` ancestor, else `document.body` |
 
-The cross-module handoffs (`settings.ts` builds containers that `shortcut-settings.ts` then queries by ID) are the fragile part of this arrangement — the coupling is a string literal with no type or compile-time check behind it.
+The cross-module handoff (`settings.ts` builds a container that `shortcut-settings.ts` then queries by ID) is the fragile part of this arrangement — the coupling is a string literal with no type or compile-time check behind it. It is now one ID rather than three.
 
 ## Build pipeline
 
@@ -193,9 +201,10 @@ Two literal manifests, one per target — Manifest V3 both.
 | `chrome_url_overrides.newtab` | `index.html` | The whole point |
 | `permissions` | `storage` | The store's `browser.storage.sync` / `.local` backing |
 | | `geolocation` | Weather coordinates, where the browser can supply them |
-| | `identity` | OAuth for Spotify and Google Calendar (`launchWebAuthFlow`, `getAuthToken`) |
+| | `identity` | OAuth for Spotify and for Google — Calendar and Gmail share one token (`launchWebAuthFlow`, `getAuthToken`), scoped per feature ([mail.md](mail.md#the-shared-google-account)). **Not** GitHub — the device flow needs no redirect URI ([github.md](github.md#the-device-flow)) |
 | | `history` | Recommendations heatmap + history import |
-| `host_permissions` | the ten API hosts the app calls | Lets extension-page `fetch` bypass CORS instead of depending on each third party's headers |
+| `optional_permissions` | `bookmarks` | Requested from a click in the shortcuts import dialog, so installing never prompts for it and an update never disables the extension. See [browser-compat.md](browser-compat.md#optional-permissions) |
+| `host_permissions` | the API hosts the app calls, `api.linear.app` and `linear.app` among them | Lets extension-page `fetch` bypass CORS instead of depending on each third party's headers |
 | `oauth2.client_id` | a Google OAuth client | Calendar via `getAuthToken`. Only used where the browser has a Google account service |
 | `oauth2.scopes` | `calendar.readonly` | |
 | `key` | a fixed public key | Chrome only. Pins the extension ID, which pins the OAuth redirect URI |
@@ -213,8 +222,8 @@ No background service worker and no content scripts — the commented-out `cp sr
 
 ## Refactor candidates
 
-- **`initHistoryImport()` is dead.** It looks up `#sc-import-history` (`history-import.ts:236`) and early-returns when absent — and nothing creates that button; `renderControlBar()` in `shortcut-settings.ts:723` has no import control. `#sc-tab-select` (`history-import.ts:123`) is likewise gone. So `#history-import-dialog` in `index.html:96` is orphaned markup and the entire 244-line module is unreachable. Either restore the entry point or delete the feature.
+
 - **`squircle.ts` has no call sites.** 159 lines of correct, carefully documented geometry that nothing imports. Either use it where `corner-shape` can't reach (SVG, canvas, masks) or drop it.
-- **Cross-module DOM handoff by ID string.** `settings.ts` builds `#sc-*` containers that `shortcut-settings.ts` queries with `!`. Nothing catches a rename. Passing the elements as arguments to `initShortcutSettings(tabBar, itemList, controlBar)` would make the dependency explicit and typed.
+- **Cross-module DOM handoff by ID string.** `settings.ts` builds `#sc-panel`, which `shortcut-settings.ts` queries with `!`. Nothing catches a rename. Passing the element as an argument to `initShortcutSettings(panel)` would make the dependency explicit and typed.
 - **No teardown.** Every `subscribe()` returns an unsubscribe function; none of the feature modules keep it. Layout switching is built around that fact — it moves existing elements rather than rebuilding them — but it still means no module can be re-initialized.
 - **`settings.ts` reaches into five subsystems.** At 1420 lines it mixes dialog chrome, tab layout, and per-feature control logic. Splitting each `buildXTab()` into the feature module it configures would cut most of the import graph's coupling.

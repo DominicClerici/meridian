@@ -44,6 +44,7 @@ const CORNER_SETTINGS = "absolute top-4 left-4 z-40 w-12 h-12 justify-center"
 const SINGLETONS = {
   widgets: "widgets",
   clock: "clock",
+  worldClocks: "world-clocks",
   search: "search-wrapper",
   dock: "dock-wrapper",
   settings: "settings-open",
@@ -63,15 +64,46 @@ let currentMode: LayoutMode | null = null
 let switching = false
 let cardGrids: CardGrid[] = []
 let cardCarousels: CardCarousel[] = []
+let packedGrid: CardGrid | null = null
 
 export function getLayout(): LayoutMode {
   return store.sync.get("layout")
 }
 
+const enabledSubs = new Map<string, () => void>()
+let batchDepth = 0
+
 export function registerCard(def: CardDef): void {
   cards.push(def)
   if (def.enabledKey) {
-    store.sync.subscribe(def.enabledKey, () => refreshCards())
+    enabledSubs.set(def.id, store.sync.subscribe(def.enabledKey, () => refreshCards()))
+  }
+  if (currentMode && batchDepth === 0) refreshCards()
+}
+
+/**
+ * Drops a card registered at runtime. Cards that exist for the life of the page
+ * never call this; the world clocks do, because the user adds and removes them.
+ */
+export function unregisterCard(id: string): void {
+  const index = cards.findIndex((c) => c.id === id)
+  if (index === -1) return
+  cards.splice(index, 1)
+  enabledSubs.get(id)?.()
+  enabledSubs.delete(id)
+  if (currentMode && batchDepth === 0) refreshCards()
+}
+
+/**
+ * Runs a set of register/unregister calls as one change. Without it, replacing
+ * five world clocks would rebuild every card on the page ten times.
+ */
+export function batchCards(fn: () => void): void {
+  batchDepth++
+  try {
+    fn()
+  } finally {
+    batchDepth--
   }
   if (currentMode) refreshCards()
 }
@@ -174,19 +206,28 @@ function frameImmersive(): HTMLElement {
   widgets.appendChild(slot("widgets"))
   root.appendChild(widgets)
 
+  // Same trick as the dashboard's `.dash-aligner`: centring inside a box that
+  // spans the top 4/5 of the stage puts the block's midpoint at 2/5 of the
+  // viewport height, with no measuring.
   const center = el(
     "div",
-    "absolute inset-0 flex items-center justify-center pointer-events-none"
+    "absolute inset-x-0 top-0 bottom-[20%] flex items-center justify-center pointer-events-none"
   )
-  const col = el("div", "w-full max-w-lg flex flex-col pointer-events-auto")
+  // Wider than the search bar so a full set of world clocks stays on one line;
+  // the search bar keeps its own cap and is centred inside it.
+  const col = el(
+    "div",
+    "w-full max-w-3xl flex flex-col items-center pointer-events-auto"
+  )
   col.appendChild(slot("clock", "text-center mb-4"))
+  col.appendChild(slot("worldClocks", "justify-center mb-5"))
   col.appendChild(slot("search", "max-w-lg"))
   center.appendChild(col)
   root.appendChild(center)
 
   const dockRow = el(
     "div",
-    "absolute bottom-4 left-0 right-0 flex justify-center pointer-events-none"
+    "absolute bottom-6 left-0 right-0 flex justify-center pointer-events-none"
   )
   dockRow.appendChild(slot("dock", "items-center"))
   root.appendChild(dockRow)
@@ -197,13 +238,25 @@ function frameImmersive(): HTMLElement {
 function frameDefault(): HTMLElement {
   const root = el("div", "absolute inset-0")
 
-  const scroll = el("div", "absolute inset-0 overflow-y-auto px-6 pt-[10vh] pb-32")
+  const scroll = el("div", "absolute inset-0 overflow-y-auto px-6 pt-[10vh] pb-16")
 
   // The head stays at reading width while the card region gets its own, wider
   // cap — four columns need room the search bar has no use for.
+  // The clock and its world clocks are one block, so they sit in a tighter
+  // nested column than the gap the search bar wants below them.
   const head = el("div", "mx-auto w-full max-w-5xl flex flex-col items-center gap-8")
-  head.appendChild(slot("clock", "text-center"))
-  head.appendChild(slot("search", "max-w-lg"))
+  head.dataset.editDim = "true"
+  const timeBlock = el("div", "flex flex-col items-center gap-4")
+  timeBlock.appendChild(slot("clock", "text-center"))
+  timeBlock.appendChild(slot("worldClocks", "justify-center"))
+  head.appendChild(timeBlock)
+
+  // The search bar and the dock are one block: the dock hangs off the bar with
+  // a tighter gap than the one separating the pair from the clock above.
+  const searchBlock = el("div", "w-full flex flex-col items-center gap-5")
+  searchBlock.appendChild(slot("search", "max-w-lg"))
+  searchBlock.appendChild(slot("dock", "items-center"))
+  head.appendChild(searchBlock)
   scroll.appendChild(head)
 
   const gridWrap = el("div", "mx-auto w-full max-w-[1600px] mt-8")
@@ -213,13 +266,6 @@ function frameDefault(): HTMLElement {
   scroll.appendChild(gridWrap)
 
   root.appendChild(scroll)
-
-  const dockRow = el(
-    "div",
-    "absolute bottom-4 left-0 right-0 flex justify-center pointer-events-none"
-  )
-  dockRow.appendChild(slot("dock", "items-center"))
-  root.appendChild(dockRow)
 
   root.appendChild(slot("settings", CORNER_SETTINGS))
 
@@ -242,9 +288,13 @@ function frameDefault(): HTMLElement {
  * The two halves of the lower row stretch to a common height, which is what
  * puts the settings button on the carousel's bottom edge without either side
  * knowing the other's size.
+ *
+ * `.dash-aligner` is what sits the whole block high on the page rather than
+ * flush to the top — see the rule in styles.css.
  */
 function frameDashboard(): HTMLElement {
   const root = el("div", "absolute inset-0 overflow-y-auto")
+  const aligner = el("div", "dash-aligner")
   const wrap = el("div", "mx-auto w-full max-w-7xl p-8 flex flex-col gap-8")
 
   const top = region("top", "flex flex-wrap items-stretch gap-3")
@@ -269,7 +319,8 @@ function frameDashboard(): HTMLElement {
   lower.appendChild(side)
 
   wrap.appendChild(lower)
-  root.appendChild(wrap)
+  aligner.appendChild(wrap)
+  root.appendChild(aligner)
   return root
 }
 
@@ -289,6 +340,7 @@ const FRAMES: Record<LayoutMode, () => HTMLElement> = {
 function unmountCards(): void {
   for (const grid of cardGrids) grid.destroy()
   cardGrids = []
+  packedGrid = null
   for (const carousel of cardCarousels) carousel.destroy()
   cardCarousels = []
   for (const id of mountedBodies.keys()) {
@@ -302,6 +354,33 @@ function unmountCards(): void {
     reclaimSingletons(node)
     node.remove()
   }
+}
+
+/**
+ * Sorts the packed region's cards into the user's arrangement. Anything the
+ * stored list doesn't name — a widget added since the last rearrange — keeps
+ * its registration order and follows the cards that were placed by hand.
+ */
+function sortIdsByCardOrder(ids: string[]): string[] {
+  const rank = new Map(store.sync.get("cardOrder").map((id, i) => [id, i] as const))
+  const unplaced = Number.MAX_SAFE_INTEGER
+  return [...ids].sort(
+    (a, b) => (rank.get(a) ?? unplaced) - (rank.get(b) ?? unplaced)
+  )
+}
+
+function applyCardOrder(items: GridItem[]): GridItem[] {
+  const byId = new Map(items.map((item) => [item.id, item] as const))
+  return sortIdsByCardOrder(items.map((item) => item.id)).map((id) => byId.get(id)!)
+}
+
+/** The Default layout's packed grid, for the rearrange mode. */
+export function getPackedGrid(): CardGrid | null {
+  return packedGrid
+}
+
+export function saveCardOrder(order: string[]): void {
+  store.sync.set("cardOrder", order)
 }
 
 function mountCards(mode: LayoutMode): void {
@@ -331,7 +410,7 @@ function mountCards(mode: LayoutMode): void {
 
     if (host.dataset.packed) {
       const items = packed.get(host) ?? []
-      items.push({ el: card.el, span })
+      items.push({ id: def.id, el: card.el, span })
       packed.set(host, items)
       host.appendChild(card.el)
     } else if (host.dataset.carousel) {
@@ -348,8 +427,9 @@ function mountCards(mode: LayoutMode): void {
 
   for (const [host, items] of packed) {
     const grid = createCardGrid(host)
-    grid.setItems(items)
+    grid.setItems(applyCardOrder(items))
     cardGrids.push(grid)
+    packedGrid = grid
   }
 
   for (const host of stageEl.querySelectorAll<HTMLElement>("[data-carousel]")) {
@@ -429,5 +509,12 @@ export function applyLayout(): void {
 export function subscribeLayout(): void {
   store.sync.subscribe("layout", (mode) => {
     void switchTo(mode)
+  })
+  // Fires for our own save too, so compare before rebuilding — a rearrange that
+  // just committed is already on screen, and only another tab needs the remount.
+  store.sync.subscribe("cardOrder", () => {
+    const current = packedGrid?.getOrder()
+    if (!current) return
+    if (sortIdsByCardOrder(current).join() !== current.join()) refreshCards()
   })
 }

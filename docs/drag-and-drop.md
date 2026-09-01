@@ -1,162 +1,165 @@
 # Drag and Drop
 
-The pointer-based drag engine for the shortcuts settings panel. **File:** `src/shortcut-drag.ts` (1127 lines).
+The pointer-based drag engine for the shortcuts settings grid. **File:** `src/shortcut-drag.ts` (579 lines).
 
-Not HTML5 drag-and-drop — Pointer Events throughout, because HTML5 DnD can't do live reorder animation, hover-to-drill, or a custom drag image that isn't a screenshot.
+Not HTML5 drag-and-drop — Pointer Events throughout, because HTML5 DnD can't animate a live insertion point or carry a custom drag image that isn't a screenshot.
 
-`shortcut-drag.ts` imports only `shortcuts.ts`. It never touches the store and never queries the DOM for state it wasn't handed: everything it needs comes through a `DragCallbacks` object.
+This is not the only drag engine. Two others share its `pointerdown → threshold → drag` shape and none of its code:
+
+- `src/layout-edit.ts` reorders widget cards in the Default layout — absolutely-positioned cards inside a packer rather than tiles in a grid. See [layouts.md](layouts.md#rearranging).
+- `src/dock-drag.ts` reorders shortcuts in the dock, on the page. One tile rather than a selection, three destinations rather than four, and it has to leave a magnifying row's transforms alone while it works. See [shortcuts.md](shortcuts.md#dragging-on-the-page).
+
+## What replaced what
+
+The previous engine was 1127 lines of row-based logic. Its reorder animation translated rows by a single `stride` — the centre-to-centre distance between consecutive rows — which is an assumption a **wrapping grid** breaks the moment there are two columns. That is why this is a rewrite rather than an adaptation.
+
+Two gestures were deliberately dropped:
+
+| Gone | Why | Replaced by |
+|---|---|---|
+| Hover a folder for 1s to drill into it mid-drag | Nothing announced the timer; you found it by accident or never | Drop onto the folder to file into it |
+| Hold on a shortcut to merge both into a new folder | Same, plus it overloaded "drop on a shortcut" with two meanings | **New folder** in the selection bar, and in the tile menu |
+
+Losing them removed the hover-timer machinery, the two-phase commitment animation, and the `merge-shortcut` drop zone — roughly half the old file.
+
+## The host object
+
+The engine never touches the store and never queries the DOM for state it wasn't handed. The old version took nine callbacks (four getters, three setters, two commands); this one takes one object:
 
 ```ts
-initDrag(tabBarEl, itemListEl, {
-  getTabs, save, render,
-  getSelectedTabId, getViewingFolderId, getSelectionMode, getSelectedIds,
-  setSelectedTabId, setViewingFolderId, exitSelectionMode,
-  openCreateFolderPopover,
+initGridDrag({
+  gridEl, railEl, scrollEl,
+  getTabs, save,
+  getState,      // () => { tabId, folderId, selection }
+  setLocation,   // (tabId, folderId) => void
+  clearSelection,
+  notify,        // a toast
+  refresh,
 })
 ```
 
-Called once from `initShortcutSettings()` (`shortcut-settings.ts:888`).
+Called once from `initShortcutSettings()`.
 
 ## What you can drag
 
 | Gesture | Result |
 |---|---|
-| Drag a row within its list | Reorder |
-| Drag a row onto a folder row | Move into that folder |
-| Drag a shortcut onto another shortcut, and **hold** | Merge both into a new folder (prompts for a name) |
-| Drag a row onto a tab pill | Move to that tab |
-| Hover a tab pill for 1s while dragging | Switch to that tab mid-drag, then keep dragging |
-| Hover a folder row for 1s while dragging | Drill into that folder mid-drag, then keep dragging |
-| Drag with multiple items selected | Move the whole selection into a folder or tab |
-| Drag a tab pill | Reorder tabs |
-| Press Escape mid-drag | Cancel and restore the pre-drag snapshot |
+| Drag a tile within the grid | Reorder |
+| Drag a tile onto a folder tile | File it into that folder |
+| Drag a tile onto a tab in the rail | Move it to that tab |
+| Drag with several tiles selected | Move the whole selection |
+| Drag a tab in the rail | Reorder tabs |
+| Press Escape mid-drag | Cancel |
+
+Dragging an **unselected** tile drags only that tile and leaves the selection alone — grabbing one thing shouldn't silently take others with it.
+
+Escape is free: nothing is written until the drop, so cancelling is just `cleanup()`. The old engine had to save a pre-drag snapshot back, because its mid-drag tab switches had already mutated visible state.
 
 ## State machine
 
 ```
-idle ──pointerdown──▶ pending ──moved >3px──▶ dragging ──pointerup──▶ (drop) ──▶ idle
+idle ──pointerdown──▶ pending ──moved >4px──▶ dragging ──pointerup──▶ (drop) ──▶ idle
                          └──pointerup (a click)──▶ idle
 ```
 
-Three module-level variables carry it: `state`, `ctx` (the drag context), and `pendingStart` (the pointerdown coordinates).
+`state`, `ctx`, and `pending` carry it. The `pending` phase and `THRESHOLD = 4` are what keep tiles clickable: under 4px of movement `pointerup` cleans up without ever starting a drag, and the click goes through.
 
-The `pending` phase and its `DRAG_THRESHOLD = 3` are what let rows stay clickable — under 3px of movement, `pointerup` cleans up without ever starting a drag, and the click goes through normally.
+`pointerdown` bails on `.sc-tile-menu` and on form controls, so the tile's own ⋯ button still works.
 
-Two context shapes, discriminated on `mode`:
+Two context shapes, discriminated on `mode`: `ItemDrag` (the dragged IDs, source location, clone, grab offsets, geometry, current target) and `TabDrag` (tab ID, source index, clone, offsets, target index).
 
-- **`ItemDragCtx`** — source tab/item/type/folder, whether it's a selection drag and which IDs, the clone element, grab offsets, a `snapshot: Tab[]` of the pre-drag state, and the hover-timer machinery.
-- **`TabDragCtx`** — source tab ID and index, clone, offsets.
+## Geometry
 
-`pointerdown` bails early on buttons, inputs, and labels, so the row's edit/delete controls and selection checkboxes still work.
-
-## Geometry snapshots
-
-The engine measures once at drag start rather than per-move.
+Measured once at drag start:
 
 ```ts
-interface RowSnap  { id, type, index, contentTop, height, left, width }
-interface ZoneSnap { location: "top-level" | "folder", folderId, rows: RowSnap[], stride, el }
+type TileSnap = { id, type, index, left, top, width, height }
 ```
 
-`snapshotZones()` (`shortcut-drag.ts:337`) walks every `[data-zone]` container and records each row's position in **content space** — `rect.top - zoneRect.top + scrollTop` — so the numbers stay valid while the list scrolls underneath. `stride` is the center-to-center distance between consecutive rows (falling back to row height when there's only one), and it's what the reorder animation translates by.
+Positions are relative to the **grid's own box**. Both the tiles and the grid move together as the list scrolls, so a snapshot stays valid without re-measuring — converting a pointer position into that space is one subtraction against the live grid rect.
 
-Snapshots are retaken whenever a hover timer changes the visible list (switching tab, drilling into a folder).
+### Finding the insertion slot
+
+`nearestSlot()` (`shortcut-drag.ts:130`) is what replaces the `stride` arithmetic. Every tile contributes two candidate slots — the one before it and the one after it, each anchored at the tile's vertical midpoint — and the closest by straight-line distance wins:
+
+```
+┌─────┐ ┌─────┐ ┌─────┐
+│  A  │ │  B  │ │  C  │      slots: |A| |B| |C|
+└─────┘ └─────┘ └─────┘             0 1 2 3 4 5 6  → deduped to 0..3
+┌─────┐
+│  D  │                             row wrapping needs no special case
+└─────┘
+```
+
+Because it is pure distance, wrapping, ragged final rows, and varying column counts all fall out for free.
 
 ## Resolving a drop target
 
-`resolveDropZone(x, y)` (`shortcut-drag.ts:457`) produces one of:
+`resolveTarget()` (`shortcut-drag.ts:155`) returns one of:
 
 ```ts
-{ type: "reorder", location, index }
-{ type: "into-folder", folderId, blocked }
-{ type: "merge-shortcut", targetId }
-{ type: "tab", tabId }
-{ type: "none" }
+{ kind: "reorder"; index }
+{ kind: "into-folder"; folderId; blocked }
+{ kind: "tab"; tabId; blocked }
+{ kind: "none" }
 ```
 
-Resolution order:
+Order:
 
-1. **Tab pills first** — `elementFromPoint`, then `closest("[data-tab-id]")` scoped to the tab bar.
-2. **Outside the item list entirely** → `none`.
-3. **Inside a zone** — the snapshot whose live rect contains the point. An empty zone means index 0; past the last row means append.
-4. **On a row** — `none` if it's the dragged item itself, or part of the dragged selection, or if a folder is being dragged into a folder view (no nesting).
-5. Then `resolveNormalSnap` or `resolveSelectionSnap`.
+1. **The rail first** — a tab row overlaps nothing else, and it's the only cross-tab move. Dropping on the tab you're already in (at the top level) is `none`.
+2. **Outside the scroll area** → `none`.
+3. **Over the middle 60% × 70% of a folder tile**, from the top level only → `into-folder`. `blocked` is set when the selection has no shortcuts in it, or when the folder can't fit them.
+4. Otherwise → `reorder` at the nearest slot.
 
-**`resolveNormalSnap`.** The middle 50% of a row (`|contentY - midY| < height * 0.25`) is the "center" band; anywhere else picks an insertion point above or below. In the center band, over a **folder** it's `into-folder` (with `blocked` set if the folder is at `MAX_CHILDREN_PER_FOLDER`); over a **shortcut** it's `into-folder` too, unless the hover timer has already fired for that shortcut, in which case it becomes `merge-shortcut`. Folders being dragged, and anything inside a folder view, skip the center band entirely and always reorder.
-
-**`resolveSelectionSnap`** is deliberately narrow: a multi-selection can only be dropped into a folder or onto a tab. Anything else is `none`. It's `blocked` if the selection contains folders (folders can't nest) or if the target folder can't fit all of them.
-
-## Hover intent
-
-`updateHoverTimer(zone)` (`shortcut-drag.ts:605`) runs a `HOVER_DELAY = 1000`ms timer whenever the hovered target changes. Moving to a different target cancels and restarts it.
-
-The feedback is two-phase, so the user can see the commitment building:
-
-1. Immediately — a faint accent tint (tab pill) or a zero-width ring (folder row).
-2. After 250ms — a 750ms transition to the full accent fill / 2px ring.
-
-At 1000ms `onHoverTimerFire` acts:
-
-| Target | Action |
-|---|---|
-| Tab | Switch to it, exit any folder view, re-render, re-apply drag styling, re-snapshot |
-| Folder | Drill into it, same |
-| Shortcut | Set `mergeReady = true` — the next `resolveDropZone` now returns `merge-shortcut` |
-
-Selection drags skip the tab-hover timer (you can drop onto a tab, but you can't navigate into one mid-drag).
+A folder tile is only a container from the top level. Inside a folder view there are no folders to drop onto, so the check is skipped entirely rather than guarded case by case.
 
 ## Visual feedback
 
-Rebuilt from scratch on every pointer move — `clearVisualFeedback()` then re-apply.
+Rebuilt on every move: `clearFeedback()` then re-apply.
 
-**Reorder** is a FLIP-style animation with no measuring: `applyReorderTransforms()` (`shortcut-drag.ts:798`) translates rows by exactly `±stride` with a 200ms transition to open a gap at the insertion index, and positions a `preview` element (accent outline over a 10%-accent fill) in the gap. The direction rules differ for a same-zone move (rows between source and destination shift one way) versus a cross-zone move (everything at or after the index shifts down). Dropping back where you started (`D === S || D === S + 1`) hides the preview entirely.
-
-**Other zones:**
-
-| Zone | Feedback |
+| Target | Feedback |
 |---|---|
-| `into-folder` (folder target) | Row tinted `bg-accent/20` |
-| `into-folder` (shortcut target) | Row tinted `bg-accent/10` — the weaker tint means "hold to merge" |
-| `into-folder` blocked | Row tinted `bg-danger/30` |
-| `merge-shortcut` | Row tinted `bg-warning/20` |
-| `tab` | Pill ringed in accent |
-| empty zone | Whole zone ringed and tinted |
+| `reorder` | A 2px accent caret in the gap, transitioning between slots |
+| `into-folder` | The folder tile fills accent and gains a ring |
+| `into-folder`, blocked | The tile fills danger |
+| `tab` | The rail row fills accent |
+| `tab`, blocked | The rail row fills danger |
 
-The dragged clone also shrinks from `scale(0.97)` to `scale(0.9)` when it's over a container it would go *into*, rather than between.
+The clone shrinks from `scale(0.96)` to `scale(0.82)` when the drop would go *into* something rather than between — the one cue that distinguishes the two outcomes at a glance.
 
-**The clone** is a `cloneNode(true)` of the source row, fixed-positioned, 90% opacity, with a shadow. A selection drag of *n* items adds a `+n-1` badge. The original row is set to `opacity: 0` (single drag) or `opacity-50` on every selected row (selection drag).
+The caret is a child of `.sc-grid` (and the rail caret of `.sc-rail`), both of which are `position: relative`, so snapshot coordinates can be used directly as `left`/`top` with no conversion.
 
-**Coordinate space.** The clone, preview, and tab indicator are appended to the nearest `<dialog>` ancestor — a `<dialog>` renders in the top layer, so a `position: fixed` child of `document.body` would appear *behind* it. `dialogOffset()` converts viewport coordinates into the dialog's local space for every positioned element.
+**The clone** is a `cloneNode(true)` of the tile, fixed-positioned, with a `+n` badge for a multi-drag. Dragged tiles drop to 35% opacity.
 
-**Auto-scroll:** within 40px of the list's top or bottom edge, scroll by 8px per pointer move.
+**Coordinate space.** The clone is appended to the nearest `<dialog>` ancestor — a `<dialog>` renders in the top layer, so a `position: fixed` child of `document.body` would appear *behind* it. `overlayOffset()` converts viewport coordinates into the dialog's local space.
 
-## Committing the drop
+**Auto-scroll:** within 48px of the scroll container's top or bottom edge, by 10px per pointer move.
 
-Every drop path starts from `ctx.snapshot` — the `Tab[]` captured at pointerdown — not from the current store value. Mid-drag tab switches and folder drills already re-rendered from live data, so replaying the whole move against the snapshot is what keeps the result consistent.
+## Committing
 
-**`processNormalDrop`:**
+Every drop is one call to `moveItems`, which handles capacity and the folders-can't-nest rule itself. The engine's only real work is the reorder index.
 
-- **reorder, same tab and same container** → `reorderItems` / `reorderFolderChildren`. The source index is read back off the DOM (`getAttribute("data-index")`), not from the model.
-- **reorder, anywhere else** → `extractItem` then `insertItem` / `insertIntoFolder`.
-- **into-folder** → `extractItem` then `insertIntoFolder(..., 0)`. Only fires when the target row's `data-type` is `folder`; the shortcut case falls through and does nothing, because dropping on a shortcut without holding is a no-op by design.
-- **merge-shortcut** → opens `openCreateFolderPopover` anchored to the target row. Saving calls `mergeShortcutsIntoNewFolder` against the snapshot; cancelling saves the snapshot back unchanged.
+**The index adjustment.** `nearestSlot` measures against the list *as it currently looks*, but `moveItems` extracts before it inserts. So the slot is pulled back by however many dragged items sit before it:
 
-**`processSelectionDrop`** handles only `tab` and `into-folder`: extract every dragged ID in turn, then re-insert them in order at the destination, then `exitSelectionMode()`.
+```ts
+const removedBefore = drag.ids.filter((id) => {
+  const index = list.findIndex((i) => i.id === id)
+  return index !== -1 && index < target.index
+}).length
+const index = target.index - removedBefore
+```
 
-**`processTabDrop`** finds the pill under the pointer, decides before/after from the horizontal midpoint, and calls `reorderTabs` with an index adjusted for the removal of the source (`finalIndex > sourceIndex ? finalIndex - 1 : finalIndex`).
+A single-item drag that lands where it started is detected here and skipped, so a stray click-drag doesn't write a no-op to storage.
 
-**Escape** (`onKeyDown`, `shortcut-drag.ts:258`) saves `ctx.snapshot` back for item drags — which undoes any mid-drag tab switch or folder drill — then cleans up. Tab drags aren't restored, but they haven't written anything yet either.
+The source index comes from `locate()` against the live model. The old engine read it off the DOM with `getAttribute("data-index") ?? 0`, so a stale attribute silently reordered to position 0.
 
-`cleanup()` runs on every exit path: clears timers and hover animation, removes the clone, hides the preview and indicator, strips every inline `transition`/`transform`/`opacity` from rows, empties the snapshots, and detaches all three document listeners.
+**Tab drops** find the insertion row from the vertical midpoints and call `reorderTabs` with an index adjusted for the removal of the source.
+
+`cleanup()` runs on every exit path: removes the clone, hides both carets, strips `sc-dragging-source` from every tile, clears the body class, and detaches all four document listeners.
 
 ## Refactor candidates
 
-- **The source index comes from the DOM.** `processNormalDrop` reads `data-index` off the source row (`shortcut-drag.ts:963`) with a `?? 0` fallback, so a stale or missing attribute silently reorders to position 0. The index is in `ctx` already via the snapshot — use it.
-- **Nine callbacks is a lot of surface.** `DragCallbacks` exists to keep the engine store-free, which is right, but four getters, three setters, and two commands is really "hand me the panel's mutable state". A single state object with a `mutate()` would be smaller and harder to desync.
-- **`resolveDropZone` returns `into-folder` for shortcut targets.** A shortcut isn't a folder, and `processNormalDrop` then has to check `data-type === "folder"` and silently drop the event. A distinct `hover-shortcut` zone type would make the state legible instead of overloading one variant with two meanings.
-- **Hover animation is hand-written inline styles with a nested timer.** `startHoverAnimation` sets `backgroundColor`, `color`, `boxShadow`, and a child input's color across two timers, then `clearHoverAnimation` unsets each one individually. Two CSS classes plus a transition would be a fraction of the code and wouldn't leak style properties when a path is missed.
-- **Drop-target resolution is one 80-line function with five bail-out branches** and two more helpers that repeat the center-band math. The zone rules deserve a table.
-- **Escape restores by writing the snapshot back** rather than by not having written. Since nothing is saved until drop, the only thing being undone is the mid-drag navigation — which would be cheaper to undo by restoring `selectedTabId`/`viewingFolderId` directly.
-- **Tab reorder has no live preview of the resulting order** — just a thin insertion indicator — while item reorder animates. Inconsistent feel between two gestures in the same panel.
-- **Selection drags can't reorder.** `resolveSelectionSnap` returns `none` for everything except folder and tab targets, so there's no way to move a multi-selection within its own list.
-- **No touch or keyboard path.** Pointer Events cover touch mechanically, but nothing accounts for scroll-vs-drag on a touch screen, and there's no keyboard alternative to any of these gestures.
+- **No touch handling.** Pointer Events cover touch mechanically, but nothing distinguishes a scroll gesture from a drag on a touch screen, so the grid is effectively undraggable there. `touch-action` plus a long-press delay is the usual fix.
+- **The keyboard path lives in the other file.** Space-to-grab and arrow-to-move are in `shortcut-settings.ts`'s `onGridKeyDown`, not here, so "how do I move an item" is answered in two places. The engine could own both.
+- **Feedback is applied by class-toggling a live query each move.** Cheap at this scale, but it re-queries the whole grid on every pointer event; tracking the previously-marked element would be one node instead.
+- **Dragging out of a folder is only possible onto a tab.** There is no way to drag a child up to its parent tab's top level without first leaving the folder — the rail is the only escape hatch.

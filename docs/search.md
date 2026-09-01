@@ -119,7 +119,6 @@ Then register it in `initSearch()`. Two things to know: `query()` must be synchr
 ## Refactor candidates
 
 - **`maxResults` is a lie.** It's part of the `SearchProvider` type and nothing in `search.ts` reads it; only the shortcuts provider honors its own value. Either enforce it in `queryProviders()` or drop it from the interface.
-- **A third copy of the palette.** `search-provider-shortcuts.ts:7` duplicates `dock.ts`'s `SWATCH_HEX` verbatim — the same hex values that already disagree with the `--swatch-*` tokens. See [shortcuts.md](shortcuts.md#refactor-candidates).
 - **A second copy of the favicon helper**, also byte-identical to `dock.ts`'s, with the same no-scheme failure.
 - **No ranking.** Results are provider order then insertion order. An exact name match doesn't beat a substring match, and there's no scoring layer where one could go.
 - **Synchronous `query()` blocks async providers.** History, bookmarks, and tab search all need to await. Making `query()` return `SearchResult[] | Promise<SearchResult[]>` and rendering incrementally is the change that unlocks the obvious next providers.

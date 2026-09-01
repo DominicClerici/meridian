@@ -30,7 +30,12 @@ declare global {
   interface BrowserIdentity {
     launchWebAuthFlow(details: { url: string; interactive: boolean }): Promise<string>;
     getRedirectURL(): string;
-    getAuthToken(details: { interactive: boolean }): Promise<GetAuthTokenResult>;
+    getAuthToken(details: {
+      interactive: boolean;
+      /** Overrides the manifest's `oauth2.scopes`, which is what lets Calendar
+          and Mail ask for their own scopes independently. */
+      scopes?: string[];
+    }): Promise<GetAuthTokenResult>;
     removeCachedAuthToken(details: { token: string }): Promise<void>;
   }
 
@@ -66,10 +71,45 @@ declare global {
     ): Promise<VisitItem[]> | void;
   }
 
+  interface BookmarkTreeNode {
+    id: string;
+    parentId?: string;
+    index?: number;
+    url?: string;
+    title: string;
+    dateAdded?: number;
+    children?: BookmarkTreeNode[];
+  }
+
+  interface BrowserBookmarks {
+    getTree(
+      callback?: (results: BookmarkTreeNode[]) => void
+    ): Promise<BookmarkTreeNode[]> | void;
+  }
+
+  interface ExtPermissions {
+    permissions?: string[];
+    origins?: string[];
+  }
+
+  interface BrowserPermissions {
+    contains(
+      permissions: ExtPermissions,
+      callback?: (granted: boolean) => void
+    ): Promise<boolean> | void;
+    request(
+      permissions: ExtPermissions,
+      callback?: (granted: boolean) => void
+    ): Promise<boolean> | void;
+  }
+
   interface BrowserAPI {
     storage: BrowserStorage;
     identity: BrowserIdentity;
     history: BrowserHistory;
+    /** Optional permission — see bookmarks-api.ts. */
+    bookmarks?: BrowserBookmarks;
+    permissions?: BrowserPermissions;
   }
 
   var browser: BrowserAPI | undefined;

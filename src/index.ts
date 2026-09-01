@@ -9,12 +9,16 @@ import { initDock } from "./dock"
 import { initShortcutSettings } from "./shortcut-settings"
 import { initSearch } from "./search"
 import { initClock } from "./clock"
+import { initWorldClocks } from "./world-clocks"
 import { initTodo } from "./todo"
+import { initNotepad } from "./notepad"
 import { initWeather } from "./weather"
 import { initSpotify } from "./spotify"
-import { initHistoryImport } from "./history-import"
 import { initRecommendations } from "./recommendations"
 import { initCalendar } from "./calendar"
+import { initGithub } from "./github"
+import { initLinear } from "./linear"
+import { initMail } from "./mail"
 
 applyTheme()
 subscribeTheme()
@@ -25,18 +29,26 @@ subscribeLayout()
 
 document.getElementById("settings-open")!.prepend(icon("settings", { size: 24 }))
 document.getElementById("todo-trigger")!.prepend(icon("todoList", { size: 24 }))
+document.getElementById("notepad-trigger")!.prepend(icon("notepad", { size: 24 }))
+document.getElementById("github-trigger")!.prepend(icon("github", { size: 22 }))
+document.getElementById("linear-trigger")!.prepend(icon("linear", { size: 21 }))
+document.getElementById("mail-trigger")!.prepend(icon("mail", { size: 22 }))
 
 document.addEventListener("DOMContentLoaded", async () => {
   await store.init()
   initSettings()
   initDock()
   initShortcutSettings()
-  initHistoryImport()
   initSearch()
   initClock()
+  initWorldClocks()
   initTodo()
+  initNotepad()
   initWeather()
   initSpotify()
   initRecommendations()
   initCalendar()
+  initGithub()
+  initLinear()
+  initMail()
 })

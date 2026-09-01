@@ -9,7 +9,7 @@ import {
   authenticate as googleAuthenticate,
   getValidToken,
   invalidateToken,
-  revoke as googleRevoke,
+  releaseGoogle,
 } from "./google-auth"
 import type { AuthOutcome } from "./google-auth"
 
@@ -42,12 +42,18 @@ type GoogleColorMap = {
 const LS_CALENDAR_LIST = "sp:calendar:calendarList"
 const LS_CALENDAR_LIST_TS = "sp:calendar:calendarListTs"
 const LS_COLOR_MAP = "sp:calendar:colors"
-const LS_LAST_FETCH = "sp:calendar:lastFetch"
-const EVENTS_PREFIX = "sp:calendar:events:"
+const WEEK_PREFIX = "sp:calendar:week:"
+/** Pre-week caches, keyed by whatever range the view happened to ask for. Swept on init. */
+const LEGACY_KEYS = ["sp:calendar:events:", "sp:calendar:lastFetch"]
 
-const COOLDOWN = 10_000
+/** How long a cached week is served before it is refetched behind the view. */
+const WEEK_TTL = 300_000
 const REFRESH_INTERVAL = 300_000
 const CALENDAR_LIST_TTL = 3_600_000
+/** `draw()` asks for its week on every render, so a failed week has to stop answering for a while. */
+const FETCH_RETRY_COOLDOWN = 20_000
+/** Weeks this far from the current one are dropped from localStorage; nothing can navigate to them. */
+const WEEK_KEEP_RADIUS = 3
 
 type State = "not-connected" | "loading" | "loaded" | "error"
 type ViewMode = "1d" | "1w"
@@ -56,21 +62,23 @@ function localDateStr(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
 }
 
+/** One week of events, as fetched and as cached. */
+type WeekData = { ts: number; events: CalendarEvent[] }
+
 let currentState: State = "loading"
-let currentEvents: CalendarEvent[] = []
-/** Which range `currentEvents` was fetched for. The views refuse to draw a range it doesn't cover. */
-let currentRangeKey: string | null = null
-/** Shared so a second caller awaits the running fetch rather than getting an instant no-op. */
-let inFlight: Promise<void> | null = null
-let todayEventCount = 0
+/** Every week we hold, keyed by the local date of its Sunday. Both views read out of exactly one. */
+const weeks = new Map<string, WeekData>()
+const weekFetches = new Map<string, Promise<void>>()
+const weekFailedAt = new Map<string, number>()
+/** A localStorage miss is worth remembering — `draw()` would otherwise re-parse for it every render. */
+const weekHydrated = new Set<string>()
 let refreshIntervalId: ReturnType<typeof setInterval> | null = null
 let calendarPopoverClose: (() => void) | null = null
-let popoverRebuild: (() => void) | null = null
 let viewMode: ViewMode = "1d"
 let offset = 0
 
 export async function authenticate(): Promise<AuthOutcome> {
-  const outcome = await googleAuthenticate()
+  const outcome = await googleAuthenticate("calendar")
   if (outcome.ok) store.local.set("calendarConnected", true)
   return outcome
 }
@@ -134,9 +142,13 @@ async function fetchColorMap(token: string): Promise<GoogleColorMap> {
 }
 
 export async function disconnect(): Promise<void> {
-  await googleRevoke()
-
+  // The flag goes first: `releaseGoogle()` reads it back to decide whether the
+  // shared token still has a user. Revoking here unconditionally would sign the
+  // mail widget out of the same account.
   store.local.set("calendarConnected", false)
+  await releaseGoogle()
+
+  clearWeeks()
   try {
     const keys = Object.keys(localStorage)
     for (const key of keys) {
@@ -145,209 +157,363 @@ export async function disconnect(): Promise<void> {
   } catch { /* */ }
 }
 
+/* ── Dates ──────────────────────────────────────────────────────────────── */
+
+// Every span here is advanced by date component, not by adding ms: across a DST
+// boundary a fixed 86_400_000 lands an hour either side of local midnight.
+function addDays(d: Date, n: number): Date {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() + n)
+}
+
+function startOfWeek(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() - d.getDay())
+}
+
+/** The key a week is cached under: the local date of its Sunday. */
+function weekKeyOf(d: Date): string {
+  return localDateStr(startOfWeek(d))
+}
+
+/** The week `n` weeks from the one containing today. */
+function weekKeyAt(n: number): string {
+  return localDateStr(addDays(startOfWeek(new Date()), n * 7))
+}
+
+function dayAt(n: number): Date {
+  return addDays(new Date(), n)
+}
+
+function weekStartAt(n: number): Date {
+  return addDays(startOfWeek(new Date()), n * 7)
+}
+
+/** The one week the current view draws out of — a day is always inside a week we hold. */
+function visibleWeekKey(): string {
+  return viewMode === "1d" ? weekKeyOf(dayAt(offset)) : weekKeyAt(offset)
+}
+
 function getDateRange(): { start: Date; end: Date } {
-  const now = new Date()
-  // Spans are advanced by date component, not by adding ms: across a DST
-  // boundary a fixed 86_400_000 lands an hour either side of local midnight.
   if (viewMode === "1d") {
-    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset)
-    const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 1)
-    return { start, end }
+    const start = dayAt(offset)
+    return { start, end: addDays(start, 1) }
   }
-  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay() + offset * 7)
-  const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 7)
-  return { start, end }
+  const start = weekStartAt(offset)
+  return { start, end: addDays(start, 7) }
 }
 
-function rangeKey(start: Date, end: Date): string {
-  return localDateStr(start) + "_" + localDateStr(end)
-}
+/* ── The week cache ─────────────────────────────────────────────────────── */
 
-function eventsCacheKey(start: Date, end: Date): string {
-  return EVENTS_PREFIX + rangeKey(start, end)
-}
-
-function getCachedEvents(start: Date, end: Date): CalendarEvent[] | null {
+function readWeekCache(key: string): WeekData | null {
   try {
-    const raw = localStorage.getItem(eventsCacheKey(start, end))
+    const raw = localStorage.getItem(WEEK_PREFIX + key)
     if (!raw) return null
-    const { ts, events } = JSON.parse(raw) as { ts: number; events: CalendarEvent[] }
-    if (Date.now() - ts > REFRESH_INTERVAL) return null
-    return events
+    const data = JSON.parse(raw) as WeekData
+    return data && typeof data.ts === "number" && Array.isArray(data.events) ? data : null
   } catch {
     return null
   }
 }
 
-function setCachedEvents(start: Date, end: Date, events: CalendarEvent[]): void {
+function writeWeekCache(key: string, data: WeekData): void {
   try {
-    localStorage.setItem(eventsCacheKey(start, end), JSON.stringify({ ts: Date.now(), events }))
-  } catch { /* quota */ }
-}
-
-function isCooldownActive(): boolean {
-  try {
-    const last = localStorage.getItem(LS_LAST_FETCH)
-    if (!last) return false
-    return Date.now() - Number(last) < COOLDOWN
+    localStorage.setItem(WEEK_PREFIX + key, JSON.stringify(data))
   } catch {
-    return false
+    pruneWeekCache()
+    try { localStorage.setItem(WEEK_PREFIX + key, JSON.stringify(data)) } catch { /* quota */ }
   }
 }
 
-function fetchEvents(): Promise<void> {
-  if (inFlight) return inFlight
-
-  const run = (async () => {
-    if (!store.sync.get("calendarEnabled")) return
-    if (!store.local.get("calendarConnected")) {
-      currentState = "not-connected"
-      currentEvents = []
-      currentRangeKey = null
-      renderTrigger()
-      return
+/** Drops cached weeks nothing can navigate to any more, and the pre-week caches. */
+function pruneWeekCache(): void {
+  try {
+    const keep = new Set<string>()
+    for (let n = -WEEK_KEEP_RADIUS; n <= WEEK_KEEP_RADIUS; n++) keep.add(WEEK_PREFIX + weekKeyAt(n))
+    for (const key of Object.keys(localStorage)) {
+      if (LEGACY_KEYS.some(prefix => key.startsWith(prefix))) localStorage.removeItem(key)
+      else if (key.startsWith(WEEK_PREFIX) && !keep.has(key)) localStorage.removeItem(key)
     }
+  } catch { /* */ }
+}
 
-    const { start, end } = getDateRange()
-    await runFetch(start, end)
+/** What we hold for a week, fresh or stale. Hydrates from localStorage once, then reads memory. */
+function getWeek(key: string): WeekData | null {
+  const held = weeks.get(key)
+  if (held) return held
+  if (weekHydrated.has(key)) return null
+  weekHydrated.add(key)
+  const cached = readWeekCache(key)
+  if (cached) weeks.set(key, cached)
+  return cached
+}
 
-    renderTrigger()
-    popoverRebuild?.()
-  })()
+function isFresh(data: WeekData): boolean {
+  return Date.now() - data.ts < WEEK_TTL
+}
 
-  inFlight = run.finally(() => {
-    inFlight = null
+/**
+ * Brings `key` up to date without ever blocking a render: callers fire and
+ * forget, and the redraw arrives from `notifyDataChanged()` when the fetch
+ * lands. It must stay safe to call from inside `draw()` — a version that
+ * resolved into a redraw would spin a failing week into a microtask loop.
+ *
+ * The promise is only for ordering the prefetch behind the visible week.
+ */
+function requestWeek(key: string, force = false): Promise<void> {
+  const running = weekFetches.get(key)
+  if (running) return running
+
+  let data = getWeek(key)
+  if (!data || !isFresh(data)) {
+    // Another tab may have cached this week since we last looked.
+    const cached = readWeekCache(key)
+    if (cached && (!data || cached.ts > data.ts)) {
+      weeks.set(key, cached)
+      weekHydrated.add(key)
+      data = cached
+      notifyDataChanged()
+    }
+  }
+  if (data && isFresh(data) && !force) return Promise.resolve()
+
+  const failedAt = weekFailedAt.get(key)
+  if (!force && failedAt !== undefined && Date.now() - failedAt < FETCH_RETRY_COOLDOWN) {
+    return Promise.resolve()
+  }
+  weekFailedAt.delete(key)
+
+  const run = fetchWeek(key)
+    .then(events => {
+      const next = { ts: Date.now(), events }
+      weeks.set(key, next)
+      weekHydrated.add(key)
+      writeWeekCache(key, next)
+    })
+    .catch(() => {
+      weekFailedAt.set(key, Date.now())
+    })
+    .finally(() => {
+      weekFetches.delete(key)
+      syncState()
+      notifyDataChanged()
+    })
+
+  weekFetches.set(key, run)
+  syncState()
+  return run
+}
+
+/**
+ * Every week the current view can reach without a fetch. The day view spans
+ * ±7 days, which never leaves the weeks either side of today; the week view
+ * gets its neighbour so one more step is already in hand when it is taken.
+ */
+function prefetchKeys(): string[] {
+  const here = viewMode === "1w" ? offset : 0
+  const wanted = new Set([-1, 0, 1])
+  for (const n of [here - 1, here + 1]) {
+    if (Math.abs(n) <= NAV_LIMITS["1w"]) wanted.add(n)
+  }
+  return [...wanted].map(weekKeyAt)
+}
+
+/**
+ * The visible week first, alone, so it is never queued behind a prefetch; its
+ * neighbours start as soon as it lands.
+ *
+ * Only the visible week is revalidated. A neighbour we already hold is left
+ * alone however stale it has gone — navigating to it renders that copy
+ * instantly and refreshes it behind the view, which is the whole point of
+ * holding it. Refreshing all five every five minutes would be five times the
+ * requests for weeks nobody is looking at.
+ */
+function refreshCalendar(force = false): Promise<void> {
+  if (!store.sync.get("calendarEnabled")) return Promise.resolve()
+  if (!store.local.get("calendarConnected")) {
+    syncState()
+    return Promise.resolve()
+  }
+  return requestWeek(visibleWeekKey(), force).then(() => {
+    for (const key of prefetchKeys()) {
+      if (!getWeek(key)) requestWeek(key)
+    }
   })
-  return inFlight
 }
 
-async function runFetch(start: Date, end: Date): Promise<void> {
-  if (isCooldownActive()) {
-    const cached = getCachedEvents(start, end)
-    if (cached) {
-      currentEvents = cached
-      currentRangeKey = rangeKey(start, end)
-      currentState = "loaded"
-      renderTrigger()
-      return
-    }
-  }
+/* ── State and redraws ──────────────────────────────────────────────────── */
 
-  const cached = getCachedEvents(start, end)
-  if (cached) {
-    currentEvents = cached
-    currentRangeKey = rangeKey(start, end)
-    currentState = "loaded"
-    renderTrigger()
-  } else if (currentState !== "loaded") {
-    currentState = "loading"
-    renderTrigger()
-  }
+let notifyQueued = false
 
-  let token = await getValidToken()
-  if (!token) {
-    store.local.set("calendarConnected", false)
-    currentState = "not-connected"
-    currentEvents = []
-    currentRangeKey = null
+/**
+ * One entry point for "the data moved" — coalesced, because a fetch landing,
+ * a state change and a cross-tab adoption can all fire in the same tick, and
+ * each host rebuild is a full re-render.
+ *
+ * It goes through `liveBodies` rather than the card and the popover by name, so
+ * a body only has to exist to stay current.
+ */
+function notifyDataChanged(): void {
+  if (notifyQueued) return
+  notifyQueued = true
+  queueMicrotask(() => {
+    notifyQueued = false
     renderTrigger()
+    for (const entry of [...liveBodies]) entry.rebuild()
+  })
+}
+
+function setState(next: State): void {
+  if (next === currentState) return
+  currentState = next
+  notifyDataChanged()
+}
+
+/** The trigger speaks for today, so the widget's state is this week's state. */
+function syncState(): void {
+  if (!store.local.get("calendarConnected")) {
+    setState("not-connected")
     return
   }
+  const key = weekKeyAt(0)
+  if (getWeek(key)) setState("loaded")
+  else if (weekFetches.has(key)) setState("loading")
+  else setState(weekFailedAt.has(key) ? "error" : "loading")
+}
 
+function countEventsToday(): number {
+  const data = getWeek(weekKeyAt(0))
+  if (!data) return 0
+  const dateStr = localDateStr(new Date())
+  return blocksForDay(data.events, dateStr).length + allDayFor(data.events, dateStr).length
+}
+
+/* ── Fetching ───────────────────────────────────────────────────────────── */
+
+type FetchContext = { token: string; calendars: CalendarInfo[]; colorMap: GoogleColorMap }
+
+let contextInFlight: Promise<FetchContext> | null = null
+
+/** Token, calendar list and colour map, shared so parallel week fetches ask for them once. */
+function getFetchContext(): Promise<FetchContext> {
+  if (contextInFlight) return contextInFlight
+  const run = loadFetchContext().finally(() => { contextInFlight = null })
+  contextInFlight = run
+  return run
+}
+
+async function loadFetchContext(): Promise<FetchContext> {
+  const token = await requireToken()
   try {
-    let calendars: CalendarInfo[]
-    let colorMap: GoogleColorMap
-    try {
-      calendars = await fetchCalendarList(token)
-      colorMap = await fetchColorMap(token)
-    } catch (e) {
-      if (e instanceof Error && e.message.includes("401")) {
-        localStorage.removeItem(LS_CALENDAR_LIST)
-        localStorage.removeItem(LS_CALENDAR_LIST_TS)
-        localStorage.removeItem(LS_COLOR_MAP)
-        await invalidateToken()
-        token = await getValidToken()
-        if (!token) {
-          store.local.set("calendarConnected", false)
-          currentState = "not-connected"
-          currentEvents = []
-          renderTrigger()
-          return
-        }
-        calendars = await fetchCalendarList(token)
-        colorMap = await fetchColorMap(token)
-      } else {
-        throw e
-      }
+    return await withToken(token)
+  } catch (e) {
+    if (!(e instanceof Error) || !e.message.includes("401")) throw e
+    // The list and the colours are cached; a 401 means both the cache and the
+    // token behind them are suspect, so drop the lot and go round once more.
+    localStorage.removeItem(LS_CALENDAR_LIST)
+    localStorage.removeItem(LS_CALENDAR_LIST_TS)
+    localStorage.removeItem(LS_COLOR_MAP)
+    await invalidateToken()
+    return await withToken(await requireToken())
+  }
+}
+
+async function withToken(token: string): Promise<FetchContext> {
+  const [calendars, colorMap] = await Promise.all([fetchCalendarList(token), fetchColorMap(token)])
+  return { token, calendars, colorMap }
+}
+
+async function requireToken(): Promise<string> {
+  const token = await getValidToken("calendar")
+  if (!token) {
+    markDisconnected()
+    throw new Error("No Google token")
+  }
+  return token
+}
+
+function markDisconnected(): void {
+  clearWeeks()
+  store.local.set("calendarConnected", false)
+  syncState()
+}
+
+function clearWeeks(): void {
+  weeks.clear()
+  weekHydrated.clear()
+  weekFailedAt.clear()
+}
+
+async function fetchWeek(key: string): Promise<CalendarEvent[]> {
+  const start = new Date(`${key}T00:00:00`)
+  const { token, calendars, colorMap } = await getFetchContext()
+
+  const params = new URLSearchParams({
+    timeMin: start.toISOString(),
+    timeMax: addDays(start, 7).toISOString(),
+    singleEvents: "true",
+    orderBy: "startTime",
+  })
+
+  // Google has no cross-calendar events endpoint, so this is one request per
+  // calendar. They go out together — a week costs one round trip, not N.
+  const results = await Promise.all(
+    calendars.map(cal => fetchCalendarEvents(cal, params, token, colorMap))
+  )
+  const reached = results.filter((r): r is CalendarEvent[] => r !== null)
+
+  // Committing an all-failed batch would cache "no events" for the week and
+  // serve it for the next five minutes.
+  if (calendars.length > 0 && reached.length === 0) throw new Error("Every calendar request failed")
+
+  const events = reached.flat()
+  events.sort((a, b) => {
+    if (a.allDay !== b.allDay) return a.allDay ? -1 : 1
+    const aTime = a.startTime ? new Date(a.startTime).getTime() : 0
+    const bTime = b.startTime ? new Date(b.startTime).getTime() : 0
+    return aTime - bTime
+  })
+  return events
+}
+
+/** One calendar's slice of a week. A failed calendar is skipped, not fatal. */
+async function fetchCalendarEvents(
+  cal: CalendarInfo,
+  params: URLSearchParams,
+  token: string,
+  colorMap: GoogleColorMap
+): Promise<CalendarEvent[] | null> {
+  try {
+    const res = await fetch(
+      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events?${params}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    )
+    if (!res.ok) return null
+
+    const data = await res.json()
+    const events: CalendarEvent[] = []
+    for (const e of (data.items ?? []) as Record<string, unknown>[]) {
+      if (e.status === "cancelled") continue
+      const colorId = e.colorId as string | undefined
+      const color = colorId && colorMap.event?.[colorId]
+        ? colorMap.event[colorId].background
+        : cal.backgroundColor
+
+      events.push({
+        id: e.id as string,
+        title: (e.summary as string) ?? "(No title)",
+        startTime: (e.start as Record<string, string>)?.dateTime ?? null,
+        endTime: (e.end as Record<string, string>)?.dateTime ?? null,
+        allDay: !!(e.start as Record<string, string>)?.date,
+        allDayDate: (e.start as Record<string, string>)?.date ?? null,
+        htmlLink: (e.htmlLink as string) ?? "",
+        calendarId: cal.id,
+        calendarName: cal.name,
+        color,
+        location: (e.location as string) ?? null,
+      })
     }
-
-    const params = new URLSearchParams({
-      timeMin: start.toISOString(),
-      timeMax: end.toISOString(),
-      singleEvents: "true",
-      orderBy: "startTime",
-    })
-
-    const allEvents: CalendarEvent[] = []
-    let reached = 0
-
-    for (const cal of calendars) {
-      try {
-        const res = await fetch(
-          `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events?${params}`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        )
-        if (!res.ok) continue
-        reached++
-
-        const data = await res.json()
-        for (const e of (data.items ?? []) as Record<string, unknown>[]) {
-          if (e.status === "cancelled") continue
-          const colorId = e.colorId as string | undefined
-          const color = colorId && colorMap.event?.[colorId]
-            ? colorMap.event[colorId].background
-            : cal.backgroundColor
-
-          allEvents.push({
-            id: e.id as string,
-            title: (e.summary as string) ?? "(No title)",
-            startTime: (e.start as Record<string, string>)?.dateTime ?? null,
-            endTime: (e.end as Record<string, string>)?.dateTime ?? null,
-            allDay: !!(e.start as Record<string, string>)?.date,
-            allDayDate: (e.start as Record<string, string>)?.date ?? null,
-            htmlLink: (e.htmlLink as string) ?? "",
-            calendarId: cal.id,
-            calendarName: cal.name,
-            color,
-            location: (e.location as string) ?? null,
-          })
-        }
-      } catch {
-        continue
-      }
-    }
-
-    if (calendars.length > 0 && reached === 0) {
-      throw new Error("Every calendar request failed")
-    }
-
-    allEvents.sort((a, b) => {
-      if (a.allDay !== b.allDay) return a.allDay ? -1 : 1
-      const aTime = a.startTime ? new Date(a.startTime).getTime() : 0
-      const bTime = b.startTime ? new Date(b.startTime).getTime() : 0
-      return aTime - bTime
-    })
-
-    currentEvents = allEvents
-    currentRangeKey = rangeKey(start, end)
-    currentState = "loaded"
-    if (viewMode === "1d" && offset === 0) todayEventCount = currentEvents.length
-    setCachedEvents(start, end, allEvents)
-    try { localStorage.setItem(LS_LAST_FETCH, String(Date.now())) } catch { /* */ }
+    return events
   } catch {
-    if (!cached) {
-      currentState = "error"
-    }
+    return null
   }
 }
 
@@ -370,7 +536,30 @@ function formatClock(d: Date): string {
   })
 }
 
-const NAV_LIMITS: Record<ViewMode, number> = { "1d": 6, "1w": 3 }
+/**
+ * How far either view can travel. Both bounds are set by what the prefetch
+ * holds: the weeks either side of today cover every day within ±7, and the
+ * week view's ±2 is one step beyond whatever its own neighbour prefetch has
+ * already brought in.
+ */
+const NAV_LIMITS: Record<ViewMode, number> = { "1d": 7, "1w": 2 }
+
+/**
+ * Switching view keeps the period you were looking at rather than snapping
+ * back to today. A week further out than ±7 days has no day inside the day
+ * view's bound, so it lands on the nearest day the day view can reach.
+ */
+function switchView(mode: ViewMode): void {
+  if (mode === viewMode) return
+  if (mode === "1w") {
+    const delta = (startOfWeek(dayAt(offset)).getTime() - startOfWeek(new Date()).getTime()) / 604_800_000
+    offset = clamp(-NAV_LIMITS["1w"], Math.round(delta), NAV_LIMITS["1w"])
+  } else if (offset !== 0) {
+    const days = (weekStartAt(offset).getTime() - dayAt(0).getTime()) / 86_400_000
+    offset = clamp(-NAV_LIMITS["1d"], Math.round(days), NAV_LIMITS["1d"])
+  }
+  viewMode = mode
+}
 
 function ordinal(n: number): string {
   const s = ["th", "st", "nd", "rd"]
@@ -422,8 +611,7 @@ function renderControls(onUpdate: () => void): HTMLElement {
       ? "px-3 py-1 rounded-theme text-xs font-semibold bg-accent text-accent-foreground transition-colors"
       : "px-3 py-1 rounded-theme text-xs font-medium text-muted hover:bg-surface transition-colors"
     btn.addEventListener("click", () => {
-      viewMode = mode
-      offset = 0
+      switchView(mode)
       onUpdate()
     })
     segmented.appendChild(btn)
@@ -467,7 +655,7 @@ function renderControls(onUpdate: () => void): HTMLElement {
   return wrapper
 }
 
-function showEventDetail(anchor: HTMLElement, event: CalendarEvent): void {
+function eventDetailContent(event: CalendarEvent): HTMLElement {
   const content = document.createElement("div")
   content.className = "flex flex-col gap-3 min-w-[240px] max-w-[300px]"
 
@@ -506,8 +694,99 @@ function showEventDetail(anchor: HTMLElement, event: CalendarEvent): void {
     content.appendChild(link)
   }
 
-  createPopover(anchor, content)
+  return content
 }
+
+/* ── Event hover card ───────────────────────────────────────────────────────
+ * Events are read by hovering, not clicking. The card is a singleton on
+ * `document.body` rather than a `createPopover` — it has to outlive the block
+ * it describes (a resize or a fetch rebuilds the whole timeline underneath it)
+ * and it must not join the popover stack, which dismisses on outside click.
+ *
+ * Both timers are the polish: `HOVER_IN` keeps the card from strobing as the
+ * pointer sweeps a dense day, and `HOVER_OUT` leaves a grace period wide enough
+ * to cross the gap into the card and click the Google Calendar link.
+ */
+
+const HOVER_IN = 90
+const HOVER_OUT = 160
+/** Above the popover stack, which starts at 100 and climbs. */
+const HOVER_Z = 2000
+
+let hoverCard: HTMLElement | null = null
+let hoverFor: HTMLElement | null = null
+let hoverInTimer: number | null = null
+let hoverOutTimer: number | null = null
+
+function hideEventHover(): void {
+  if (hoverInTimer !== null) { clearTimeout(hoverInTimer); hoverInTimer = null }
+  if (hoverOutTimer !== null) { clearTimeout(hoverOutTimer); hoverOutTimer = null }
+  hoverCard?.remove()
+  hoverCard = null
+  hoverFor = null
+}
+
+function scheduleHoverOut(): void {
+  if (hoverOutTimer !== null) clearTimeout(hoverOutTimer)
+  hoverOutTimer = window.setTimeout(() => {
+    hoverOutTimer = null
+    hideEventHover()
+  }, HOVER_OUT)
+}
+
+/** Beside the block if it fits, flipped to the other side if not, always on screen. */
+function placeHoverCard(card: HTMLElement, anchor: HTMLElement): void {
+  const a = anchor.getBoundingClientRect()
+  const c = card.getBoundingClientRect()
+  const margin = 8
+  const gap = 10
+  let left = a.right + gap
+  if (left + c.width > window.innerWidth - margin) left = a.left - gap - c.width
+  card.style.left = `${Math.round(clamp(margin, left, window.innerWidth - c.width - margin))}px`
+  card.style.top = `${Math.round(clamp(margin, a.top + a.height / 2 - c.height / 2, window.innerHeight - c.height - margin))}px`
+}
+
+function showEventHover(anchor: HTMLElement, event: CalendarEvent): void {
+  hideEventHover()
+  const card = document.createElement("div")
+  card.className =
+    "fixed bg-popover text-popover-foreground rounded-theme p-3 flex flex-col gap-2 border border-popover-foreground/[0.08] glass-surface popover-enter"
+  card.style.zIndex = String(HOVER_Z)
+  card.appendChild(eventDetailContent(event))
+  document.body.appendChild(card)
+
+  card.addEventListener("mouseenter", () => {
+    if (hoverOutTimer !== null) { clearTimeout(hoverOutTimer); hoverOutTimer = null }
+  })
+  card.addEventListener("mouseleave", scheduleHoverOut)
+
+  hoverCard = card
+  hoverFor = anchor
+  placeHoverCard(card, anchor)
+}
+
+/** Makes `el` show the event's card on hover. Replaces the old click-to-open popover. */
+function attachEventHover(el: HTMLElement, event: CalendarEvent): void {
+  el.addEventListener("mouseenter", () => {
+    if (hoverOutTimer !== null) { clearTimeout(hoverOutTimer); hoverOutTimer = null }
+    if (hoverFor === el) return
+    if (hoverInTimer !== null) clearTimeout(hoverInTimer)
+    hoverInTimer = window.setTimeout(() => {
+      hoverInTimer = null
+      showEventHover(el, event)
+    }, HOVER_IN)
+  })
+  el.addEventListener("mouseleave", () => {
+    if (hoverInTimer !== null) { clearTimeout(hoverInTimer); hoverInTimer = null }
+    scheduleHoverOut()
+  })
+}
+
+// The card is positioned from a rect taken once, so anything that moves the
+// block out from under it — the timeline scrolling, the window resizing —
+// retires it rather than leaving it pointing at nothing.
+window.addEventListener("scroll", hideEventHover, true)
+window.addEventListener("resize", hideEventHover)
 
 function detailRow(label: string, value: string): HTMLElement {
   const row = document.createElement("div")
@@ -541,14 +820,19 @@ type TimeMap = {
   domain: Span
   /** Minutes past local midnight → pixels from the top of the timeline. */
   y: (min: number) => number
+  /** The inverse: pixels from the top → the minute there, and whether that stretch is drawn to scale. */
+  minAt: (px: number) => { min: number; busy: boolean }
 }
 
 type MapOpts = {
   pxPerMin: number
   minEventHeight: number
-  gapScale: number
+  /** Gap heights run gapMin → gapMax over a sqrt curve, reaching gapMax at gapFull minutes. */
   gapMin: number
   gapMax: number
+  gapFull: number
+  /** Floor for the whole axis. Sparse days grow their gaps to reach it. */
+  minTotal: number
 }
 
 const EMPTY_MAP: TimeMap = {
@@ -556,10 +840,39 @@ const EMPTY_MAP: TimeMap = {
   total: 0,
   domain: { start: 0, end: 0 },
   y: () => 0,
+  minAt: () => ({ min: 0, busy: false }),
 }
 
 function clamp(lo: number, v: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v))
+}
+
+const CORE_START = 8 * 60
+const CORE_END = 18 * 60
+/** A sparse axis grows to this fraction of its scroll cap — enough to read, never enough to scroll. */
+const MIN_TOTAL_RATIO = 0.55
+/** Gap duration at which compression tops out at `gapMax`. */
+const GAP_FULL_MIN = 8 * 60
+
+/**
+ * The window the axis always covers. Without it the domain is whatever the
+ * events happen to span, so a lone 2pm event fills the timeline top to bottom
+ * and reads exactly like a lone 8am one. Today also anchors to `now`, so the
+ * now-line lands where it belongs instead of clamping to an edge.
+ */
+function coreAnchor(isToday: boolean): Span {
+  if (!isToday) return { start: CORE_START, end: CORE_END }
+  const now = minutesNow()
+  return { start: Math.min(CORE_START, now), end: Math.max(CORE_END, now) }
+}
+
+/**
+ * Empty time is compressed, but not to a constant: a flat clamp made a 45m gap
+ * and a 4h gap the same height, which is most of a day's shape thrown away.
+ * The sqrt keeps every gap distinguishable while still bounding the tallest.
+ */
+function gapHeight(dur: number, o: MapOpts): number {
+  return o.gapMin + (o.gapMax - o.gapMin) * Math.sqrt(clamp(0, dur / o.gapFull, 1))
 }
 
 /**
@@ -567,18 +880,25 @@ function clamp(lo: number, v: number, hi: number): number {
  * (compressed if nothing covers it), then grows slices until every span clears
  * `minEventH` — so the shortest event still has room for its title. Growth only
  * ever adds height, so the relaxation converges; six passes is far more than
- * any realistic day needs.
+ * any realistic day needs. A final pass grows the gaps — never the events,
+ * which stay scaled to their duration — until the axis clears `minTotal`.
+ *
+ * `anchor` widens the domain to a fixed window so y means the same thing from
+ * one day to the next; it deliberately does not join `spans`, since it is a
+ * reference frame rather than something to draw or to relax around.
  */
-function buildTimeMap(spans: Span[], opts: MapOpts): TimeMap {
+function buildTimeMap(spans: Span[], opts: MapOpts, anchor?: Span): TimeMap {
   if (spans.length === 0) return EMPTY_MAP
 
   const domain = {
-    start: Math.min(...spans.map(s => s.start)),
-    end: Math.max(...spans.map(s => s.end)),
+    start: Math.min(...spans.map(s => s.start), anchor?.start ?? Infinity),
+    end: Math.max(...spans.map(s => s.end), anchor?.end ?? -Infinity),
   }
   if (domain.end <= domain.start) return EMPTY_MAP
 
-  const bounds = [...new Set(spans.flatMap(s => [s.start, s.end]))].sort((a, b) => a - b)
+  const bounds = [
+    ...new Set([domain.start, domain.end, ...spans.flatMap(s => [s.start, s.end])]),
+  ].sort((a, b) => a - b)
 
   const slices: Slice[] = []
   for (let i = 0; i < bounds.length - 1; i++) {
@@ -592,9 +912,7 @@ function buildTimeMap(spans: Span[], opts: MapOpts): TimeMap {
       end,
       busy,
       y: 0,
-      h: busy
-        ? dur * opts.pxPerMin
-        : clamp(opts.gapMin, dur * opts.pxPerMin * opts.gapScale, opts.gapMax),
+      h: busy ? dur * opts.pxPerMin : gapHeight(dur, opts),
     })
   }
 
@@ -619,6 +937,14 @@ function buildTimeMap(spans: Span[], opts: MapOpts): TimeMap {
     if (!grew) break
   }
 
+  // Relaxation only ever touched busy slices, so the gaps are untouched here.
+  const gaps = slices.filter(sl => !sl.busy)
+  const gapDur = gaps.reduce((sum, sl) => sum + (sl.end - sl.start), 0)
+  const deficit = opts.minTotal - slices.reduce((sum, sl) => sum + sl.h, 0)
+  if (deficit > 0 && gapDur > 0) {
+    for (const sl of gaps) sl.h += (deficit * (sl.end - sl.start)) / gapDur
+  }
+
   let y = 0
   for (const sl of slices) {
     sl.y = y
@@ -637,7 +963,18 @@ function buildTimeMap(spans: Span[], opts: MapOpts): TimeMap {
     return total
   }
 
-  return { slices, total, domain, y: mapY }
+  function minAt(px: number): { min: number; busy: boolean } {
+    for (const sl of slices) {
+      if (px < sl.y + sl.h) {
+        const min = sl.h > 0 ? sl.start + ((sl.end - sl.start) * (px - sl.y)) / sl.h : sl.start
+        return { min: clamp(sl.start, min, sl.end), busy: sl.busy }
+      }
+    }
+    const last = slices[slices.length - 1]
+    return { min: last.end, busy: last.busy }
+  }
+
+  return { slices, total, domain, y: mapY, minAt }
 }
 
 /**
@@ -706,6 +1043,14 @@ function formatHourLabel(min: number): string {
   const h12 = h % 12 === 0 ? 12 : h % 12
   const suffix = h < 12 ? "a" : "p"
   return m === 0 ? `${h12}${suffix}` : `${h12}:${String(m).padStart(2, "0")}${suffix}`
+}
+
+/** Minutes past local midnight as a full wall-clock time, for the scrubline readout. */
+function formatMinuteOfDay(min: number): string {
+  const d = new Date()
+  d.setHours(0, 0, 0, 0)
+  d.setMinutes(Math.round(min))
+  return formatClock(d)
 }
 
 function formatDuration(minutes: number): string {
@@ -789,11 +1134,83 @@ function renderGapMarks(map: TimeMap, m: Metrics): HTMLElement[] {
   return out
 }
 
+/**
+ * The hover scrubline: a hairline across the full timeline at the pointer, with
+ * the time under it read off `map.minAt` — the inverse of the layout, so it
+ * stays honest on a non-linear axis.
+ *
+ * Over a compressed gap a few pixels sweep hours, so the whole group dims there
+ * rather than pretending the readout tracks the pointer at the same rate.
+ * Position is written straight to `top` with no transition — a lagging line
+ * reads as broken — while the opacity change is what carries the smoothness.
+ */
+function attachScrubber(scroll: HTMLElement, inner: HTMLElement, map: TimeMap, m: Metrics): void {
+  const row = absEl("absolute pointer-events-none transition-opacity duration-150", {
+    left: "0px",
+    right: "0px",
+    top: "0px",
+    height: "0px",
+    opacity: "0",
+    zIndex: "15",
+  })
+  row.appendChild(
+    absEl("absolute bg-popover-foreground/30", {
+      left: `${m.gutter}px`,
+      right: "0px",
+      top: "0px",
+      height: "1px",
+    })
+  )
+
+  const pill = document.createElement("div")
+  pill.className =
+    "absolute left-0 rounded-theme-xs bg-popover-foreground/90 text-popover tabular-nums font-medium leading-none whitespace-nowrap px-1.5 py-1"
+  pill.style.fontSize = `${Math.max(9.5, m.labelFont).toFixed(2)}px`
+  row.appendChild(pill)
+  inner.appendChild(row)
+
+  let pillH = 0
+  let clientY = 0
+  let visible = false
+  let frame = 0
+
+  function paint(): void {
+    frame = 0
+    if (!visible) return
+    const y = clamp(0, clientY - inner.getBoundingClientRect().top, map.total)
+    const { min, busy } = map.minAt(y)
+    row.style.top = `${y.toFixed(1)}px`
+    row.style.opacity = busy ? "1" : "0.45"
+    // Snapped to 5 minutes: at these scales the pixel is not that precise, and
+    // an exact-minute readout jitters on every frame.
+    pill.textContent = formatMinuteOfDay(clamp(map.domain.start, Math.round(min / 5) * 5, map.domain.end))
+    if (pillH === 0) pillH = pill.offsetHeight
+    pill.style.top = `${(clamp(0, y - pillH / 2, Math.max(0, map.total - pillH)) - y).toFixed(1)}px`
+  }
+
+  function schedule(): void {
+    if (frame === 0) frame = requestAnimationFrame(paint)
+  }
+
+  scroll.addEventListener("mousemove", (e) => {
+    visible = true
+    clientY = e.clientY
+    schedule()
+  })
+  scroll.addEventListener("mouseleave", () => {
+    visible = false
+    if (frame !== 0) { cancelAnimationFrame(frame); frame = 0 }
+    row.style.opacity = "0"
+  })
+  // Content moving under a stationary pointer changes the time it is over.
+  scroll.addEventListener("scroll", () => { if (visible) schedule() })
+}
+
 /** One event. Text is sized to fit the block, dropping to a bare title when short. */
 function renderBlock(block: Block, w: number, h: number, m: Metrics): HTMLElement {
   const el = document.createElement("div")
   el.className =
-    "absolute overflow-hidden rounded-theme-xs cursor-pointer flex flex-col transition-[filter,box-shadow] hover:brightness-110 hover:z-10"
+    "absolute overflow-hidden rounded-theme-xs flex flex-col transition-[filter,box-shadow] hover:brightness-110 hover:z-10"
   el.style.justifyContent = h >= 30 ? "flex-start" : "center"
   el.style.backgroundColor = tint(block.event.color, 20)
   el.style.boxShadow = `inset 2px 0 0 ${block.event.color}`
@@ -826,8 +1243,7 @@ function renderBlock(block: Block, w: number, h: number, m: Metrics): HTMLElemen
   }
 
   el.appendChild(inner)
-  el.title = `${block.event.title} · ${formatTimeRange(block.event)}`
-  el.addEventListener("click", () => showEventDetail(el, block.event))
+  attachEventHover(el, block.event)
   return el
 }
 
@@ -890,15 +1306,14 @@ function renderNowLine(
 
 function allDayChip(event: CalendarEvent, m: Metrics, full: boolean): HTMLElement {
   const chip = document.createElement("div")
-  chip.className = "truncate rounded-theme-xs cursor-pointer leading-tight hover:brightness-110"
+  chip.className = "truncate rounded-theme-xs leading-tight hover:brightness-110"
   chip.style.backgroundColor = tint(event.color, 22)
   chip.style.boxShadow = `inset 2px 0 0 ${event.color}`
   chip.style.padding = full ? "3px 7px 3px 9px" : "1.5px 4px 1.5px 6px"
   chip.style.fontSize = `${(full ? m.titleFont : m.metaFont).toFixed(2)}px`
   chip.classList.add("text-popover-foreground/85", "font-medium")
   chip.textContent = event.title
-  chip.title = `${event.title} · All day`
-  chip.addEventListener("click", () => showEventDetail(chip, event))
+  attachEventHover(chip, event)
   return chip
 }
 
@@ -951,6 +1366,24 @@ function emptyNote(text: string): HTMLElement {
   return el
 }
 
+/** A failed week, with the way out of it — the retry bypasses the fetch cooldown. */
+function retryNote(key: string, redraw: () => void): HTMLElement {
+  const wrap = document.createElement("div")
+  wrap.className = "flex flex-col items-center gap-2 py-8"
+  wrap.appendChild(emptyNote("Couldn't reach Google Calendar."))
+  wrap.firstElementChild!.className = "text-sm text-popover-foreground/45 text-center"
+
+  const retry = document.createElement("button")
+  retry.className = "px-2.5 py-1 rounded-theme text-xs font-medium text-muted hover:bg-surface transition-colors"
+  retry.textContent = "Retry"
+  retry.addEventListener("click", () => {
+    void requestWeek(key, true)
+    redraw()
+  })
+  wrap.appendChild(retry)
+  return wrap
+}
+
 function sectionLabel(text: string, font: number): HTMLElement {
   const el = document.createElement("div")
   el.className = "uppercase tracking-[0.09em] text-popover-foreground/40 font-semibold leading-none"
@@ -983,7 +1416,7 @@ function renderNextUp(blocks: Block[], m: Metrics, requestRebuild: () => void): 
 
   const card = document.createElement("div")
   card.className =
-    "relative overflow-hidden rounded-theme flex items-center gap-2.5 cursor-pointer hover:brightness-110 transition-[filter]"
+    "relative overflow-hidden rounded-theme flex items-center gap-2.5 hover:brightness-110 transition-[filter]"
   card.style.backgroundColor = tint(next.event.color, 16)
   card.style.boxShadow = `inset 3px 0 0 ${next.event.color}`
   card.style.padding = `${m.titleFont >= 12 ? 9 : 7}px ${m.titleFont >= 12 ? 11 : 9}px`
@@ -1033,12 +1466,13 @@ function renderNextUp(blocks: Block[], m: Metrics, requestRebuild: () => void): 
   paint()
   mounted = true
 
-  card.addEventListener("click", () => showEventDetail(card, next.event))
+  attachEventHover(card, next.event)
   wrap.appendChild(card)
   return { el: wrap, tick: paint }
 }
 
 function dayMetrics(width: number): Metrics & MapOpts & { maxHeight: number } {
+  const maxHeight = clamp(240, width * 0.72, 460)
   return {
     width,
     gutter: width >= 200 ? Math.round(clamp(36, width * 0.1, 48)) : 0,
@@ -1047,10 +1481,11 @@ function dayMetrics(width: number): Metrics & MapOpts & { maxHeight: number } {
     metaFont: clamp(9, width * 0.026, 11),
     minEventHeight: clamp(19, width * 0.05, 26),
     pxPerMin: clamp(0.55, width * 0.0017, 1),
-    gapScale: 0.16,
     gapMin: 14,
     gapMax: clamp(18, width * 0.06, 30),
-    maxHeight: clamp(240, width * 0.72, 460),
+    gapFull: GAP_FULL_MIN,
+    minTotal: maxHeight * MIN_TOTAL_RATIO,
+    maxHeight,
   }
 }
 
@@ -1106,7 +1541,7 @@ function renderDayView(events: CalendarEvent[], width: number, requestRebuild: (
     return { el: root, tick: () => ticks.forEach(t => t()) }
   }
 
-  const map = buildTimeMap(blocks, m)
+  const map = buildTimeMap(blocks, m, coreAnchor(isToday))
   const contentW = Math.max(40, width - m.gutter - 6)
 
   const scroll = scroller(m.maxHeight)
@@ -1127,6 +1562,7 @@ function renderDayView(events: CalendarEvent[], width: number, requestRebuild: (
     inner.appendChild(nowRow)
   }
 
+  attachScrubber(scroll, inner, map, m)
   scroll.appendChild(inner)
   root.appendChild(scroll)
 
@@ -1148,6 +1584,7 @@ function renderDayView(events: CalendarEvent[], width: number, requestRebuild: (
 function weekMetrics(width: number): Metrics & MapOpts & { maxHeight: number; dayWidth: number } {
   // No time gutter: the week's seven columns span the full measured width.
   const dayWidth = Math.max(70, width) / 7
+  const maxHeight = clamp(200, width * 0.5, 380)
   return {
     width,
     gutter: 0,
@@ -1157,14 +1594,48 @@ function weekMetrics(width: number): Metrics & MapOpts & { maxHeight: number; da
     metaFont: clamp(8, dayWidth * 0.105, 9.5),
     minEventHeight: clamp(12, dayWidth * 0.15, 17),
     pxPerMin: clamp(0.22, dayWidth * 0.005, 0.5),
-    gapScale: 0.1,
     gapMin: 8,
     gapMax: 16,
-    maxHeight: clamp(200, width * 0.5, 380),
+    gapFull: GAP_FULL_MIN,
+    minTotal: maxHeight * MIN_TOTAL_RATIO,
+    maxHeight,
   }
 }
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+
+/** Day names and dates over the seven columns. Drawn from dates alone, so the skeleton shares it. */
+function weekHeaderRow(dates: Date[], m: Metrics & { dayWidth: number }): HTMLElement {
+  const todayStr = localDateStr(new Date())
+  const header = document.createElement("div")
+  header.className = "flex shrink-0"
+
+  for (const date of dates) {
+    const isToday = localDateStr(date) === todayStr
+    const col = document.createElement("div")
+    col.className = "flex flex-col items-center gap-0.5 min-w-0"
+    col.style.width = `${m.dayWidth}px`
+
+    const name = document.createElement("div")
+    name.className = isToday
+      ? "uppercase tracking-[0.08em] font-semibold text-accent leading-none"
+      : "uppercase tracking-[0.08em] text-popover-foreground/40 leading-none"
+    name.style.fontSize = `${m.labelFont.toFixed(2)}px`
+    name.textContent = WEEKDAYS[date.getDay()]
+    col.appendChild(name)
+
+    const num = document.createElement("div")
+    num.className = isToday
+      ? "font-semibold text-accent tabular-nums leading-none"
+      : "text-popover-foreground/70 tabular-nums leading-none"
+    num.style.fontSize = `${(m.labelFont + 2).toFixed(2)}px`
+    num.textContent = String(date.getDate())
+    col.appendChild(num)
+
+    header.appendChild(col)
+  }
+  return header
+}
 
 function renderWeekView(events: CalendarEvent[], width: number): ViewParts {
   const m = weekMetrics(width)
@@ -1187,34 +1658,7 @@ function renderWeekView(events: CalendarEvent[], width: number): ViewParts {
   const todayIndex = days.findIndex(d => d.isToday)
   const root = document.createElement("div")
   root.className = "flex flex-col gap-1.5 min-w-0 pt-2"
-
-  const header = document.createElement("div")
-  header.className = "flex shrink-0"
-
-  for (const day of days) {
-    const col = document.createElement("div")
-    col.className = "flex flex-col items-center gap-0.5 min-w-0"
-    col.style.width = `${m.dayWidth}px`
-
-    const name = document.createElement("div")
-    name.className = day.isToday
-      ? "uppercase tracking-[0.08em] font-semibold text-accent leading-none"
-      : "uppercase tracking-[0.08em] text-popover-foreground/40 leading-none"
-    name.style.fontSize = `${m.labelFont.toFixed(2)}px`
-    name.textContent = WEEKDAYS[day.date.getDay()]
-    col.appendChild(name)
-
-    const num = document.createElement("div")
-    num.className = day.isToday
-      ? "font-semibold text-accent tabular-nums leading-none"
-      : "text-popover-foreground/70 tabular-nums leading-none"
-    num.style.fontSize = `${(m.labelFont + 2).toFixed(2)}px`
-    num.textContent = String(day.date.getDate())
-    col.appendChild(num)
-
-    header.appendChild(col)
-  }
-  root.appendChild(header)
+  root.appendChild(weekHeaderRow(days.map(d => d.date), m))
 
   if (days.some(d => d.allDay.length > 0 || d.todos.length > 0)) {
     const row = document.createElement("div")
@@ -1248,7 +1692,7 @@ function renderWeekView(events: CalendarEvent[], width: number): ViewParts {
     return { el: root, tick: () => {} }
   }
 
-  const map = buildTimeMap(allBlocks, m)
+  const map = buildTimeMap(allBlocks, m, coreAnchor(todayIndex >= 0))
 
   const scroll = scroller(m.maxHeight)
   const inner = document.createElement("div")
@@ -1295,6 +1739,7 @@ function renderWeekView(events: CalendarEvent[], width: number): ViewParts {
     inner.appendChild(nowRow)
   }
 
+  attachScrubber(scroll, inner, map, m)
   scroll.appendChild(inner)
   root.appendChild(scroll)
 
@@ -1314,8 +1759,110 @@ function renderWeekView(events: CalendarEvent[], width: number): ViewParts {
 }
 
 
+/* ── Skeleton ───────────────────────────────────────────────────────────── */
+
+/** Where a placeholder block sits, as a fraction of the timeline's height. */
+const DAY_SKELETON: [number, number][] = [[0, 0.12], [0.19, 0.29], [0.37, 0.58], [0.66, 0.76], [0.85, 0.97]]
+const WEEK_SKELETON: [number, number][][] = [
+  [[0.1, 0.24]],
+  [[0.04, 0.18], [0.42, 0.62]],
+  [[0.3, 0.44]],
+  [[0.12, 0.34], [0.55, 0.66]],
+  [[0.22, 0.3], [0.46, 0.72]],
+  [[0.08, 0.2], [0.62, 0.78]],
+  [[0.36, 0.5]],
+]
+
+function skeletonBlock(left: number, top: number, width: number, height: number): HTMLElement {
+  return absEl("absolute bg-popover-foreground/[0.07] rounded-theme-xs", {
+    left: `${left}px`,
+    top: `${top}px`,
+    width: `${width}px`,
+    height: `${Math.max(6, height)}px`,
+  })
+}
+
+/**
+ * Stands in for a view whose week hasn't landed yet, at the same dimensions the
+ * real one will take. Navigation never waits on a fetch, so this is what a step
+ * past the prefetch window shows for the ~300ms before the events arrive.
+ */
+function renderSkeleton(width: number): HTMLElement {
+  return viewMode === "1d" ? daySkeleton(width) : weekSkeleton(width)
+}
+
+function daySkeleton(width: number): HTMLElement {
+  const m = dayMetrics(width)
+  const root = document.createElement("div")
+  root.className = "flex flex-col gap-2.5 min-w-0 pt-2.5 animate-pulse"
+
+  if (offset === 0) {
+    const nextUp = document.createElement("div")
+    nextUp.className = "bg-popover-foreground/[0.05] rounded-theme shrink-0"
+    nextUp.style.height = `${Math.round(clamp(48, width * 0.17, 62))}px`
+    root.appendChild(nextUp)
+  }
+
+  const height = Math.round(m.maxHeight * 0.68)
+  const inner = document.createElement("div")
+  inner.className = "relative min-w-0"
+  inner.style.height = `${height}px`
+
+  const contentW = Math.max(40, width - m.gutter - 6)
+  for (const [from, to] of DAY_SKELETON) {
+    if (m.gutter > 0) {
+      inner.appendChild(skeletonBlock(0, from * height + 2, Math.max(14, m.gutter - 12), 6))
+    }
+    inner.appendChild(skeletonBlock(m.gutter, from * height, contentW, (to - from) * height))
+  }
+  root.appendChild(inner)
+  return root
+}
+
+function weekSkeleton(width: number): HTMLElement {
+  const m = weekMetrics(width)
+  const start = weekStartAt(viewMode === "1w" ? offset : 0)
+  const root = document.createElement("div")
+  root.className = "flex flex-col gap-1.5 min-w-0 pt-2"
+  root.appendChild(weekHeaderRow(Array.from({ length: 7 }, (_, i) => addDays(start, i)), m))
+
+  const height = Math.round(m.maxHeight * 0.72)
+  const inner = document.createElement("div")
+  inner.className = "relative min-w-0 animate-pulse"
+  inner.style.height = `${height}px`
+
+  const todayIndex = Array.from({ length: 7 }, (_, i) => localDateStr(addDays(start, i)))
+    .indexOf(localDateStr(new Date()))
+  if (todayIndex >= 0) {
+    inner.appendChild(
+      absEl("absolute top-0 bottom-0 bg-accent/[0.07] rounded-theme-xs pointer-events-none", {
+        left: `${todayIndex * m.dayWidth}px`,
+        width: `${m.dayWidth}px`,
+      })
+    )
+  }
+
+  for (let i = 1; i < 7; i++) {
+    inner.appendChild(
+      absEl("absolute top-0 bottom-0 bg-popover-foreground/[0.06] pointer-events-none", {
+        left: `${i * m.dayWidth}px`,
+        width: "1px",
+      })
+    )
+  }
+
+  WEEK_SKELETON.forEach((spans, i) => {
+    for (const [from, to] of spans) {
+      inner.appendChild(
+        skeletonBlock(i * m.dayWidth + 1, from * height, m.dayWidth - 2, (to - from) * height)
+      )
+    }
+  })
+  root.appendChild(inner)
+  return root
+}
+
 function renderTrigger(): void {
-  cardBody?.rebuild()
   const trigger = document.getElementById("calendar-trigger") as HTMLButtonElement
   if (!store.sync.get("calendarEnabled")) {
     trigger.hidden = true
@@ -1346,7 +1893,7 @@ function renderTrigger(): void {
     return
   }
 
-  const count = todayEventCount
+  const count = countEventsToday()
   const label = count === 1 ? "1 event today" : `${count} events today`
   trigger.innerHTML = ""
   trigger.appendChild(icon("calendar", { size: 24 }))
@@ -1363,10 +1910,17 @@ function renderTrigger(): void {
  * once it leaves the document. `mounted` guards the window between building a
  * body and its host inserting it, when it is legitimately disconnected.
  */
-type LiveBody = { root: HTMLElement; ro: ResizeObserver; timer: ReturnType<typeof setInterval>; mounted: boolean }
+type LiveBody = {
+  root: HTMLElement
+  rebuild: () => void
+  ro: ResizeObserver
+  timer: ReturnType<typeof setInterval>
+  mounted: boolean
+}
 const liveBodies = new Set<LiveBody>()
 
 function retire(entry: LiveBody): void {
+  hideEventHover()
   entry.ro.disconnect()
   clearInterval(entry.timer)
   liveBodies.delete(entry)
@@ -1389,37 +1943,35 @@ export function buildCalendarBody(): { el: HTMLElement; rebuild: () => void; dis
 
   let width = 320
   let parts: ViewParts | null = null
-  let requested: string | null = null
 
   function draw(): void {
     if (width <= 0) return
+    // Every path below replaces the view, and an element removed from under the
+    // pointer fires no mouseleave — the card would sit there anchored to nothing.
+    hideEventHover()
 
-    // `currentEvents` is module state shared with the fetch loop, and the view
-    // resets to 1d/today on every mount. If what we hold was fetched for some
-    // other range, rendering it would silently show the wrong day — or, once
-    // the views filter by date, an empty one. Ask for the right range instead.
-    const { start, end } = getDateRange()
-    const key = rangeKey(start, end)
-    if (currentRangeKey !== key) {
-      parts = null
-      viewHost.replaceChildren(
-        emptyNote(requested === key ? "Couldn't reach Google Calendar." : "Loading…")
-      )
-      if (requested !== key) {
-        requested = key
-        fetchEvents().then(() => {
-          if (content.isConnected) draw()
-        })
-      }
-      return
-    }
-    requested = null
+    // Navigation never waits on the network: whatever week the controls are
+    // pointing at is drawn from what we hold, and the request below is fire-
+    // and-forget — a stale week refreshes underneath, a missing one arrives as
+    // a redraw from notifyDataChanged(). Chaining a redraw onto it instead
+    // would spin a permanently failing week into a microtask loop.
+    const key = visibleWeekKey()
+    const data = getWeek(key)
+    requestWeek(key)
 
     const scrollTop = viewHost.querySelector<HTMLElement>(".overflow-y-auto")?.scrollTop ?? null
     viewHost.replaceChildren()
+
+    if (!data) {
+      parts = null
+      const failed = weekFailedAt.has(key) && !weekFetches.has(key)
+      viewHost.appendChild(failed ? retryNote(key, draw) : renderSkeleton(width))
+      return
+    }
+
     parts = viewMode === "1d"
-      ? renderDayView(currentEvents, width, rebuild)
-      : renderWeekView(currentEvents, width)
+      ? renderDayView(data.events, width, rebuild)
+      : renderWeekView(data.events, width)
     viewHost.appendChild(parts.el)
     if (scrollTop) {
       const next = viewHost.querySelector<HTMLElement>(".overflow-y-auto")
@@ -1431,7 +1983,9 @@ export function buildCalendarBody(): { el: HTMLElement; rebuild: () => void; dis
     content.replaceChildren()
     content.appendChild(
       renderControls(() => {
-        fetchEvents().then(rebuild)
+        // Redraw first — the new period is already in hand, or is a skeleton.
+        rebuild()
+        void refreshCalendar()
       })
     )
     content.appendChild(viewHost)
@@ -1450,6 +2004,7 @@ export function buildCalendarBody(): { el: HTMLElement; rebuild: () => void; dis
 
   const entry: LiveBody = {
     root: content,
+    rebuild,
     ro,
     timer: setInterval(() => {
       if (content.isConnected) {
@@ -1473,13 +2028,11 @@ function showCalendarPopover(anchor: HTMLElement): void {
 
   const body = buildCalendarBody()
   body.el.style.width = "660px"
-  popoverRebuild = body.rebuild
-  fetchEvents()
+  void refreshCalendar()
 
   const { close } = createPopover(anchor, body.el, {
     onClose: () => {
       calendarPopoverClose = null
-      popoverRebuild = null
       body.dispose()
     },
   })
@@ -1500,7 +2053,7 @@ registerCard({
     viewMode = "1d"
     offset = 0
     cardBody = buildCalendarBody()
-    fetchEvents()
+    void refreshCalendar()
     return cardBody.el
   },
   onUnmount: () => {
@@ -1511,14 +2064,11 @@ registerCard({
 
 // The day and week views draw todos due in the range, so a change over in the
 // todo widget has to reach the calendar the same way a fetch does.
-store.local.subscribe("todos", () => {
-  cardBody?.rebuild()
-  popoverRebuild?.()
-})
+store.local.subscribe("todos", notifyDataChanged)
 
 function startRefreshInterval(): void {
   stopRefreshInterval()
-  refreshIntervalId = setInterval(() => fetchEvents(), REFRESH_INTERVAL)
+  refreshIntervalId = setInterval(() => void refreshCalendar(), REFRESH_INTERVAL)
 }
 
 function stopRefreshInterval(): void {
@@ -1534,7 +2084,7 @@ export function initCalendar(): void {
   trigger.addEventListener("click", (e) => {
     e.stopPropagation()
     if (currentState === "error") {
-      fetchEvents()
+      void refreshCalendar(true)
       return
     }
     if (currentState === "loaded") {
@@ -1548,7 +2098,7 @@ export function initCalendar(): void {
 
   store.sync.subscribe("calendarEnabled", (val) => {
     if (val && store.local.get("calendarConnected")) {
-      fetchEvents()
+      void refreshCalendar()
       startRefreshInterval()
     } else {
       trigger.hidden = true
@@ -1560,12 +2110,12 @@ export function initCalendar(): void {
   store.local.subscribe("calendarConnected", (connected) => {
     refreshCards()
     if (connected && store.sync.get("calendarEnabled")) {
-      fetchEvents()
+      void refreshCalendar()
       startRefreshInterval()
     } else {
       stopRefreshInterval()
-      currentState = "not-connected"
-      currentEvents = []
+      clearWeeks()
+      setState("not-connected")
       renderTrigger()
     }
   })
@@ -1581,6 +2131,9 @@ export function initCalendar(): void {
     return
   }
 
-  fetchEvents()
+  pruneWeekCache()
+  syncState()
+  renderTrigger()
+  void refreshCalendar()
   startRefreshInterval()
 }

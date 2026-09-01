@@ -1,7 +1,22 @@
 import { store } from "./store"
-import type { GoogleAuthMethod } from "./defaults"
+import type { GoogleAuthMethod, GoogleFeature } from "./defaults"
 
-const SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
+/**
+ * What each feature needs, and the only place a scope is named. The token is
+ * always issued for the union of the *connected* features' scopes, never for
+ * everything this file knows about — connecting the calendar must not ask for
+ * mail, which is the whole reason this is a map rather than a constant.
+ */
+const FEATURE_SCOPES: Record<GoogleFeature, readonly string[]> = {
+  calendar: ["https://www.googleapis.com/auth/calendar.readonly"],
+  mail: ["https://www.googleapis.com/auth/gmail.modify"],
+}
+
+const FEATURE_LABELS: Record<GoogleFeature, string> = {
+  calendar: "Calendar",
+  mail: "Gmail",
+}
+
 const AUTH_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth"
 const REVOKE_ENDPOINT = "https://oauth2.googleapis.com/revoke"
 
@@ -121,13 +136,50 @@ export async function probeNativeBroker(force = false): Promise<NativeProbe> {
   return result
 }
 
-function storeToken(token: string, expiresInSeconds: number, method: GoogleAuthMethod): void {
+/** The features holding a connection right now. The union of these is what any
+    token gets issued for. */
+function connectedFeatures(): GoogleFeature[] {
+  const out: GoogleFeature[] = []
+  if (store.local.get("calendarConnected")) out.push("calendar")
+  if (store.local.get("mailConnected")) out.push("mail")
+  return out
+}
+
+/** The scope set a token must cover for `feature` plus everything already connected. */
+function scopeSetFor(feature: GoogleFeature): string[] {
+  const set = new Set<string>()
+  for (const f of [...connectedFeatures(), feature]) {
+    for (const scope of FEATURE_SCOPES[f]) set.add(scope)
+  }
+  return [...set]
+}
+
+/**
+ * Does the token in hand actually carry what `feature` needs? A connected
+ * feature whose scope was never granted is a different problem from a missing
+ * token, and only this distinguishes them.
+ */
+export function hasScopesFor(feature: GoogleFeature): boolean {
+  const granted = store.local.get("googleGrantedScopes")
+  return FEATURE_SCOPES[feature].every((scope) => granted.includes(scope))
+}
+
+function storeToken(
+  token: string,
+  expiresInSeconds: number,
+  method: GoogleAuthMethod,
+  granted: string[]
+): void {
   store.local.set("googleAccessToken", token)
   store.local.set("googleTokenExpiry", Date.now() + expiresInSeconds * 1000)
   store.local.set("googleAuthMethod", method)
+  store.local.set("googleGrantedScopes", granted)
 }
 
-async function nativeAuthenticate(interactive: boolean): Promise<NativeOutcome> {
+async function nativeAuthenticate(
+  interactive: boolean,
+  scopes: string[]
+): Promise<NativeOutcome> {
   if (!nativeApiPresent()) {
     return {
       ok: false,
@@ -138,7 +190,7 @@ async function nativeAuthenticate(interactive: boolean): Promise<NativeOutcome> 
 
   let call: Promise<GetAuthTokenResult>
   try {
-    call = getApi()!.identity.getAuthToken({ interactive })
+    call = getApi()!.identity.getAuthToken({ interactive, scopes })
   } catch (e) {
     return { ok: false, error: errorText(e) }
   }
@@ -167,7 +219,9 @@ async function nativeAuthenticate(interactive: boolean): Promise<NativeOutcome> 
   if (!token) return { ok: false, error: "No token was returned." }
 
   // Native tokens are ~1h; renew a little early rather than trusting the clock.
-  storeToken(token, 3_000, "native")
+  // Older Chromiums answer without `grantedScopes`; the broker grants the whole
+  // request or errors, so what we asked for is the honest fallback.
+  storeToken(token, 3_000, "native", raced.grantedScopes ?? scopes)
   return { ok: true }
 }
 
@@ -188,7 +242,10 @@ function googleErrorText(code: string): string {
   }
 }
 
-async function webAuthenticate(interactive: boolean): Promise<AuthOutcome> {
+async function webAuthenticate(
+  interactive: boolean,
+  scopes: string[]
+): Promise<AuthOutcome> {
   const api = getApi()
   if (!api?.identity?.launchWebAuthFlow) {
     return { ok: false, error: "This browser doesn't support the web auth flow." }
@@ -213,7 +270,7 @@ async function webAuthenticate(interactive: boolean): Promise<AuthOutcome> {
     client_id: clientId,
     response_type: "token",
     redirect_uri: redirectUri,
-    scope: SCOPES.join(" "),
+    scope: scopes.join(" "),
     include_granted_scopes: "true",
     prompt: interactive ? "consent" : "none",
   })
@@ -249,7 +306,11 @@ async function webAuthenticate(interactive: boolean): Promise<AuthOutcome> {
   const token = result.get("access_token")
   if (!token) return { ok: false, error: "Google didn't return an access token." }
 
-  storeToken(token, Number(result.get("expires_in") ?? 3600), "web")
+  // `include_granted_scopes` means the token can come back with more than was
+  // asked for, so the response is the authority on what it carries.
+  const grantedRaw = result.get("scope")
+  const granted = grantedRaw ? grantedRaw.split(" ").filter(Boolean) : scopes
+  storeToken(token, Number(result.get("expires_in") ?? 3600), "web", granted)
   return { ok: true }
 }
 
@@ -257,33 +318,60 @@ export function currentMethod(): GoogleAuthMethod | null {
   return store.local.get("googleAuthMethod")
 }
 
-/** Interactive sign-in. Prefers the native broker, falls back to the web flow. */
-export async function authenticate(): Promise<AuthOutcome> {
+/**
+ * A grant that came back without what was asked for. The redirect flow reports
+ * a partial consent plainly; the native broker on a stripped Chromium can
+ * ignore the scope override entirely and hand back the manifest's token, so the
+ * only reliable check is what the token says it carries afterwards.
+ */
+function verifyGrant(outcome: AuthOutcome, feature: GoogleFeature): AuthOutcome {
+  if (!outcome.ok || hasScopesFor(feature)) return outcome
+  return {
+    ok: false,
+    error: `Google signed you in but didn't grant ${FEATURE_LABELS[feature]} access. Approve the ${FEATURE_LABELS[feature]} permission when the consent screen asks, or add your own OAuth client ID under Settings → Advanced.`,
+  }
+}
+
+/**
+ * Interactive sign-in for one feature. Prefers the native broker, falls back to
+ * the web flow. The scope set is the union with whatever is already connected,
+ * so approving mail never silently drops calendar off the same token.
+ */
+export async function authenticate(feature: GoogleFeature): Promise<AuthOutcome> {
+  const scopes = scopeSetFor(feature)
   const probe = await probeNativeBroker()
 
   if (probe === "available") {
-    const native = await nativeAuthenticate(true)
+    const native = await nativeAuthenticate(true, scopes)
     // Only a dead broker justifies opening a second window — a declined or
     // failed consent is the user's answer, not a reason to ask again.
-    if (native.ok || !("brokerDead" in native)) return native
+    if (native.ok || !("brokerDead" in native)) return verifyGrant(native, feature)
     if (!webAuthAvailable()) return native
   }
 
-  return webAuthenticate(true)
+  return verifyGrant(await webAuthenticate(true, scopes), feature)
 }
 
-/** A non-expired token, renewing silently when possible. Null if sign-in is needed. */
-export async function getValidToken(): Promise<string | null> {
+/**
+ * A non-expired token that covers `feature`, renewing silently when possible.
+ * Null if sign-in is needed — including when the token is live but was issued
+ * before this feature was connected, which a silent renew usually repairs.
+ */
+export async function getValidToken(feature: GoogleFeature): Promise<string | null> {
   const token = store.local.get("googleAccessToken")
   const expiry = store.local.get("googleTokenExpiry")
-  if (token && expiry && Date.now() < expiry - 60_000) return token
+  if (token && expiry && Date.now() < expiry - 60_000 && hasScopesFor(feature)) return token
 
   const method = currentMethod()
   if (!method) return null
 
+  const scopes = scopeSetFor(feature)
   const renewed =
-    method === "native" ? await nativeAuthenticate(false) : await webAuthenticate(false)
-  return renewed.ok ? store.local.get("googleAccessToken") : null
+    method === "native"
+      ? await nativeAuthenticate(false, scopes)
+      : await webAuthenticate(false, scopes)
+  if (!renewed.ok || !hasScopesFor(feature)) return null
+  return store.local.get("googleAccessToken")
 }
 
 /** Drop the current token so the next call re-authenticates. Used on a 401. */
@@ -296,6 +384,21 @@ export async function invalidateToken(): Promise<void> {
   }
   store.local.delete("googleAccessToken")
   store.local.delete("googleTokenExpiry")
+  // The record describes the token that just went away. Leaving it would let
+  // `hasScopesFor` vouch for a token nobody holds.
+  store.local.set("googleGrantedScopes", [])
+}
+
+/**
+ * Give up one feature's claim on the shared account. Calendar and Mail sign in
+ * once between them, so revoking is only correct once *nothing* is left —
+ * otherwise disconnecting mail would sign the calendar out too.
+ *
+ * Callers clear their own connected flag first; this reads that flag back.
+ */
+export async function releaseGoogle(): Promise<void> {
+  if (connectedFeatures().length > 0) return
+  await revoke()
 }
 
 export async function revoke(): Promise<void> {
@@ -311,4 +414,5 @@ export async function revoke(): Promise<void> {
   }
 
   store.local.delete("googleAuthMethod")
+  store.local.set("googleGrantedScopes", [])
 }

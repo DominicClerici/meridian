@@ -859,6 +859,8 @@ export type MenuItem =
       disabled?: boolean
       /** Shown as a `title` when the item is disabled, to explain why. */
       hint?: string
+      /** Right-aligned content — a count, a shortcut. Pushes the label wide. */
+      trailing?: HTMLElement
     }
 
 /**
@@ -907,9 +909,14 @@ export function createMenu(
       btn.appendChild(item.icon)
     }
     const label = document.createElement("span")
-    label.className = "truncate"
+    label.className = item.trailing ? "flex-1 min-w-0 truncate" : "truncate"
     label.textContent = item.label
     btn.appendChild(label)
+
+    if (item.trailing) {
+      item.trailing.classList.add("shrink-0")
+      btn.appendChild(item.trailing)
+    }
 
     if (!item.disabled) {
       btn.addEventListener("click", (e) => {
@@ -949,4 +956,114 @@ export function createTooltip(
   })
 
   return tip
+}
+
+// ------------------------------------------------------------------ toasts
+
+export type ToastAction = { label: string; onClick: () => void }
+
+export type ToastOptions = {
+  action?: ToastAction
+  /** Milliseconds before auto-dismiss. Defaults to 6s with an action, 4s without. */
+  duration?: number
+  variant?: "default" | "danger"
+}
+
+/**
+ * A `<dialog>` renders in the top layer, so a `position: fixed` toast parented
+ * to `document.body` would sit behind whichever dialog is open. Parenting to
+ * the topmost open dialog instead is the same trick the drag engine uses for
+ * its clone.
+ */
+function toastHost(): HTMLElement {
+  const dialogs = document.querySelectorAll<HTMLDialogElement>("dialog[open]")
+  const parent: HTMLElement = dialogs[dialogs.length - 1] ?? document.body
+
+  const existing = parent.querySelector<HTMLElement>(":scope > .toast-host")
+  if (existing) return existing
+
+  const host = document.createElement("div")
+  host.className = "toast-host"
+  parent.appendChild(host)
+  return host
+}
+
+/**
+ * The undo path for destructive actions. Deleting acts immediately and offers
+ * a way back for a few seconds, rather than asking first — the one exception
+ * is deleting a whole tab, which still confirms.
+ */
+export function showToast(message: string, opts?: ToastOptions): { dismiss: () => void } {
+  const duration = opts?.duration ?? (opts?.action ? 6000 : 4000)
+
+  const toast = document.createElement("div")
+  toast.className = `toast${opts?.variant === "danger" ? " toast-danger" : ""}`
+  toast.setAttribute("role", "status")
+
+  const text = document.createElement("span")
+  text.className = "toast-message"
+  text.textContent = message
+  toast.appendChild(text)
+
+  let dismissed = false
+  let timer: number | null = null
+  let deadline = 0
+  let remaining = duration
+
+  function dismiss(): void {
+    if (dismissed) return
+    dismissed = true
+    if (timer !== null) clearTimeout(timer)
+    toast.classList.add("toast-leaving")
+    const remove = () => {
+      const host = toast.parentElement
+      toast.remove()
+      if (host && host.childElementCount === 0) host.remove()
+    }
+    toast.addEventListener("animationend", remove, { once: true })
+    setTimeout(remove, 250)
+  }
+
+  function resume(): void {
+    if (dismissed) return
+    deadline = Date.now() + remaining
+    timer = window.setTimeout(dismiss, remaining)
+  }
+
+  // Reading a message and reaching for Undo takes longer than the timer allows,
+  // so hovering the toast holds it open.
+  function pause(): void {
+    if (timer === null) return
+    clearTimeout(timer)
+    timer = null
+    remaining = Math.max(1200, deadline - Date.now())
+  }
+
+  if (opts?.action) {
+    const action = document.createElement("button")
+    action.type = "button"
+    action.className = "toast-action"
+    action.textContent = opts.action.label
+    action.addEventListener("click", () => {
+      opts.action!.onClick()
+      dismiss()
+    })
+    toast.appendChild(action)
+  }
+
+  const close = document.createElement("button")
+  close.type = "button"
+  close.className = "toast-close"
+  close.setAttribute("aria-label", "Dismiss")
+  close.appendChild(icon("close", { size: 11 }))
+  close.addEventListener("click", dismiss)
+  toast.appendChild(close)
+
+  toast.addEventListener("mouseenter", pause)
+  toast.addEventListener("mouseleave", resume)
+
+  toastHost().appendChild(toast)
+  resume()
+
+  return { dismiss }
 }

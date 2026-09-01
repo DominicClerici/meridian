@@ -227,16 +227,18 @@ The most intricate thing in the file. A module-level **popover stack** (`compone
 type MenuItem =
   | "separator"
   | { label: string; icon?: HTMLElement; onClick: () => void
-      danger?: boolean; disabled?: boolean; hint?: string }
+      danger?: boolean; disabled?: boolean; hint?: string; trailing?: HTMLElement }
 
 createMenu(anchor: HTMLElement, items: MenuItem[], opts?: { onClose?: () => void }): { close: () => void }
 ```
 
 A dropdown of actions built on `createPopover` with `padding: "none"`, so it inherits the stack, the focus trap and the outside-click dismissal. Picking an item closes the menu and *then* runs `onClick`. `danger` tints an item with the danger token; `disabled` dims it and drops its listener, and `hint` becomes the `title` explaining why (the todo row's Pin item uses it at the three-pin limit).
 
+`trailing` pins an element to the right edge and gives the label the slack (`flex-1 min-w-0 truncate`), which is what turns a list of choices into a list of choices *with numbers on them* — the mail widget's inbox picker carries each inbox's unread count that way. An item with a `trailing` and no `icon` sits flush left, so a menu that mixes the two should give every item both, even if one of them is a spacer.
+
 The popover is created **after** the items are in place — it measures itself when it mounts, so building it first would position an empty box.
 
-The todo row's ⋮ button is the only caller today.
+Callers: the todo row's ⋮ button, the notepad menu, Linear's status picker, and Mail's inbox picker.
 
 ## createTooltip
 
@@ -247,6 +249,23 @@ createTooltip(anchor: HTMLElement, text: string, opts?: { delay?: number }): HTM
 Appends a `.tooltip-below` span **into the anchor** and sets `anchor.style.position = "relative"`. Shows on `mouseenter` after `delay` (default 300ms), hides on `mouseleave`.
 
 Because it's a child of the anchor, it inherits the anchor's overflow and stacking context — inside a clipped container it will be clipped. `settings.ts` needed a differently-positioned variant for the nav rail and hand-rolled it with `.settings-tooltip` rather than extending this.
+
+## showToast
+
+```ts
+showToast(message: string, opts?: {
+  action?: { label: string; onClick: () => void }
+  duration?: number      // default 6s with an action, 4s without
+  variant?: "default" | "danger"
+}): { dismiss: () => void }
+```
+
+Transient feedback with an optional action, stacked bottom-centre. It is the undo path for destructive actions in the shortcuts panel: delete acts immediately and offers a way back, rather than asking first ([shortcuts.md](shortcuts.md#destructive-actions)).
+
+Two details matter:
+
+- **It parents to the topmost open `<dialog>`, not to `document.body`.** A dialog renders in the top layer, so a toast fixed to the body would sit *behind* it — the same trick the drag engine uses for its clone. Because `.dialog-surface` carries a `backdrop-filter`, an open dialog is also the containing block for its fixed-position children, so `dialog .toast-host` is offset 64px from the dialog's bottom rather than 24px from the viewport's, clearing the settings footer.
+- **Hovering pauses the timer.** Reading a message and reaching for Undo takes longer than the timer allows, so the countdown holds while the pointer is over the toast and resumes (with at least 1.2s left) when it leaves.
 
 ## Conventions
 

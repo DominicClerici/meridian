@@ -12,6 +12,7 @@
   },
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAjq/qtH2kGe1vYPz9VKPcUQ5IuCKLoYtprBjH+YvcZJsz04QC5q6EO0K2lFjQOLaAP2ClT4N5d5gGJfP2dTIiMUMsaBHB7a/m+Tc10wn1W2hZ3O+dq/a0z1kBUkGDI6B3rNhvg5p+P3SOSAunWX/OKe4OMmPoHxHJg5VPqQPbfO08lM5zd/YbY/EwGeTiSRsjoYp6Z/NxdU8yWzLar42Ohvp1+/WC62ZejKjMepldhkbTh3C4YzxSOO3Z0geunFWiJZp3ia4b6bWhwjYP6XH13CB9PLpYOD0GkjjfSRoPygy3wnOs5APYVuTQhnP+I3yhoJ0K3ZGwsvHU/KMIIJbRFwIDAQAB",
   "permissions": ["storage", "geolocation", "identity", "history"],
+  "optional_permissions": ["bookmarks"],
   "host_permissions": [
     "https://api.open-meteo.com/*",
     "https://air-quality-api.open-meteo.com/*",
@@ -19,8 +20,13 @@
     "https://accounts.spotify.com/*",
     "https://api.spotify.com/*",
     "https://www.googleapis.com/*",
+    "https://gmail.googleapis.com/*",
     "https://oauth2.googleapis.com/*",
     "https://accounts.google.com/*",
+    "https://github.com/*",
+    "https://api.github.com/*",
+    "https://linear.app/*",
+    "https://api.linear.app/*",
     "https://api.unsplash.com/*",
     "https://images.unsplash.com/*"
   ]

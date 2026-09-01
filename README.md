@@ -10,8 +10,11 @@ A Chrome extension that turns every new tab into a proper dashboard. Shortcuts, 
 - **Clock** — timezone, 12/24h toggle, seconds, date format, all configurable
 - **Weather** — hourly forecast with an interactive SVG chart; powered by [Open-Meteo](https://open-meteo.com/), no API key required
 - **Spotify** — shows current track with album art and playback controls; full OAuth via PKCE, no backend
+- **Notepad** — a freeform scratchpad that autosaves as you type, continues `-` and `1.` lists on Enter, and keeps the browser's own undo working
 - **Todo list** — overdue / active / completed sections, drag-to-reorder, due dates, auto-purge of items over 30 days stale
 - **Google Calendar** — upcoming events via OAuth2, no server needed
+- **GitHub** — review requests, your pull requests with CI and review state, mentions and assigned issues, grouped by what needs you; sign in with a device code, no secret and no server
+- **Linear** — your inbox, what's due, what's in flight and what's next, with the active cycle's burndown; change an issue's status or copy its branch name without leaving the tab. Connects with a personal API key — nothing to register
 - **Backgrounds** — [Unsplash](https://unsplash.com/) integration for a daily photo refresh, or upload your own
 
 Appearance is controlled by four independent axes — theme, accent color, background color, and light/dark mode — and syncs across devices via `browser.storage.sync`.
@@ -24,6 +27,8 @@ Appearance is controlled by four independent axes — theme, accent color, backg
 - **Open-Meteo** — free weather API, no key required
 - **Spotify Web API** — PKCE OAuth flow runs entirely in the browser, no backend
 - **Google Calendar API** — same; OAuth2 via `chrome.identity`
+- **GitHub GraphQL + REST** — OAuth device flow (or a personal access token); one query per refresh
+- **Linear GraphQL** — a personal API key (or PKCE OAuth with your own app); one query per refresh covering issues, inbox, teams and the cycle
 
 The extension compiles down to two files — `dist/index.js` and `dist/styles.css`. The reactive state layer is a custom store built on `browser.storage` with a synchronous localStorage mirror: reads are instant on load, writes propagate cross-tab, and there's no flash of unstyled content because the theme gets applied synchronously before the first paint.
 
@@ -62,6 +67,8 @@ Most features work out of the box. A few need setup:
 | Spotify | Click **Connect** in the widget; PKCE flow, no key needed |
 | Unsplash backgrounds | Add your API key in **Settings → Appearance** |
 | Google Calendar | Replace `client_id` in `manifest.json` with your own Google OAuth client |
+| GitHub | Click **Connect** in the widget and enter the code shown, or paste a personal access token in Settings → Advanced |
+| Linear | Paste a personal API key from Linear → Settings → Security & access into the widget. OAuth is optional, in Settings → Advanced |
 
 ## License
 

@@ -94,9 +94,16 @@ different fixes and must not be reported as the same thing.
 
 ## Google sign-in
 
-`google-auth.ts` presents one interface over two mechanisms.
+`google-auth.ts` presents one interface over two mechanisms, for two features.
 
-**`authenticate()`** probes the native broker, then:
+**Scopes are per feature, not per extension.** Calendar and Mail share one
+token, issued for the union of whatever is *connected* — so connecting only the
+calendar never puts Gmail on the consent screen, and disconnecting one revokes
+nothing while the other is still signed in. The registry and the reasoning are
+in [mail.md](mail.md#the-shared-google-account); everything below applies to
+both features equally.
+
+**`authenticate(feature)`** probes the native broker, then:
 
 - Broker available → `getAuthToken({interactive:true})`, raced against a 2-minute
   clock. If that fails for any reason *other* than the broker going silent, that
@@ -113,8 +120,16 @@ partition still holds a Google session.
 It does require the user to supply their own OAuth client, because a
 Chrome-Extension-type client can't register redirect URIs. Settings → Advanced
 has the field, shows the extension's redirect URI with a copy button, and links
-to the console. `summarizeCalendar()` in `capabilities.ts` reports
-`Needs setup` until a client ID is present.
+to the console. `summarizeGoogle()` in `capabilities.ts` reports
+`Needs setup` until a client ID is present — one row for both the Calendar and
+Gmail widgets, since they share the path and the client ID.
+
+**The native broker can ignore the scope override.** `getAuthToken({scopes})` is
+documented to override `manifest.json`, and on a stripped Chromium it can hand
+back the manifest's token while reporting success. `verifyGrant()` therefore
+checks `hasScopesFor()` *after* a successful sign-in rather than trusting the
+outcome, so a partial grant is reported at the point the user can act on it
+instead of surfacing later as an unexplained 403.
 
 **Why implicit rather than PKCE:** Google's Web-application clients still expect
 a `client_secret` at the token endpoint, and the client types that accept PKCE
@@ -127,7 +142,7 @@ token and a ~1h lifetime, which is invisible behind a 5-minute refresh interval.
 Firefox has every service Chromium forks strip out. What it differs on is
 conventions, and the failures are quieter for it.
 
-### The history API
+### The history and bookmarks APIs
 
 The single sharpest edge in the codebase. `globalThis.browser ?? globalThis.chrome`
 resolves to `browser` on Firefox — and `browser.*` is **promise-only**. It never
@@ -136,10 +151,10 @@ parameter. Chrome's `chrome.*` is the mirror image: callback-first, returns
 nothing.
 
 Written the Chrome way, `history.search(query, cb)` on Firefox produces a
-promise that never settles or a synchronous throw — so History Import hangs on
-its spinner and the recommendation heatmap silently never builds.
+promise that never settles or a synchronous throw — so the import dialog hangs
+on its spinner and the recommendation heatmap silently never builds.
 
-`history-api.ts` calls with a callback *and* takes the return value, so whichever
+`ext-call.ts` calls with a callback *and* takes the return value, so whichever
 one answers wins:
 
 ```ts
@@ -148,11 +163,35 @@ return isThenable(returned) ? returned : viaCallback
 ```
 
 Behaviour detection, not a `browser`-is-defined check — a fork that defines
-`browser` with callback semantics still works. All `history` access goes through
-this module; don't call `api.history` directly.
+`browser` with callback semantics still works. All `history`, `bookmarks` and
+`permissions` access goes through `history-api.ts` / `bookmarks-api.ts`, which
+share it; don't reach for `api.history` directly.
 
 `storage` and `identity` need no such treatment: Chrome has returned promises
 from both since MV3, so the plain `browser ?? chrome` alias is enough.
+
+## Optional permissions
+
+`bookmarks` is declared in `optional_permissions` in **both** manifests rather
+than `permissions`. Two reasons:
+
+- On Chrome, growing a `permissions` array **disables the extension** until the
+  user re-approves it in the extensions page. Importing bookmarks is a thing
+  most people do once, if ever; making everyone re-authorise a new-tab page
+  over it is a bad trade.
+- It keeps the install prompt honest. A startpage asking for full bookmark
+  access at install time reads badly, and deservedly.
+
+The cost is that the request has to happen inside a **user gesture**. Chrome
+rejects a `permissions.request()` that isn't synchronous with a click, so
+`pickSource()` in `shortcut-import.ts` calls `requestBookmarks()` first and
+awaits nothing before it. Declining is an ordinary outcome, not an error: the
+dialog returns to the source list with an explanation.
+
+`bookmarksSupported()` distinguishes the third state — a browser with no
+`permissions` API at all — so the source card can be disabled with a reason
+rather than failing after it's picked. See
+[shortcut-import.md](shortcut-import.md#the-permission-request).
 
 ### The manifest
 
@@ -202,6 +241,23 @@ Note the test is on the redirect URI's host, not the browser's identity —
 consistent with [Detection](#detection) above. The URI is the thing that has to
 match the registration, so it is the real test rather than a proxy for one.
 
+### GitHub is the exception
+
+The GitHub widget sidesteps this section entirely: the **device flow has no
+redirect URI**, so there is nothing per-browser to register and one client ID
+works on Chromium, Firefox and de-Googled builds alike. It never touches
+`identity` at all. See [github.md](github.md#the-device-flow).
+
+What it needs instead is the **host permission**, and needs it more than the
+other services do. `github.com/login/device/code` and
+`github.com/login/oauth/access_token` send no `Access-Control-Allow-Origin`, so
+unlike Open-Meteo or Spotify these calls cannot succeed on CORS alone — they
+work only because `host_permissions` lets an extension page bypass the check.
+On Firefox, where MV3 host permissions are optional-until-granted, a user who
+hasn't granted `https://github.com/*` gets a sign-in that fails at the token
+exchange. The personal-access-token path is the fallback there, since
+`api.github.com` is only ever reached with a token already in hand.
+
 ### CSS
 
 | Feature | Firefox | Handling |
@@ -213,9 +269,10 @@ match the registration, so it is the real test rather than a proxy for one.
 ### Not a problem
 
 - **`fetch` and host permissions.** Firefox MV3 treats `host_permissions` as
-  optional-until-granted, but every endpoint the extension calls (open-meteo,
-  Spotify, googleapis, Unsplash) sends `Access-Control-Allow-Origin`, so the
-  requests succeed on CORS alone.
+  optional-until-granted, but most endpoints the extension calls (open-meteo,
+  Spotify, googleapis, Unsplash) send `Access-Control-Allow-Origin`, so the
+  requests succeed on CORS alone. **`github.com/login/*` does not** — see
+  [GitHub is the exception](#github-is-the-exception).
 - **`chrome_url_overrides.newtab`**, `<dialog>`/`::backdrop`, `color-mix`,
   `:has()`, Resize/MutationObserver, WAAPI, IndexedDB, `crypto.subtle` — all
   supported on both.

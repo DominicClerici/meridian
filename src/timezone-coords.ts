@@ -142,6 +142,14 @@ const TZ_COORDS: Record<string, [number, number, string]> = {
 
 export type TimezoneGuess = { lat: number; lon: number; label: string }
 
+/**
+ * The zone ids this table covers. Used as the world-clock picker's catalogue on
+ * a browser without `Intl.supportedValuesOf` — a curated 130 beats nothing.
+ */
+export function knownTimezones(): string[] {
+  return Object.keys(TZ_COORDS)
+}
+
 export function coordsForTimezone(tz: string): TimezoneGuess | null {
   const hit = TZ_COORDS[tz]
   if (!hit) return null

@@ -1,6 +1,6 @@
 import { store } from "./store"
-import type { SyncSettings } from "./defaults"
-import { ACCENT_COLORS, LAYOUT_MODES } from "./defaults"
+import type { SyncSettings, WorldClock } from "./defaults"
+import { ACCENT_COLORS, LAYOUT_MODES, MAX_WORLD_CLOCKS } from "./defaults"
 import {
   authenticate as spotifyAuthenticate,
   clearTokens as spotifyClearTokens,
@@ -9,6 +9,10 @@ import {
   authenticate as calendarAuthenticate,
   disconnect as calendarDisconnect,
 } from "./calendar"
+import {
+  authenticate as mailAuthenticate,
+  disconnect as mailDisconnect,
+} from "./mail"
 import {
   createAccordion,
   createButton,
@@ -19,6 +23,7 @@ import {
   createTooltip,
 } from "./components"
 import { icon, getIconSvg } from "./icons/registry"
+import { canEditLayout, startLayoutEdit } from "./layout-edit"
 import { searchPhotos, TOPICS } from "./unsplash"
 import {
   setUnsplashPhoto,
@@ -41,6 +46,31 @@ import { refreshWeather } from "./weather"
 import { probeCapabilities } from "./capabilities"
 import type { Capability } from "./capabilities"
 import { getRedirectUri } from "./google-auth"
+import {
+  authenticateDevice as githubAuthenticate,
+  cancelDeviceFlow as githubCancelFlow,
+  connectWithToken as githubConnectWithToken,
+  clearTokens as githubClearTokens,
+} from "./github-auth"
+import {
+  authenticateOAuth as linearAuthenticate,
+  connectWithApiKey as linearConnectWithApiKey,
+  disconnect as linearDisconnect,
+  getClientId as linearGetClientId,
+} from "./linear-auth"
+import { GITHUB_SECTIONS, LINEAR_SECTIONS } from "./defaults"
+import type { GithubSection, LinearSection, MailCategory, MailCountSource } from "./defaults"
+import { MAIL_CATEGORIES } from "./defaults"
+import { onSettingsTick } from "./world-clocks"
+import {
+  displayTime,
+  searchZones,
+  utcOffsetLabel,
+  zoneInfo,
+  zoneOffsetMinutes,
+  zoneTime,
+} from "./timezones"
+import type { ZoneInfo } from "./timezones"
 
 const TABS = [
   { id: "general", label: "General", iconName: "tabGeneral" },
@@ -76,6 +106,10 @@ function selectTab(tabId: string): void {
 }
 
 let openDialogFn: (() => void) | null = null
+let closeDialogFn: (() => void) | null = null
+/** Re-checked on open: which widgets are on decides whether there is anything
+    to rearrange, and that is settled two tabs away. */
+let refreshRearrangeFn: (() => void) | null = null
 
 /** Accordions that something outside settings can deep-link to, by id. */
 const sectionHooks: Record<string, () => void> = {}
@@ -90,6 +124,11 @@ export function openSettings(tabId?: string, sectionId?: string): void {
   if (sectionId) {
     requestAnimationFrame(() => sectionHooks[sectionId]?.())
   }
+}
+
+/** Closes the dialog, for a flow that continues on the page behind it. */
+export function closeSettings(): void {
+  closeDialogFn?.()
 }
 
 /** Buttons from `createButton` put the label in the last span; icons come first. */
@@ -110,6 +149,382 @@ function showStatus(el: HTMLParagraphElement, text: string, isError: boolean): v
   el.textContent = text
   el.className = isError ? "text-xs text-danger mt-1" : "text-xs text-muted mt-1"
   el.hidden = false
+}
+
+/* ── World clocks ───────────────────────────────────────────────────────── */
+
+function readWorldClocks(): WorldClock[] {
+  return store.sync.get("worldClocks")
+}
+
+function writeWorldClocks(clocks: WorldClock[]): void {
+  store.sync.set("worldClocks", clocks.slice(0, MAX_WORLD_CLOCKS))
+}
+
+/** A city and its current time, for one row of the picker. */
+function pickerOption(
+  zone: ZoneInfo,
+  alreadyAdded: boolean,
+  onPick: () => void
+): HTMLButtonElement {
+  const option = document.createElement("button")
+  option.type = "button"
+  option.className = "wc-picker-option"
+  option.dataset.zone = zone.id
+  option.disabled = alreadyAdded
+
+  const names = document.createElement("div")
+  names.className = "wc-picker-names"
+  const city = document.createElement("div")
+  city.className = "wc-picker-city"
+  city.textContent = zone.city
+  const region = document.createElement("div")
+  region.className = "wc-picker-region"
+  region.textContent = alreadyAdded
+    ? `${zone.region || zone.id} · already added`
+    : zone.region || zone.id
+  names.append(city, region)
+
+  const side = document.createElement("div")
+  side.className = "wc-picker-side"
+  const time = document.createElement("div")
+  time.className = "wc-picker-time"
+  const offset = document.createElement("div")
+  offset.className = "wc-picker-offset"
+  side.append(time, offset)
+
+  option.append(names, side)
+
+  onSettingsTick(option, (now) => {
+    const t = zoneTime(zone.id, now)
+    const shown = displayTime(t, {
+      hour24: store.sync.get("clock24Hour"),
+      seconds: false,
+    })
+    time.textContent = shown.meridiem ? `${shown.time} ${shown.meridiem}` : shown.time
+    offset.textContent = utcOffsetLabel(zoneOffsetMinutes(zone.id, now))
+  })
+
+  if (!alreadyAdded) option.addEventListener("click", onPick)
+  return option
+}
+
+/**
+ * The Add-clock control. It is one slot that swaps between a button and a live
+ * search panel rather than a popover, so it can't detach from the row it
+ * belongs to when the settings panel scrolls.
+ */
+function buildWorldClockPicker(opts: {
+  onAdd: (zone: ZoneInfo) => void
+  canAdd: () => boolean
+}): { el: HTMLElement; refresh: () => void; collapse: () => void } {
+  const host = document.createElement("div")
+  host.className = "mt-1"
+
+  const addBtn = createButton("Add clock", "outline", {
+    icon: getIconSvg("plus"),
+    onClick: () => expand(),
+  })
+  addBtn.className += " self-start"
+
+  const picker = document.createElement("div")
+  picker.className = "wc-picker"
+  picker.hidden = true
+
+  const search = createInput({
+    placeholder: "Search cities and timezones…",
+    className: "wc-picker-search",
+  }) as HTMLInputElement
+
+  const results = document.createElement("div")
+  results.className = "wc-picker-results"
+  picker.append(search, results)
+
+  host.append(addBtn, picker)
+
+  let highlighted = 0
+  let shown: ZoneInfo[] = []
+
+  function paintHighlight(): void {
+    const options = [...results.querySelectorAll<HTMLElement>(".wc-picker-option")]
+    options.forEach((option, i) => {
+      option.setAttribute("aria-selected", String(i === highlighted))
+    })
+    options[highlighted]?.scrollIntoView({ block: "nearest" })
+  }
+
+  function renderResults(): void {
+    const taken = new Set(readWorldClocks().map((c) => c.timezone))
+    shown = searchZones(search.value)
+    results.replaceChildren()
+
+    if (shown.length === 0) {
+      const empty = document.createElement("div")
+      empty.className = "text-xs text-muted px-2 py-3"
+      empty.textContent = "No timezone matches that."
+      results.appendChild(empty)
+      return
+    }
+
+    for (const zone of shown) {
+      results.appendChild(
+        pickerOption(zone, taken.has(zone.id), () => {
+          opts.onAdd(zone)
+          if (opts.canAdd()) {
+            search.value = ""
+            renderResults()
+            highlighted = 0
+            paintHighlight()
+            search.focus()
+          } else {
+            collapse()
+          }
+        })
+      )
+    }
+    highlighted = Math.min(highlighted, shown.length - 1)
+    paintHighlight()
+  }
+
+  function expand(): void {
+    addBtn.hidden = true
+    picker.hidden = false
+    search.value = ""
+    highlighted = 0
+    renderResults()
+    search.focus()
+    // The list opens at the foot of a scrolling panel, so it starts out below
+    // the fold more often than not.
+    picker.scrollIntoView({ block: "nearest", behavior: "smooth" })
+  }
+
+  function collapse(): void {
+    picker.hidden = true
+    addBtn.hidden = false
+    results.replaceChildren()
+  }
+
+  search.addEventListener("input", () => {
+    highlighted = 0
+    renderResults()
+  })
+
+  search.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      e.preventDefault()
+      collapse()
+      addBtn.focus()
+      return
+    }
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault()
+      const step = e.key === "ArrowDown" ? 1 : -1
+      highlighted = Math.max(0, Math.min(shown.length - 1, highlighted + step))
+      paintHighlight()
+      return
+    }
+    if (e.key === "Enter") {
+      e.preventDefault()
+      const option = results.querySelectorAll<HTMLButtonElement>(".wc-picker-option")[
+        highlighted
+      ]
+      if (option && !option.disabled) option.click()
+    }
+  })
+
+  function refresh(): void {
+    addBtn.disabled = !opts.canAdd()
+    addBtn.style.opacity = addBtn.disabled ? "0.45" : ""
+    addBtn.style.cursor = addBtn.disabled ? "not-allowed" : ""
+    if (addBtn.disabled && !picker.hidden) collapse()
+    if (!picker.hidden) renderResults()
+  }
+
+  return { el: host, refresh, collapse }
+}
+
+function buildWorldClocksSection(): HTMLElement {
+  const section = document.createElement("div")
+
+  const heading = document.createElement("div")
+  heading.className =
+    "flex items-baseline justify-between gap-3 mt-6 mb-1 pt-4 border-t border-input-border/10"
+  const title = document.createElement("h3")
+  title.className = "text-[11px] uppercase tracking-wider text-muted"
+  title.textContent = "World clocks"
+  const count = document.createElement("span")
+  count.className = "text-[11px] text-muted tabular-nums shrink-0"
+  heading.append(title, count)
+  section.appendChild(heading)
+
+  const blurb = document.createElement("p")
+  blurb.className = "text-xs text-muted mb-2"
+  blurb.textContent =
+    "Extra timezones beside your clock. They follow the 24-hour and seconds settings above."
+  section.appendChild(blurb)
+
+  const list = document.createElement("div")
+  list.className = "flex flex-col"
+  section.appendChild(list)
+
+  const empty = document.createElement("p")
+  empty.className = "text-xs text-muted py-2"
+  empty.textContent = "No world clocks yet."
+  section.appendChild(empty)
+
+  const picker = buildWorldClockPicker({
+    canAdd: () => readWorldClocks().length < MAX_WORLD_CLOCKS,
+    onAdd: (zone) => {
+      const clocks = readWorldClocks()
+      if (clocks.length >= MAX_WORLD_CLOCKS) return
+      if (clocks.some((c) => c.timezone === zone.id)) return
+      writeWorldClocks([
+        ...clocks,
+        { id: crypto.randomUUID(), timezone: zone.id, label: zone.city },
+      ])
+    },
+  })
+  section.appendChild(picker.el)
+
+  let dragId: string | null = null
+
+  function clearDropMarks(): void {
+    for (const row of list.querySelectorAll(".wc-settings-row")) {
+      row.classList.remove("is-drop-target")
+    }
+  }
+
+  function buildRow(clock: WorldClock): HTMLElement {
+    const zone = zoneInfo(clock.timezone)
+
+    const row = document.createElement("div")
+    row.className = "wc-settings-row"
+    row.dataset.id = clock.id
+    row.draggable = true
+
+    const grip = icon("dragHandle", { size: 12 })
+    grip.classList.add("wc-settings-grip")
+    row.appendChild(grip)
+
+    const label = document.createElement("input")
+    label.className = "wc-settings-label"
+    label.value = clock.label
+    label.setAttribute("aria-label", `Name for ${zone.city}`)
+    label.maxLength = 24
+    // While the field has focus, selecting text inside it must not drag the row.
+    label.addEventListener("focus", () => {
+      row.draggable = false
+    })
+    const commit = (): void => {
+      const next = label.value.trim() || zone.city
+      label.value = next
+      if (next === clock.label) return
+      writeWorldClocks(
+        readWorldClocks().map((c) => (c.id === clock.id ? { ...c, label: next } : c))
+      )
+    }
+    label.addEventListener("change", commit)
+    label.addEventListener("blur", () => {
+      row.draggable = true
+    })
+    label.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") label.blur()
+      if (e.key === "Escape") {
+        label.value = clock.label
+        label.blur()
+      }
+    })
+    row.appendChild(label)
+
+    const zoneLabel = document.createElement("span")
+    zoneLabel.className = "wc-settings-zone"
+    row.appendChild(zoneLabel)
+
+    const time = document.createElement("span")
+    time.className = "wc-settings-time"
+    row.appendChild(time)
+
+    onSettingsTick(row, (now) => {
+      const t = zoneTime(clock.timezone, now)
+      const shown = displayTime(t, {
+        hour24: store.sync.get("clock24Hour"),
+        seconds: store.sync.get("clockShowSeconds"),
+      })
+      time.textContent = shown.meridiem ? `${shown.time} ${shown.meridiem}` : shown.time
+      zoneLabel.textContent = `${zone.city} · ${utcOffsetLabel(
+        zoneOffsetMinutes(clock.timezone, now)
+      )}`
+    })
+
+    const remove = document.createElement("button")
+    remove.type = "button"
+    remove.className = "wc-settings-remove"
+    remove.setAttribute("aria-label", `Remove ${clock.label}`)
+    remove.appendChild(icon("trash", { size: 13 }))
+    remove.addEventListener("click", () => {
+      writeWorldClocks(readWorldClocks().filter((c) => c.id !== clock.id))
+    })
+    row.appendChild(remove)
+
+    return row
+  }
+
+  function render(): void {
+    const clocks = readWorldClocks()
+    list.replaceChildren(...clocks.map(buildRow))
+    empty.hidden = clocks.length > 0
+    count.textContent = `${clocks.length} / ${MAX_WORLD_CLOCKS}`
+    picker.refresh()
+  }
+
+  list.addEventListener("dragstart", (e: DragEvent) => {
+    const row = (e.target as HTMLElement).closest<HTMLElement>(".wc-settings-row")
+    if (!row) return
+    dragId = row.dataset.id!
+    row.classList.add("is-dragging")
+    e.dataTransfer!.effectAllowed = "move"
+  })
+
+  list.addEventListener("dragend", (e: DragEvent) => {
+    ;(e.target as HTMLElement)
+      .closest<HTMLElement>(".wc-settings-row")
+      ?.classList.remove("is-dragging")
+    dragId = null
+    clearDropMarks()
+  })
+
+  list.addEventListener("dragover", (e: DragEvent) => {
+    if (!dragId) return
+    e.preventDefault()
+    e.dataTransfer!.dropEffect = "move"
+    clearDropMarks()
+    const row = (e.target as HTMLElement).closest<HTMLElement>(".wc-settings-row")
+    if (row && row.dataset.id !== dragId) row.classList.add("is-drop-target")
+  })
+
+  list.addEventListener("drop", (e: DragEvent) => {
+    e.preventDefault()
+    const row = (e.target as HTMLElement).closest<HTMLElement>(".wc-settings-row")
+    const toId = row?.dataset.id
+    if (!dragId || !toId || toId === dragId) return
+
+    const clocks = readWorldClocks()
+    const from = clocks.findIndex((c) => c.id === dragId)
+    const to = clocks.findIndex((c) => c.id === toId)
+    if (from === -1 || to === -1) return
+    const next = [...clocks]
+    next.splice(to, 0, ...next.splice(from, 1))
+    writeWorldClocks(next)
+  })
+
+  render()
+  store.sync.subscribe("worldClocks", render)
+  // The rows print the time in the main clock's format, so a change there has
+  // to redraw them the way it redraws the chips on the page.
+  store.sync.subscribe("clock24Hour", render)
+  store.sync.subscribe("clockShowSeconds", render)
+
+  return section
 }
 
 function buildGeneralTab(): void {
@@ -181,6 +596,7 @@ function buildGeneralTab(): void {
   wrapper.appendChild(settingsRow("Size", clockSize))
 
   panel.appendChild(wrapper)
+  panel.appendChild(buildWorldClocksSection())
 
   const sc = (el: HTMLLabelElement, v: boolean) => (el as any).setChecked(v)
   store.sync.subscribe("clockEnabled", (v) => {
@@ -313,6 +729,9 @@ function buildSwatchGroup(storeKey: "accentColor" | "bgColor"): HTMLElement {
 }
 
 function buildLayoutSelector(): HTMLElement {
+  const wrapper = document.createElement("div")
+  wrapper.className = "flex flex-col gap-2"
+
   const container = document.createElement("div")
   container.className = "grid grid-cols-3 gap-2"
 
@@ -382,10 +801,34 @@ function buildLayoutSelector(): HTMLElement {
     })
   }
 
-  updateSelected(store.sync.get("layout"))
-  store.sync.subscribe("layout", updateSelected)
+  // Rearranging only means something where cards are packed by hand, so the
+  // action rides with the Default preview rather than sitting on its own row.
+  const rearrange = createButton("Rearrange widgets", "outline", {
+    icon: icon("dragHandle", { size: 14 }),
+    onClick: () => {
+      closeSettings()
+      startLayoutEdit()
+    },
+    className: "w-full justify-center disabled:opacity-40 disabled:pointer-events-none",
+  })
+  rearrange.title = "Drag widget cards into the arrangement you want"
 
-  return container
+  function updateRearrange(mode: string): void {
+    rearrange.hidden = mode !== "default"
+    rearrange.disabled = !canEditLayout()
+  }
+  refreshRearrangeFn = () => updateRearrange(store.sync.get("layout"))
+
+  updateSelected(store.sync.get("layout"))
+  updateRearrange(store.sync.get("layout"))
+  store.sync.subscribe("layout", (v) => {
+    updateSelected(v)
+    updateRearrange(v)
+  })
+
+  wrapper.appendChild(container)
+  wrapper.appendChild(rearrange)
+  return wrapper
 }
 
 function buildModeSelector(): HTMLElement {
@@ -1153,6 +1596,61 @@ function buildWidgetsTab(): void {
 
   panel.appendChild(todoAcc.container)
 
+  // --- Notepad ---
+  const notepadAcc = createAccordion("Notepad", {
+    variant: "settings",
+    defaultOpen: false,
+  })
+
+  const notepadEnabled = createCheckbox(
+    "",
+    store.sync.get("notepadEnabled"),
+    (v) => store.sync.set("notepadEnabled", v)
+  )
+  notepadAcc.content.appendChild(
+    settingsRow("Enable notepad widget", notepadEnabled)
+  )
+  store.sync.subscribe("notepadEnabled", (v) => {
+    ;(notepadEnabled as any).setChecked(v)
+  })
+
+  const notepadFont = createSelect({
+    options: [
+      { value: "sans", label: "Sans" },
+      { value: "mono", label: "Monospace" },
+    ],
+    value: store.sync.get("notepadFont"),
+    onChange: (v) =>
+      store.sync.set("notepadFont", v as SyncSettings["notepadFont"]),
+  })
+  notepadAcc.content.appendChild(settingsRow("Typeface", notepadFont))
+  store.sync.subscribe("notepadFont", (v) => {
+    notepadFont.value = v
+  })
+
+  const notepadHint = document.createElement("span")
+  notepadHint.className = "text-muted text-xs -mt-1 mb-1 block px-1"
+  notepadHint.textContent =
+    "The note is saved on this device only — it is too big for synced storage."
+  notepadAcc.content.appendChild(notepadHint)
+
+  const notepadClearRow = document.createElement("div")
+  notepadClearRow.className = "flex justify-end"
+  notepadClearRow.appendChild(
+    createButton("Clear note", "destructive", {
+      onClick: () => {
+        if (store.local.get("notepadBody") === "") return
+        if (confirm("Erase the note? This can't be undone from here.")) {
+          store.local.set("notepadBody", "")
+          store.local.set("notepadUpdatedAt", null)
+        }
+      },
+    })
+  )
+  notepadAcc.content.appendChild(notepadClearRow)
+
+  panel.appendChild(notepadAcc.container)
+
   // --- Weather ---
   const weatherAcc = createAccordion("Weather", {
     variant: "settings",
@@ -1352,6 +1850,481 @@ function buildWidgetsTab(): void {
   calendarAcc.content.appendChild(calConnectRow)
   calendarAcc.content.appendChild(calDisconnectRow)
   panel.appendChild(calendarAcc.container)
+
+  // --- Gmail ---
+  const mailAcc = createAccordion("Gmail", {
+    variant: "settings",
+    defaultOpen: false,
+  })
+
+  const mailEnabled = createCheckbox("", store.sync.get("mailEnabled"), (v) =>
+    store.sync.set("mailEnabled", v)
+  )
+  mailAcc.content.appendChild(settingsRow("Enable Gmail widget", mailEnabled))
+  store.sync.subscribe("mailEnabled", (v) => {
+    ;(mailEnabled as any).setChecked(v)
+  })
+
+  const mailConnectRow = document.createElement("div")
+  const mailStatus = statusText()
+  const mailBtn = createGoogleButton(async () => {
+    mailBtn.disabled = true
+    setButtonLabel(mailBtn, "Signing in…")
+    mailStatus.hidden = true
+
+    const result = await mailAuthenticate()
+
+    mailBtn.disabled = false
+    setButtonLabel(mailBtn, "Sign in with Google")
+
+    if (result.ok) {
+      updateMailUI()
+      return
+    }
+
+    showStatus(mailStatus, result.error, true)
+    if (result.needsClientId) {
+      const link = document.createElement("button")
+      link.className = "underline text-accent ml-1"
+      link.textContent = "Open Advanced settings"
+      link.addEventListener("click", () => selectTab("advanced"))
+      mailStatus.appendChild(link)
+    }
+  })
+  mailConnectRow.appendChild(mailBtn)
+  mailConnectRow.appendChild(mailStatus)
+
+  const mailDisconnectRow = document.createElement("div")
+  mailDisconnectRow.hidden = true
+  const mailAccount = statusText()
+  const mailDisconnectBtn = createButton("Disconnect", "destructive-outline", {
+    onClick: async () => {
+      await mailDisconnect()
+      updateMailUI()
+    },
+  })
+  mailDisconnectRow.appendChild(mailAccount)
+  mailDisconnectRow.appendChild(mailDisconnectBtn)
+
+  function updateMailUI(): void {
+    const connected = store.local.get("mailConnected")
+    mailConnectRow.hidden = connected
+    mailDisconnectRow.hidden = !connected
+    const address = store.local.get("mailAddress")
+    if (address) showStatus(mailAccount, `Signed in as ${address}`, false)
+    else mailAccount.hidden = true
+  }
+  updateMailUI()
+  store.local.subscribe("mailConnected", () => updateMailUI())
+  store.local.subscribe("mailAddress", () => updateMailUI())
+
+  mailAcc.content.appendChild(mailConnectRow)
+  mailAcc.content.appendChild(mailDisconnectRow)
+
+  const mailCount = createSelect({
+    options: [
+      { value: "primary", label: "Primary" },
+      { value: "inbox", label: "All inbox" },
+      { value: "important", label: "Important" },
+      { value: "starred", label: "Starred" },
+    ],
+    value: store.sync.get("mailCountSource"),
+    onChange: (v) => store.sync.set("mailCountSource", v as MailCountSource),
+  })
+  mailAcc.content.appendChild(settingsRow("Badge counts", mailCount))
+  store.sync.subscribe("mailCountSource", (v) => {
+    mailCount.value = v
+  })
+
+  const MAIL_CATEGORY_LABELS: Record<MailCategory, string> = {
+    primary: "Primary",
+    social: "Social",
+    promotions: "Promotions",
+    updates: "Updates",
+    forums: "Forums",
+  }
+  for (const category of MAIL_CATEGORIES) {
+    const box = createCheckbox("", store.sync.get("mailCategories").includes(category), (v) => {
+      const next = MAIL_CATEGORIES.filter((c) =>
+        c === category ? v : store.sync.get("mailCategories").includes(c)
+      )
+      store.sync.set("mailCategories", next)
+    })
+    mailAcc.content.appendChild(settingsRow(`Show ${MAIL_CATEGORY_LABELS[category]} inbox`, box))
+    store.sync.subscribe("mailCategories", (v) => {
+      ;(box as any).setChecked(v.includes(category))
+    })
+  }
+
+  const mailSnippets = createCheckbox("", store.sync.get("mailShowSnippets"), (v) =>
+    store.sync.set("mailShowSnippets", v)
+  )
+  mailAcc.content.appendChild(settingsRow("Show preview text", mailSnippets))
+  store.sync.subscribe("mailShowSnippets", (v) => {
+    ;(mailSnippets as any).setChecked(v)
+  })
+
+  const mailRows = createSelect({
+    options: [
+      { value: "8", label: "8" },
+      { value: "12", label: "12" },
+      { value: "20", label: "20" },
+      { value: "30", label: "30" },
+    ],
+    value: String(store.sync.get("mailMaxRows")),
+    onChange: (v) => store.sync.set("mailMaxRows", Number(v)),
+  })
+  mailAcc.content.appendChild(settingsRow("Messages to load", mailRows))
+  store.sync.subscribe("mailMaxRows", (v) => {
+    mailRows.value = String(v)
+  })
+
+  panel.appendChild(mailAcc.container)
+
+  // --- GitHub ---
+  const githubAcc = createAccordion("GitHub", {
+    variant: "settings",
+    defaultOpen: false,
+  })
+
+  const githubEnabled = createCheckbox("", store.sync.get("githubEnabled"), (v) =>
+    store.sync.set("githubEnabled", v)
+  )
+  githubAcc.content.appendChild(settingsRow("Enable GitHub widget", githubEnabled))
+  store.sync.subscribe("githubEnabled", (v) => {
+    ;(githubEnabled as any).setChecked(v)
+  })
+
+  githubAcc.content.appendChild(buildGithubAccountRow())
+
+  const SECTION_LABELS: Record<GithubSection, string> = {
+    reviews: "Needs your review",
+    mine: "Your pull requests",
+    mentions: "Mentions & notifications",
+    issues: "Assigned issues",
+  }
+  for (const section of GITHUB_SECTIONS) {
+    const box = createCheckbox("", store.sync.get("githubSections").includes(section), (v) => {
+      const next = GITHUB_SECTIONS.filter((s) =>
+        s === section ? v : store.sync.get("githubSections").includes(s)
+      )
+      store.sync.set("githubSections", next)
+    })
+    githubAcc.content.appendChild(settingsRow(SECTION_LABELS[section], box))
+    store.sync.subscribe("githubSections", (v) => {
+      ;(box as any).setChecked(v.includes(section))
+    })
+  }
+
+  const githubHideBots = createCheckbox("", store.sync.get("githubHideBots"), (v) =>
+    store.sync.set("githubHideBots", v)
+  )
+  githubAcc.content.appendChild(settingsRow("Hide pull requests from bots", githubHideBots))
+  store.sync.subscribe("githubHideBots", (v) => {
+    ;(githubHideBots as any).setChecked(v)
+  })
+
+  const githubContributions = createCheckbox("", store.sync.get("githubShowContributions"), (v) =>
+    store.sync.set("githubShowContributions", v)
+  )
+  githubAcc.content.appendChild(settingsRow("Show contribution graph", githubContributions))
+  store.sync.subscribe("githubShowContributions", (v) => {
+    ;(githubContributions as any).setChecked(v)
+  })
+
+  const githubOrg = createInput({ placeholder: "All organizations" }) as HTMLInputElement
+  githubOrg.value = store.sync.get("githubOrgFilter")
+  githubOrg.style.width = "200px"
+  githubOrg.addEventListener("change", () => {
+    store.sync.set("githubOrgFilter", githubOrg.value.trim())
+  })
+  store.sync.subscribe("githubOrgFilter", (v) => {
+    githubOrg.value = v
+  })
+  githubAcc.content.appendChild(settingsRow("Only this organization", githubOrg))
+
+  const githubIgnored = createInput({ placeholder: "owner/repo, owner/repo" }) as HTMLInputElement
+  githubIgnored.value = store.sync.get("githubIgnoredRepos").join(", ")
+  githubIgnored.style.width = "200px"
+  githubIgnored.addEventListener("change", () => {
+    const repos = githubIgnored.value
+      .split(",")
+      .map((r) => r.trim())
+      .filter(Boolean)
+    store.sync.set("githubIgnoredRepos", repos)
+  })
+  store.sync.subscribe("githubIgnoredRepos", (v) => {
+    githubIgnored.value = v.join(", ")
+  })
+  githubAcc.content.appendChild(settingsRow("Ignore these repos", githubIgnored))
+
+  panel.appendChild(githubAcc.container)
+
+  sectionHooks["github"] = () => {
+    if (githubAcc.content.hidden) githubAcc.toggle()
+    githubAcc.container.scrollIntoView({ block: "start", behavior: "smooth" })
+  }
+
+  // --- Linear ---
+  const linearAcc = createAccordion("Linear", {
+    variant: "settings",
+    defaultOpen: false,
+  })
+
+  const linearEnabled = createCheckbox("", store.sync.get("linearEnabled"), (v) =>
+    store.sync.set("linearEnabled", v)
+  )
+  linearAcc.content.appendChild(settingsRow("Enable Linear widget", linearEnabled))
+  store.sync.subscribe("linearEnabled", (v) => {
+    ;(linearEnabled as any).setChecked(v)
+  })
+
+  linearAcc.content.appendChild(buildLinearAccountRow())
+
+  const LINEAR_SECTION_LABELS: Record<LinearSection, string> = {
+    inbox: "Inbox (unread notifications)",
+    due: "Due & overdue",
+    progress: "In progress",
+    todo: "Up next",
+  }
+  for (const section of LINEAR_SECTIONS) {
+    const box = createCheckbox("", store.sync.get("linearSections").includes(section), (v) => {
+      const next = LINEAR_SECTIONS.filter((sec) =>
+        sec === section ? v : store.sync.get("linearSections").includes(sec)
+      )
+      store.sync.set("linearSections", next)
+    })
+    linearAcc.content.appendChild(settingsRow(LINEAR_SECTION_LABELS[section], box))
+    store.sync.subscribe("linearSections", (v) => {
+      ;(box as any).setChecked(v.includes(section))
+    })
+  }
+
+  const linearCycle = createCheckbox("", store.sync.get("linearShowCycle"), (v) =>
+    store.sync.set("linearShowCycle", v)
+  )
+  linearAcc.content.appendChild(settingsRow("Show active cycle burndown", linearCycle))
+  store.sync.subscribe("linearShowCycle", (v) => {
+    ;(linearCycle as any).setChecked(v)
+  })
+
+  const linearLink = createCheckbox("", store.sync.get("linearLinkGithub"), (v) =>
+    store.sync.set("linearLinkGithub", v)
+  )
+  linearAcc.content.appendChild(settingsRow("Cross-link issues and pull requests", linearLink))
+  store.sync.subscribe("linearLinkGithub", (v) => {
+    ;(linearLink as any).setChecked(v)
+  })
+
+  const linkHelp = document.createElement("p")
+  linkHelp.className = "text-xs text-muted -mt-1 mb-1 leading-relaxed"
+  linkHelp.textContent =
+    "Badges a Linear issue with its pull request and check status, and a pull request with its Linear issue. Uses what both widgets have already fetched — no extra requests."
+  linearAcc.content.appendChild(linkHelp)
+
+  const linearTeam = createInput({ placeholder: "All teams" }) as HTMLInputElement
+  linearTeam.value = store.sync.get("linearTeamFilter")
+  linearTeam.style.width = "200px"
+  linearTeam.addEventListener("change", () => {
+    store.sync.set("linearTeamFilter", linearTeam.value.trim().toUpperCase())
+  })
+  store.sync.subscribe("linearTeamFilter", (v) => {
+    linearTeam.value = v
+  })
+  linearAcc.content.appendChild(settingsRow("Only this team (key, e.g. ENG)", linearTeam))
+
+  panel.appendChild(linearAcc.container)
+
+  sectionHooks["linear"] = () => {
+    if (linearAcc.content.hidden) linearAcc.toggle()
+    linearAcc.container.scrollIntoView({ block: "start", behavior: "smooth" })
+  }
+}
+
+/**
+ * Connect / connected / disconnect for Linear. The API key is the field in
+ * front, because it is the path that works without registering anything; OAuth
+ * sits behind the button beside it and needs the client ID from Advanced. The
+ * same two doors the widget's own connect panel offers.
+ */
+function buildLinearAccountRow(): HTMLElement {
+  const wrap = document.createElement("div")
+
+  const connectRow = document.createElement("div")
+  const status = statusText()
+
+  const keyInput = createInput({ type: "password", placeholder: "lin_api_…" }) as HTMLInputElement
+  keyInput.style.width = "200px"
+
+  const saveBtn = createButton("Connect", "primary", {
+    icon: icon("linear", { size: 14 }),
+    onClick: async () => {
+      saveBtn.disabled = true
+      setButtonLabel(saveBtn, "Checking…")
+      const result = await linearConnectWithApiKey(keyInput.value)
+      saveBtn.disabled = false
+      setButtonLabel(saveBtn, "Connect")
+      if (result.ok) {
+        keyInput.value = ""
+        update()
+      } else {
+        showStatus(status, result.error, true)
+      }
+    },
+  })
+
+  const oauthBtn = createButton("Use OAuth", "outline", {
+    onClick: async () => {
+      if (!linearGetClientId()) {
+        showStatus(status, "Add a Linear client ID under Advanced first, or connect with an API key.", true)
+        return
+      }
+      oauthBtn.disabled = true
+      setButtonLabel(oauthBtn, "Connecting…")
+      const result = await linearAuthenticate()
+      oauthBtn.disabled = false
+      setButtonLabel(oauthBtn, "Use OAuth")
+      if (result.ok) update()
+      else showStatus(status, result.error, true)
+    },
+  })
+
+  const right = document.createElement("div")
+  right.className = "flex items-center gap-1 min-w-0"
+  right.append(keyInput, saveBtn, oauthBtn)
+  connectRow.appendChild(settingsRow("Personal API key", right))
+  connectRow.appendChild(status)
+
+  const help = document.createElement("p")
+  help.className = "text-xs text-muted mt-1 mb-2 leading-relaxed"
+  help.innerHTML =
+    `Create a key under ` +
+    `<a href="https://linear.app/settings/account/security" target="_blank" rel="noopener" class="underline text-accent">Linear → Security &amp; access</a> ` +
+    `with <strong>Read</strong> and <strong>Write</strong> — write is what lets a row change an issue’s status and clear a notification — and access to every team you want on the card. ` +
+    `It is stored in this browser only. OAuth is the narrower-scoped alternative and needs a client ID under Advanced.`
+  connectRow.appendChild(help)
+
+  const connectedRow = document.createElement("div")
+  connectedRow.className = "flex items-center gap-2 py-3"
+  connectedRow.hidden = true
+
+  const account = document.createElement("span")
+  account.className = "flex-1 min-w-0 truncate text-sm text-foreground"
+  connectedRow.appendChild(account)
+
+  const disconnectBtn = createButton("Disconnect", "destructive-outline", {
+    onClick: async () => {
+      await linearDisconnect()
+      update()
+    },
+  })
+  connectedRow.appendChild(disconnectBtn)
+
+  function update(): void {
+    const user = store.local.get("linearUser")
+    const connected = store.local.get("linearToken") !== null
+    connectRow.hidden = connected
+    connectedRow.hidden = !connected
+    if (user) {
+      const kind = store.local.get("linearTokenType") === "oauth" ? "OAuth" : "API key"
+      const org = user.orgName ? ` · ${user.orgName}` : ""
+      account.textContent = `Connected as ${user.displayName || user.name}${org} (${kind})`
+    }
+  }
+  update()
+  store.local.subscribe("linearToken", () => update())
+
+  wrap.appendChild(connectRow)
+  wrap.appendChild(connectedRow)
+  return wrap
+}
+
+/**
+ * Connect / connected / disconnect, plus the device code while one is pending.
+ * The same flow the widget runs inline — settings is the second door to it, for
+ * someone who got here before they ever saw the card.
+ */
+function buildGithubAccountRow(): HTMLElement {
+  const wrap = document.createElement("div")
+
+  const connectRow = document.createElement("div")
+  const status = statusText()
+
+  const codeBox = document.createElement("div")
+  codeBox.className = "flex items-center gap-2 mt-2"
+  codeBox.hidden = true
+
+  const connectBtn = createButton("Connect GitHub", "primary", {
+    icon: icon("github", { size: 15 }),
+    onClick: async () => {
+      connectBtn.disabled = true
+      setButtonLabel(connectBtn, "Connecting…")
+      status.hidden = true
+
+      const result = await githubAuthenticate({
+        onCode: (code) => {
+          codeBox.hidden = false
+          codeBox.replaceChildren()
+
+          const value = document.createElement("code")
+          value.className = "font-mono text-base tracking-[0.16em] text-foreground"
+          value.textContent = code.userCode
+          codeBox.appendChild(value)
+
+          const hint = document.createElement("span")
+          hint.className = "text-xs text-muted"
+          hint.textContent = "Enter this at github.com/login/device"
+          codeBox.appendChild(hint)
+
+          window.open(code.verificationUri, "_blank", "noopener,noreferrer")
+        },
+      })
+
+      connectBtn.disabled = false
+      setButtonLabel(connectBtn, "Connect GitHub")
+      codeBox.hidden = true
+
+      if (result.ok) update()
+      else showStatus(status, result.error, true)
+    },
+  })
+  connectRow.appendChild(connectBtn)
+  connectRow.appendChild(codeBox)
+  connectRow.appendChild(status)
+
+  const connectedRow = document.createElement("div")
+  connectedRow.className = "flex items-center gap-2 py-3"
+  connectedRow.hidden = true
+
+  const account = document.createElement("span")
+  account.className = "flex-1 min-w-0 truncate text-sm text-foreground"
+  connectedRow.appendChild(account)
+
+  const disconnectBtn = createButton("Disconnect", "destructive-outline", {
+    onClick: () => {
+      githubCancelFlow()
+      githubClearTokens()
+      update()
+    },
+  })
+  connectedRow.appendChild(disconnectBtn)
+
+  function update(): void {
+    const user = store.local.get("githubUser")
+    const connected = store.local.get("githubToken") !== null
+    connectRow.hidden = connected
+    connectedRow.hidden = !connected
+    if (user) {
+      const kind = store.local.get("githubTokenType") === "pat" ? "token" : "OAuth"
+      account.textContent = `Connected as @${user.login} (${kind})`
+    }
+  }
+  update()
+  store.local.subscribe("githubToken", () => update())
+
+  wrap.appendChild(connectRow)
+  wrap.appendChild(connectedRow)
+  return wrap
 }
 
 function buildNav(): { refreshIndicator: () => void } {
@@ -1506,25 +2479,20 @@ function buildShortcutsPanel(): HTMLDivElement {
   panel.className = "settings-panel flex flex-col h-full"
   panel.hidden = true
 
-  const tabBar = document.createElement("div")
-  tabBar.id = "sc-tab-bar"
-  tabBar.className = "flex items-center gap-1.5 px-6 pt-4 pb-3 shrink-0"
-  panel.appendChild(tabBar)
+  // Everything above the footer is built by shortcut-settings.ts; this is only
+  // the shell it mounts into, plus the two settings that belong to the panel
+  // rather than to any one shortcut.
+  const host = document.createElement("div")
+  host.id = "sc-panel"
+  host.className = "flex-1 flex min-h-0"
+  panel.appendChild(host)
 
-  const itemList = document.createElement("div")
-  itemList.id = "sc-item-list"
-  itemList.className = "flex-1 overflow-y-auto px-6"
-  panel.appendChild(itemList)
-
-  const controlBar = document.createElement("div")
-  controlBar.id = "sc-control-bar"
-  controlBar.className =
-    "flex items-center justify-between px-6 py-3 shrink-0 border-t border-input-border/15"
-  panel.appendChild(controlBar)
+  const footer = document.createElement("div")
+  footer.className =
+    "flex items-center justify-between gap-4 px-6 py-2.5 shrink-0 border-t border-input-border/15"
 
   const recsRow = document.createElement("div")
-  recsRow.className =
-    "flex items-center gap-2 px-6 pb-4 pt-1 border-t border-input-border/15"
+  recsRow.className = "flex items-center gap-2 min-w-0"
 
   const recsInput = document.createElement("input")
   recsInput.type = "checkbox"
@@ -1534,18 +2502,17 @@ function buildShortcutsPanel(): HTMLDivElement {
 
   const recsLabel = document.createElement("label")
   recsLabel.htmlFor = "settings-recommendations-enabled"
-  recsLabel.className = "text-sm"
+  recsLabel.className = "text-sm truncate"
   recsLabel.textContent = "Show smart suggestions in dock"
   recsRow.appendChild(recsLabel)
 
-  panel.appendChild(recsRow)
+  footer.appendChild(recsRow)
 
   const openInRow = document.createElement("div")
-  openInRow.className =
-    "flex items-center justify-between px-6 pb-4 pt-1 border-t border-input-border/15"
+  openInRow.className = "flex items-center gap-2 shrink-0"
 
   const openInLabel = document.createElement("span")
-  openInLabel.className = "text-sm"
+  openInLabel.className = "text-sm text-muted"
   openInLabel.textContent = "Open shortcuts in"
   openInRow.appendChild(openInLabel)
 
@@ -1560,7 +2527,8 @@ function buildShortcutsPanel(): HTMLDivElement {
   })
   openInRow.appendChild(openInSelect)
 
-  panel.appendChild(openInRow)
+  footer.appendChild(openInRow)
+  panel.appendChild(footer)
 
   return panel
 }
@@ -1627,6 +2595,8 @@ function buildAdvancedPanel(): HTMLDivElement {
 
   wrapper.appendChild(buildGoogleAuthSection())
   wrapper.appendChild(buildSpotifyAuthSection())
+  wrapper.appendChild(buildGithubAuthSection())
+  wrapper.appendChild(buildLinearAuthSection())
   wrapper.appendChild(buildCapabilityPanel())
 
   panel.appendChild(wrapper)
@@ -1651,7 +2621,7 @@ function sectionHeading(text: string): HTMLElement {
  */
 function buildOAuthSection(opts: {
   heading: string
-  clientIdKey: "googleClientId" | "spotifyClientId"
+  clientIdKey: "googleClientId" | "spotifyClientId" | "githubClientId" | "linearClientId"
   placeholder: string
   help: string
 }): HTMLElement {
@@ -1726,13 +2696,14 @@ function buildOAuthSection(opts: {
 
 function buildGoogleAuthSection(): HTMLElement {
   return buildOAuthSection({
-    heading: "Google Calendar sign-in",
+    heading: "Google sign-in",
     clientIdKey: "googleClientId",
     placeholder: "…apps.googleusercontent.com",
     help:
-      `Leave this blank if "Sign in with Google" already works — it's only needed when your browser has no Google account service. ` +
+      `Shared by the Calendar and Gmail widgets. Leave this blank if "Sign in with Google" already works — it's only needed when your browser has no Google account service. ` +
       `In <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener" class="underline text-accent">Google Cloud Console</a>, ` +
-      `enable the Calendar API, create an OAuth client of type <strong>Web application</strong>, add the redirect URI above, and paste the client ID here.`,
+      `enable the Calendar API and the Gmail API, create an OAuth client of type <strong>Web application</strong>, add the redirect URI above, and paste the client ID here. ` +
+      `Each widget asks for its own permission the first time you connect it, so connecting only the calendar never requests mail access.`,
   })
 }
 
@@ -1745,6 +2716,101 @@ function buildSpotifyAuthSection(): HTMLElement {
       `Leave this blank if "Connect Spotify" already works — it's only needed on browsers whose redirect URI can't be registered on the built-in app, such as Firefox. ` +
       `In the <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener" class="underline text-accent">Spotify Developer Dashboard</a>, ` +
       `create an app, tick <strong>Web API</strong>, add the redirect URI above, and paste the client ID here. Changing this disconnects the current session.`,
+  })
+}
+
+/**
+ * GitHub is the one service here that doesn't sign in through a redirect: the
+ * device flow trades a code the user types on github.com for a token, so the
+ * same client ID works on every browser and the callback URL registered against
+ * it is never used. The token field below is the way in with no App at all.
+ */
+function buildGithubAuthSection(): HTMLElement {
+  const section = buildOAuthSection({
+    heading: "GitHub sign-in",
+    clientIdKey: "githubClientId",
+    placeholder: "Ov23li… client ID",
+    help:
+      `Leave this blank if "Connect GitHub" already works. To use your own app, create an ` +
+      `<a href="https://github.com/settings/developers" target="_blank" rel="noopener" class="underline text-accent">OAuth App</a>, ` +
+      `tick <strong>Enable Device Flow</strong>, and paste the client ID here — no secret needed. ` +
+      `GitHub's form requires a callback URL but the device flow never uses it; the redirect URI above is a safe thing to put there. ` +
+      `Changing this disconnects the current session.`,
+  })
+
+  // Only a GitHub App with expiring user tokens needs this; GitHub's refresh
+  // endpoint asks for a secret even from a public client. Hidden until there is
+  // a refresh token to use it on, so the ordinary OAuth App setup never sees it.
+  const secretInput = createInput({ type: "password", placeholder: "client secret" }) as HTMLInputElement
+  secretInput.value = store.local.get("githubClientSecret")
+  secretInput.style.width = "220px"
+  secretInput.addEventListener("change", () => {
+    store.local.set("githubClientSecret", secretInput.value.trim())
+  })
+  const secretRow = settingsRow("Client secret (expiring tokens)", secretInput)
+  secretRow.hidden = store.local.get("githubRefreshToken") === null
+  store.local.subscribe("githubRefreshToken", (v) => {
+    secretRow.hidden = v === null
+  })
+  section.appendChild(secretRow)
+
+  const tokenInput = createInput({ type: "password", placeholder: "ghp_… or github_pat_…" }) as HTMLInputElement
+  tokenInput.style.width = "220px"
+
+  const status = statusText()
+  const saveBtn = createButton("Use token", "outline", {
+    onClick: async () => {
+      saveBtn.disabled = true
+      setButtonLabel(saveBtn, "Checking…")
+      const result = await githubConnectWithToken(tokenInput.value)
+      saveBtn.disabled = false
+      setButtonLabel(saveBtn, "Use token")
+      if (result.ok) {
+        tokenInput.value = ""
+        showStatus(status, "Connected.", false)
+      } else {
+        showStatus(status, result.error, true)
+      }
+    },
+  })
+
+  const right = document.createElement("div")
+  right.className = "flex items-center gap-1 min-w-0"
+  right.appendChild(tokenInput)
+  right.appendChild(saveBtn)
+  section.appendChild(settingsRow("Personal access token", right))
+  section.appendChild(status)
+
+  const tokenHelp = document.createElement("p")
+  tokenHelp.className = "text-xs text-muted mt-2 leading-relaxed"
+  tokenHelp.innerHTML =
+    `An alternative to signing in: create a ` +
+    `<a href="https://github.com/settings/tokens" target="_blank" rel="noopener" class="underline text-accent">personal access token</a> ` +
+    `with <code>repo</code>, <code>read:org</code> and <code>notifications</code>. A token without <code>notifications</code> hides the mentions section. ` +
+    `The token is stored in this browser only, and never synced.`
+  section.appendChild(tokenHelp)
+
+  return section
+}
+
+/**
+ * Linear is the one service here whose easy path is not OAuth. A personal API
+ * key needs no app at all, so it lives in Settings → Widgets next to the
+ * widget it powers; this section exists for the narrower-scoped alternative,
+ * which does need a registered app because Linear checks the redirect URI
+ * against its allowlist. See `docs/linear.md`.
+ */
+function buildLinearAuthSection(): HTMLElement {
+  return buildOAuthSection({
+    heading: "Linear sign-in",
+    clientIdKey: "linearClientId",
+    placeholder: "OAuth application client ID",
+    help:
+      `Optional. The Linear widget connects with a personal API key under <strong>Widgets → Linear</strong>, which needs none of this. ` +
+      `To sign in with OAuth instead, create an application under ` +
+      `<a href="https://linear.app/settings/api/applications/new" target="_blank" rel="noopener" class="underline text-accent">Linear → API → Applications</a>, ` +
+      `add the redirect URI above as a callback URL, tick <strong>public client</strong> so it can use PKCE, and paste the client ID here — no secret needed. ` +
+      `Changing this disconnects the current OAuth session.`,
   })
 }
 
@@ -1828,7 +2894,7 @@ export function initSettings(): void {
   dialog.id = "settings-dialog"
   dialog.setAttribute("aria-labelledby", "settings-title")
 
-  body.className = "flex w-[725px] h-[480px] max-h-[80vh]"
+  body.className = "flex w-[900px] h-[600px] max-w-[95vw] max-h-[85vh]"
 
   const nav = document.createElement("nav")
   nav.id = "settings-nav"
@@ -1893,7 +2959,11 @@ export function initSettings(): void {
 
   openDialogFn = () => {
     if (!dialog.open) open()
+    refreshRearrangeFn?.()
     requestAnimationFrame(() => navResult.refreshIndicator())
+  }
+  closeDialogFn = () => {
+    if (dialog.open) close()
   }
 
   const openBtn = document.getElementById("settings-open") as HTMLButtonElement

@@ -107,8 +107,9 @@ function probeWebAuth(): Capability {
   }
 }
 
-function summarizeCalendar(broker: Capability, web: Capability): Capability {
-  const base = { id: "calendar-auth", label: "Calendar sign-in" }
+/** One row, not two: Calendar and Gmail share a sign-in path and a client ID. */
+function summarizeGoogle(broker: Capability, web: Capability): Capability {
+  const base = { id: "google-auth", label: "Google sign-in" }
 
   if (broker.state === "available") {
     return { ...base, state: "available", detail: "Uses your browser's Google account." }
@@ -163,5 +164,5 @@ export async function probeCapabilities(force = false): Promise<Capability[]> {
   ])
   const web = probeWebAuth()
 
-  return [location, broker, web, summarizeCalendar(broker, web), summarizeSpotify(web)]
+  return [location, broker, web, summarizeGoogle(broker, web), summarizeSpotify(web)]
 }

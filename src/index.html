@@ -47,9 +47,63 @@
               hidden
             ></span>
           </button>
+          <button
+            id="notepad-trigger"
+            class="relative flex items-center justify-center w-12 h-12 rounded-lg bg-page-foreground/20 hover:bg-page-foreground/30 transition-colors text-page-foreground"
+            aria-label="Notepad"
+            hidden
+          >
+            <span
+              id="notepad-badge"
+              class="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-page-foreground/80"
+              hidden
+            ></span>
+          </button>
+          <button
+            id="github-trigger"
+            class="relative flex items-center justify-center w-12 h-12 rounded-lg bg-page-foreground/20 hover:bg-page-foreground/30 transition-colors text-page-foreground"
+            aria-label="GitHub"
+            hidden
+          >
+            <span
+              id="github-badge"
+              class="absolute -top-1 -right-1 text-[10px] bg-page-foreground/90 text-page-overlay rounded-full min-w-[18px] h-[18px] flex items-center justify-center font-semibold"
+              hidden
+            ></span>
+          </button>
+          <button
+            id="mail-trigger"
+            class="relative flex items-center justify-center w-12 h-12 rounded-lg bg-page-foreground/20 hover:bg-page-foreground/30 transition-colors text-page-foreground"
+            aria-label="Mail"
+            hidden
+          >
+            <span
+              id="mail-badge"
+              class="absolute -top-1 -right-1 text-[10px] bg-page-foreground/90 text-page-overlay rounded-full min-w-[18px] h-[18px] flex items-center justify-center font-semibold"
+              hidden
+            ></span>
+          </button>
+          <button
+            id="linear-trigger"
+            class="relative flex items-center justify-center w-12 h-12 rounded-lg bg-page-foreground/20 hover:bg-page-foreground/30 transition-colors text-page-foreground"
+            aria-label="Linear"
+            hidden
+          >
+            <span
+              id="linear-badge"
+              class="absolute -top-1 -right-1 text-[10px] bg-page-foreground/90 text-page-overlay rounded-full min-w-[18px] h-[18px] flex items-center justify-center font-semibold"
+              hidden
+            ></span>
+          </button>
         </div>
 
         <div id="clock" class="text-page-foreground font-mono tabular-nums"></div>
+
+        <div
+          id="world-clocks"
+          class="world-clock-row flex flex-wrap items-stretch gap-2"
+          hidden
+        ></div>
 
         <div id="search-wrapper" class="w-full">
           <input
@@ -65,58 +119,23 @@
           ></div>
         </div>
 
-        <div
-          id="dock-wrapper"
-          class="flex flex-col gap-1.5 pointer-events-none"
-          hidden
-        >
-          <div
-            id="dock"
-            class="dock-surface pointer-events-auto relative max-w-[80vw] rounded-2xl"
-          >
-            <div id="dock-scroll" class="flex items-center overflow-x-auto dock-scroll">
-              <div id="dock-suggestions" class="flex items-center gap-1 shrink-0" hidden></div>
-              <div id="dock-divider" class="w-px self-stretch bg-page-foreground/15 mx-1 shrink-0" hidden></div>
-              <div id="dock-items" class="flex items-center gap-1 shrink-0"></div>
+        <div id="dock-wrapper" class="dock-wrapper pointer-events-none" hidden>
+          <div id="dock" class="pointer-events-auto">
+            <div id="dock-scroll" class="dock-scroll">
+              <div id="dock-groups" class="dock-groups">
+                <div id="dock-suggestions" class="dock-group" hidden></div>
+                <div id="dock-divider" class="dock-divider" hidden></div>
+                <div id="dock-items" class="dock-group"></div>
+              </div>
             </div>
           </div>
-          <div
-            id="dock-tabs"
-            class="pointer-events-auto flex items-center gap-1"
-          ></div>
+          <div id="dock-tabs" class="dock-tabs pointer-events-auto" hidden>
+            <span id="dock-tabs-indicator" class="dock-tab-indicator" hidden></span>
+          </div>
         </div>
       </div>
     </div>
 
-    <dialog
-      id="history-import-dialog"
-      class="rounded-xl p-0 backdrop:bg-page-overlay/50 bg-panel text-foreground"
-    >
-      <div class="p-6 min-w-[340px] max-w-[480px]">
-        <h3 class="text-sm font-semibold mb-3">Import from History</h3>
-        <div id="history-import-loading" class="text-sm text-muted">
-          Loading history...
-        </div>
-        <div
-          id="history-import-list"
-          class="flex flex-col gap-1 max-h-[400px] overflow-y-auto"
-          hidden
-        ></div>
-        <div id="history-import-empty" class="text-sm text-muted" hidden>
-          No new sites found in your history.
-        </div>
-        <div id="history-import-error" class="text-sm text-danger" hidden>
-          Could not load history.
-        </div>
-        <button
-          id="history-import-close"
-          type="button"
-          class="mt-4 px-4 py-2 rounded-lg bg-secondary hover:bg-secondary-hover text-secondary-foreground transition-colors text-sm"
-        >
-          Close
-        </button>
-      </div>
-    </dialog>
 
     <script src="index.js"></script>
   </body>
