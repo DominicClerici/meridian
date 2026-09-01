@@ -1087,6 +1087,19 @@ export function buildTodoList(): { el: HTMLElement; rebuild: () => void } {
  * the todo chips it draws on a day, so something due can be read and checked
  * off without leaving the calendar.
  */
+/**
+ * The palette's write path. Search can add, complete and archive todos, and it
+ * has to go through the same `save` the widget does or the two views drift.
+ */
+export function applyTodos(next: Todo[]): void {
+  save(next)
+}
+
+/** Todos as the widget sees them — normalized, not the raw store array. */
+export function currentTodos(): Todo[] {
+  return getTodos()
+}
+
 export function showTodoPopover(anchor: HTMLElement, id: string): void {
   const todo = getTodos().find((t) => t.id === id)
   if (!todo) return

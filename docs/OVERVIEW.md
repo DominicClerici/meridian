@@ -4,7 +4,7 @@ The documentation map for this project. Start here, then follow the link to the 
 
 ## What this is
 
-A Chrome extension (Manifest V3) that replaces the new tab page with a custom startpage: a shortcut dock, a search bar, and a set of widgets (clock, todo, notepad, weather, Spotify, Google Calendar), arranged by one of three view modes. Vanilla TypeScript, no frameworks, no runtime dependencies, no `node_modules` — the build is two standalone binaries in `bin/` driven by `build.sh`.
+A Chrome extension (Manifest V3) that replaces the new tab page with a custom startpage: a shortcut dock, a command palette, and a set of widgets (clock, todo, notepad, weather, Spotify, Google Calendar), arranged by one of three view modes. Vanilla TypeScript, no frameworks, no runtime dependencies, no `node_modules` — the build is two standalone binaries in `bin/` driven by `build.sh`.
 
 Everything renders into one page (`src/index.html`) from one bundle (`dist/index.js`). Modules are wired together by `src/index.ts`, which calls each subsystem's `initX()` once on `DOMContentLoaded`.
 
@@ -21,7 +21,7 @@ Everything renders into one page (`src/index.html`) from one bundle (`dist/index
 | [shortcuts.md](shortcuts.md) | Shortcut data model, CRUD, the icon layer, the dock in all three layouts, the shortcuts settings panel | `shortcuts.ts`, `shortcut-icon.ts`, `dock*.ts`, `shortcut-settings.ts` |
 | [drag-and-drop.md](drag-and-drop.md) | The pointer-based drag engine for the shortcuts grid, and the two others it doesn't share code with (todos use plain HTML5 DnD) | `shortcut-drag.ts`, `dock-drag.ts`, `layout-edit.ts` |
 | [shortcut-import.md](shortcut-import.md) | Importing shortcuts from bookmarks, history, a pasted list or a file; JSON backup | `shortcut-import.ts`, `bookmarks-api.ts`, `ext-call.ts` |
-| [search.md](search.md) | The search bar, the provider registry, and its two providers | `search.ts`, `search-provider-*.ts`, `url.ts` |
+| [search.md](search.md) | The command palette: sources, ranking, the input grammar, instant answers | `search/`, `navigate.ts`, `url.ts`, `tabs-api.ts` |
 | [widgets.md](widgets.md) | The shared widget pattern (trigger + popover + cache), and the clock | `clock.ts` |
 | [world-clocks.md](world-clocks.md) | Extra timezones beside the clock: the chip row, the Dashboard tiles, the hover card, the shared tick, and the timezone catalogue | `world-clocks.ts`, `timezones.ts` |
 | [todos.md](todos.md) | Todo data model, pure operations, the widget body, and the calendar cross-link | `todos.ts`, `todo.ts` |
@@ -60,7 +60,7 @@ Everything renders into one page (`src/index.html`) from one bundle (`dist/index
 | A shortcut that navigates somewhere odd, or won't save | [shortcuts.md](shortcuts.md#url-normalization) |
 | Pulling shortcuts in from bookmarks, history or a file | [shortcut-import.md](shortcut-import.md) |
 | Dragging an item and it lands in the wrong place | [drag-and-drop.md](drag-and-drop.md) |
-| The search bar, or results ranked wrong | [search.md](search.md) |
+| The command palette, results ranked wrong, or a missing source | [search.md](search.md) |
 | A widget's popover not opening or closing | [widgets.md](widgets.md), [components.md](components.md#createpopover) |
 | A note that didn't save, or Enter doing something odd in the notepad | [notepad.md](notepad.md) |
 | A world clock reading the wrong time, or its hover card | [world-clocks.md](world-clocks.md) |
@@ -119,9 +119,18 @@ src/
   shortcut-icon-picker.ts  The icon editor used by the detail pane
   shortcut-drag.ts    Pointer-based drag-and-drop engine for the grid
   shortcut-import.ts  Import from bookmarks/history/paste/file, and JSON backup
-  search.ts           Search bar + provider registry
-  search-provider-engine.ts     Web-search-engine provider
-  search-provider-shortcuts.ts  Shortcut-matching provider
+  search/
+    index.ts          Source registration, global keys, the resting bar
+    overlay.ts        The <dialog>, the morph, the keyboard
+    registry.ts       Fan-out, cancellation, ranking, grouping
+    rank.ts           Fuzzy matcher and scoring
+    list.ts           Keyed row reuse and the selection rail
+    input.ts          The `>` / `@` / `!` grammar
+    recents.ts        Recent queries and learned ranking
+    answers.ts        Offline maths, units and timezones
+    empty.ts          Recent + suggested, for an empty query
+    sources/          One file per source
+  navigate.ts         The one place a URL becomes a navigation
   clock.ts            Clock widget
   world-clocks.ts     Extra timezone clocks: chip row, Dashboard tiles, hover card
   timezones.ts        IANA zone catalogue, search, and offset/day arithmetic

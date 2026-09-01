@@ -133,6 +133,45 @@ export type LinearUser = {
 export const LINEAR_SECTIONS = ["inbox", "due", "progress", "todo"] as const
 export type LinearSection = (typeof LINEAR_SECTIONS)[number]
 
+/**
+ * Everything the command palette can find. The ids are stable: they key the
+ * per-source toggles, the `@token` scopes, and the learned ranking. See
+ * `docs/search.md`.
+ */
+export const SEARCH_SOURCES = [
+  "answers",
+  "navigation",
+  "commands",
+  "shortcuts",
+  "tabs",
+  "history",
+  "bookmarks",
+  "todos",
+  "notes",
+  "calendar",
+  "mail",
+  "linear",
+  "github",
+  "spotify",
+  "suggestions",
+  "engine",
+] as const
+export type SearchSourceId = (typeof SEARCH_SOURCES)[number]
+
+export type RecentQuery = { text: string; at: number }
+
+/**
+ * What the palette has learned from what you actually pick.
+ *
+ * `picks` is a decayed frequency per candidate id; `byQuery` remembers the one
+ * result a given query ended in, which is what makes the second search for
+ * something land on it directly.
+ */
+export type SearchLearning = {
+  picks: Record<string, number>
+  byQuery: Record<string, string>
+}
+
 export type SyncSettings = {
   theme: "modern";
   layout: LayoutMode;
@@ -143,8 +182,20 @@ export type SyncSettings = {
   bgColor: AccentColor | "auto";
   mode: "light" | "dark" | "auto";
   searchEngine: "google" | "bing" | "yahoo" | "duckduckgo" | "ecosia" | "qwant" | "startpage";
-  debounceSearch: boolean;
   searchOpenInNewTab: boolean;
+  /** Sources the palette should not query. Stored as a *disabled* list rather
+      than a map of every source, so a source added in a later version is on by
+      default without a migration. */
+  searchDisabledSources: SearchSourceId[];
+  /** Live query suggestions from the search engine. Off: it is a network call
+      that sends keystrokes to the engine, and it needs an optional host grant. */
+  searchSuggestions: boolean;
+  /** Any printable key on the page opens the palette with that character. */
+  searchTypeAnywhere: boolean;
+  /** Focus the resting bar as soon as a new tab paints. */
+  searchAutofocus: boolean;
+  /** Remember recent queries and learn from which results get picked. */
+  searchRecents: boolean;
   clockEnabled: boolean;
   clockShowSeconds: boolean;
   clock24Hour: boolean;
@@ -257,7 +308,13 @@ export type LocalSettings = {
   bgUploadMeta: BgImageMeta | null
   /** Which widget the Dashboard's side carousel was left on. */
   dashboardWidget: string | null
+  /** Newest first, capped at `MAX_RECENT_QUERIES`. Local, never synced. */
+  searchRecentQueries: RecentQuery[]
+  searchLearning: SearchLearning
 }
+
+/** Enough to fill an empty palette twice over; more is a history, not a hint. */
+export const MAX_RECENT_QUERIES = 20
 
 export const syncDefaults: SyncSettings = {
   theme: "modern",
@@ -267,8 +324,12 @@ export const syncDefaults: SyncSettings = {
   bgColor: "auto",
   mode: "auto",
   searchEngine: "google",
-  debounceSearch: false,
   searchOpenInNewTab: false,
+  searchDisabledSources: [],
+  searchSuggestions: false,
+  searchTypeAnywhere: true,
+  searchAutofocus: true,
+  searchRecents: true,
   clockEnabled: true,
   clockShowSeconds: false,
   clock24Hour: false,
@@ -351,4 +412,6 @@ export const localDefaults: LocalSettings = {
   bgUnsplashMeta: null,
   bgUploadMeta: null,
   dashboardWidget: null,
+  searchRecentQueries: [],
+  searchLearning: { picks: {}, byQuery: {} },
 }

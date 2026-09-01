@@ -1181,6 +1181,15 @@ registerCard({
 
 // ---------------------------------------------------------------- init
 
+/** The card data, for the palette's blended pass. */
+export function linearSnapshot(): LinearData {
+  return data
+}
+
+export function linearConnected(): boolean {
+  return Boolean(store.local.get("linearToken"))
+}
+
 export function initLinear(): void {
   const trigger = document.getElementById("linear-trigger") as HTMLButtonElement | null
 

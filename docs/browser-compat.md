@@ -163,17 +163,18 @@ return isThenable(returned) ? returned : viaCallback
 ```
 
 Behaviour detection, not a `browser`-is-defined check — a fork that defines
-`browser` with callback semantics still works. All `history`, `bookmarks` and
-`permissions` access goes through `history-api.ts` / `bookmarks-api.ts`, which
-share it; don't reach for `api.history` directly.
+`browser` with callback semantics still works. All `history`, `bookmarks`,
+`tabs` and `permissions` access goes through `history-api.ts` /
+`bookmarks-api.ts` / `tabs-api.ts`, which share it; don't reach for
+`api.history` directly.
 
 `storage` and `identity` need no such treatment: Chrome has returned promises
 from both since MV3, so the plain `browser ?? chrome` alias is enough.
 
 ## Optional permissions
 
-`bookmarks` is declared in `optional_permissions` in **both** manifests rather
-than `permissions`. Two reasons:
+`bookmarks` and `tabs` are declared in `optional_permissions` in **both**
+manifests rather than `permissions`. Two reasons:
 
 - On Chrome, growing a `permissions` array **disables the extension** until the
   user re-approves it in the extensions page. Importing bookmarks is a thing
@@ -187,6 +188,25 @@ rejects a `permissions.request()` that isn't synchronous with a click, so
 `pickSource()` in `shortcut-import.ts` calls `requestBookmarks()` first and
 awaits nothing before it. Declining is an ordinary outcome, not an error: the
 dialog returns to the source list with an explanation.
+
+The command palette asks the same way, from the button on the notice it shows
+when you scope to `@bm` or `@tab` without the grant. See
+[search.md](search.md#permissions).
+
+`tabs` has a wrinkle the others don't: **`tabs.query` succeeds without it**. It
+just omits `url` and `title`, which is the entire payload tab search needs. So
+`tabs-api.ts` checks `permissions.contains` rather than inferring the grant from
+the API being present — a check that reads as redundant and isn't.
+
+### Optional host permissions
+
+`optional_host_permissions` carries the four search-suggestion endpoints
+(`suggestqueries.google.com`, `api.bing.com`, `duckduckgo.com`,
+`ac.ecosia.org`). They are requested by the **Engine suggestions** checkbox in
+Widgets → Search, under the same user-gesture rule, through
+`requestOrigins()` in `ext-call.ts`. The setting only flips on if the grant
+comes back — an enabled checkbox that silently can't fetch would be worse than
+an unchecked one.
 
 `bookmarksSupported()` distinguishes the third state — a browser with no
 `permissions` API at all — so the source card can be disabled with a reason

@@ -170,6 +170,29 @@ Creates a native `<dialog class="dialog-surface">`, **appends it to `document.bo
 
 Styling lives in `.dialog-surface` — see [design-system.md](design-system.md#component-css).
 
+## The command palette
+
+Not a `components.ts` export — it lives in `search/overlay.ts` — but it is the
+second native-`<dialog>` surface in the app, and it solves the same problems a
+different way. Worth reading alongside `createDialog` before building a third.
+
+| | `createDialog` | `#palette` |
+|---|---|---|
+| Surface | `.dialog-surface` | `.palette-frame`, same `--dialog*` tokens |
+| Element | `<dialog>` sized to content | `<dialog>` filling the viewport, with an absolutely-positioned frame inside |
+| Close animation | `.closing` class + `animationend`, 150ms timeout fallback | WAAPI on the frame, driven to completion by a `setTimeout` |
+| Escape | `cancel` → `preventDefault` → `close()` | `cancel` → `preventDefault`; a `keydown` listener on the dialog owns the staged behaviour |
+
+The viewport-filling dialog is what makes the open animation possible: the frame
+can be positioned and transformed freely inside it, and a click that lands on the
+dialog rather than the frame is unambiguously a backdrop click.
+
+Neither surface uses `createPopover` internally, and the palette **cannot** — a
+popover is appended to `<body>` with a z-index, and the top layer is above every
+z-index there is, so a popover raised from inside the palette would render behind
+it. That is why the row action menu is an inline mode of the list rather than a
+floating menu. See [search.md](search.md#keyboard).
+
 ## createCard
 
 ```ts

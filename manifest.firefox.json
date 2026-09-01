@@ -12,8 +12,16 @@
       "strict_min_version": "109.0"
     }
   },
-  "permissions": ["storage", "geolocation", "identity", "history"],
-  "optional_permissions": ["bookmarks"],
+  "permissions": [
+    "storage",
+    "geolocation",
+    "identity",
+    "history"
+  ],
+  "optional_permissions": [
+    "bookmarks",
+    "tabs"
+  ],
   "host_permissions": [
     "https://api.open-meteo.com/*",
     "https://air-quality-api.open-meteo.com/*",
@@ -30,5 +38,11 @@
     "https://api.linear.app/*",
     "https://api.unsplash.com/*",
     "https://images.unsplash.com/*"
+  ],
+  "optional_host_permissions": [
+    "https://suggestqueries.google.com/*",
+    "https://api.bing.com/*",
+    "https://duckduckgo.com/*",
+    "https://ac.ecosia.org/*"
   ]
 }

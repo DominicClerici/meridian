@@ -87,6 +87,42 @@ declare global {
     ): Promise<BookmarkTreeNode[]> | void;
   }
 
+  /**
+   * `url` and `title` are only populated when the optional `tabs` permission is
+   * granted — the query itself succeeds either way. See `tabs-api.ts`.
+   */
+  interface ExtTab {
+    id?: number;
+    windowId?: number;
+    index?: number;
+    url?: string;
+    title?: string;
+    favIconUrl?: string;
+    active?: boolean;
+    pinned?: boolean;
+    audible?: boolean;
+  }
+
+  interface BrowserTabs {
+    query(
+      queryInfo: object,
+      callback?: (results: ExtTab[]) => void
+    ): Promise<ExtTab[]> | void;
+    update(
+      tabId: number,
+      props: { active?: boolean },
+      callback?: (tab?: ExtTab) => void
+    ): Promise<ExtTab> | void;
+  }
+
+  interface BrowserWindows {
+    update(
+      windowId: number,
+      props: { focused?: boolean },
+      callback?: (win?: unknown) => void
+    ): Promise<unknown> | void;
+  }
+
   interface ExtPermissions {
     permissions?: string[];
     origins?: string[];
@@ -109,6 +145,9 @@ declare global {
     history: BrowserHistory;
     /** Optional permission — see bookmarks-api.ts. */
     bookmarks?: BrowserBookmarks;
+    /** Optional permission — see tabs-api.ts. */
+    tabs?: BrowserTabs;
+    windows?: BrowserWindows;
     permissions?: BrowserPermissions;
   }
 

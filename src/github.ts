@@ -949,6 +949,15 @@ registerCard({
 
 // ---------------------------------------------------------------- init
 
+/** The filtered card data, for the palette's blended pass. */
+export function githubSnapshot(): GithubData {
+  return data
+}
+
+export function githubConnected(): boolean {
+  return Boolean(store.local.get("githubToken"))
+}
+
 export function initGithub(): void {
   const trigger = document.getElementById("github-trigger") as HTMLButtonElement | null
 

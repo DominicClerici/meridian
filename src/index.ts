@@ -7,7 +7,7 @@ import { applyLayout, subscribeLayout } from "./layout"
 import { initSettings } from "./settings"
 import { initDock } from "./dock"
 import { initShortcutSettings } from "./shortcut-settings"
-import { initSearch } from "./search"
+import { initSearch } from "./search/index"
 import { initClock } from "./clock"
 import { initWorldClocks } from "./world-clocks"
 import { initTodo } from "./todo"
@@ -28,6 +28,7 @@ applyLayout()
 subscribeLayout()
 
 document.getElementById("settings-open")!.prepend(icon("settings", { size: 24 }))
+document.querySelector("#search-bar .search-bar-glyph")!.appendChild(icon("search", { size: 18 }))
 document.getElementById("todo-trigger")!.prepend(icon("todoList", { size: 24 }))
 document.getElementById("notepad-trigger")!.prepend(icon("notepad", { size: 24 }))
 document.getElementById("github-trigger")!.prepend(icon("github", { size: 22 }))

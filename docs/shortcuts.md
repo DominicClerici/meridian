@@ -102,7 +102,7 @@ For pre-flight checks (disabling an Add control before it's pressed) there are `
 
 ## The icon layer
 
-`shortcut-icon.ts` is the single source of truth for how a shortcut looks. Before it, the ten palette colours had **four** disagreeing JS definitions (`dock.ts`, `shortcut-settings.ts`, `settings.ts`, `search-provider-shortcuts.ts`) that also disagreed with the `--swatch-*` CSS tokens, so the same shortcut rendered one colour in the dock and another in settings. There were also two favicon helpers that behaved differently on a scheme-less URL.
+`shortcut-icon.ts` is the single source of truth for how a shortcut looks. Before it, the ten palette colours had **four** disagreeing JS definitions (`dock.ts`, `shortcut-settings.ts`, `settings.ts`, and the old search shortcut provider) that also disagreed with the `--swatch-*` CSS tokens, so the same shortcut rendered one colour in the dock and another in settings. There were also two favicon helpers that behaved differently on a scheme-less URL.
 
 ```ts
 renderIcon(spec, { kind, name, url }, { size?, className? }): HTMLElement

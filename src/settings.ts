@@ -1,6 +1,9 @@
 import { store } from "./store"
 import type { SyncSettings, WorldClock } from "./defaults"
 import { ACCENT_COLORS, LAYOUT_MODES, MAX_WORLD_CLOCKS } from "./defaults"
+import type { SearchSourceId } from "./defaults"
+import { clearSearchHistory, SUGGEST_ORIGINS } from "./search/index"
+import { requestOrigins } from "./ext-call"
 import {
   authenticate as spotifyAuthenticate,
   clearTokens as spotifyClearTokens,
@@ -21,6 +24,7 @@ import {
   createInput,
   createSelect,
   createTooltip,
+  showToast,
 } from "./components"
 import { icon, getIconSvg } from "./icons/registry"
 import { canEditLayout, startLayoutEdit } from "./layout-edit"
@@ -78,6 +82,62 @@ const TABS = [
   { id: "appearance", label: "Appearance", iconName: "tabAppearance" },
   { id: "widgets", label: "Widgets", iconName: "tabWidgets" },
   { id: "advanced", label: "Advanced", iconName: "tabAdvanced" },
+]
+
+function requestSuggestOrigins(): Promise<boolean> {
+  return requestOrigins(SUGGEST_ORIGINS)
+}
+
+/** The small grey line of explanation that sits under a settings row. */
+function settingsHint(text: string): HTMLElement {
+  const hint = document.createElement("span")
+  hint.className = "text-muted text-xs -mt-2 mb-1 block px-1"
+  hint.textContent = text
+  return hint
+}
+
+/**
+ * Per-source toggles. Stored as a disabled list, so a source added in a later
+ * version arrives switched on without a migration.
+ */
+function buildSearchSources(): HTMLElement {
+  const wrap = document.createElement("div")
+  wrap.className = "flex flex-col"
+
+  const label = document.createElement("span")
+  label.className = "text-sm text-foreground pt-3 pb-1"
+  label.textContent = "Search in"
+  wrap.appendChild(label)
+
+  for (const source of TOGGLEABLE_SOURCES) {
+    const disabled = new Set(store.sync.get("searchDisabledSources"))
+    const box = createCheckbox("", !disabled.has(source.id), (on) => {
+      const next = new Set(store.sync.get("searchDisabledSources"))
+      if (on) next.delete(source.id)
+      else next.add(source.id)
+      store.sync.set("searchDisabledSources", [...next])
+    })
+    wrap.appendChild(settingsRow(source.label, box))
+  }
+
+  return wrap
+}
+
+/** Everything but the web-search row and direct navigation, which always run. */
+const TOGGLEABLE_SOURCES: { id: SearchSourceId; label: string }[] = [
+  { id: "answers", label: "Instant answers" },
+  { id: "commands", label: "Commands and settings" },
+  { id: "shortcuts", label: "Shortcuts" },
+  { id: "tabs", label: "Open tabs" },
+  { id: "history", label: "History" },
+  { id: "bookmarks", label: "Bookmarks" },
+  { id: "todos", label: "Todos" },
+  { id: "notes", label: "Notes" },
+  { id: "calendar", label: "Calendar" },
+  { id: "mail", label: "Mail" },
+  { id: "linear", label: "Linear" },
+  { id: "github", label: "GitHub" },
+  { id: "spotify", label: "Spotify" },
 ]
 
 function settingsRow(
@@ -1533,20 +1593,6 @@ function buildWidgetsTab(): void {
     searchEngine.value = v
   })
 
-  const debounce = createCheckbox("", store.sync.get("debounceSearch"), (v) =>
-    store.sync.set("debounceSearch", v)
-  )
-  searchAcc.content.appendChild(
-    settingsRow("Debounce shortcut search", debounce)
-  )
-  const debounceHint = document.createElement("span")
-  debounceHint.className = "text-muted text-xs -mt-2 mb-1 block px-1"
-  debounceHint.textContent = "Enable this if the search lags when you type"
-  searchAcc.content.appendChild(debounceHint)
-  store.sync.subscribe("debounceSearch", (v) => {
-    ;(debounce as any).setChecked(v)
-  })
-
   const openNewTab = createCheckbox(
     "",
     store.sync.get("searchOpenInNewTab"),
@@ -1559,7 +1605,75 @@ function buildWidgetsTab(): void {
     ;(openNewTab as any).setChecked(v)
   })
 
+  const typeAnywhere = createCheckbox("", store.sync.get("searchTypeAnywhere"), (v) =>
+    store.sync.set("searchTypeAnywhere", v)
+  )
+  searchAcc.content.appendChild(settingsRow("Type anywhere to search", typeAnywhere))
+  searchAcc.content.appendChild(
+    settingsHint("Any key on the page opens the palette. ⌘K and / always work.")
+  )
+  store.sync.subscribe("searchTypeAnywhere", (v) => {
+    ;(typeAnywhere as any).setChecked(v)
+  })
+
+  const autofocus = createCheckbox("", store.sync.get("searchAutofocus"), (v) =>
+    store.sync.set("searchAutofocus", v)
+  )
+  searchAcc.content.appendChild(settingsRow("Focus the search bar on a new tab", autofocus))
+  store.sync.subscribe("searchAutofocus", (v) => {
+    ;(autofocus as any).setChecked(v)
+  })
+
+  // Off by default and permission-gated: it sends what you are typing to the
+  // search engine before you have decided to search for it.
+  const suggestions = createCheckbox("", store.sync.get("searchSuggestions"), (v) => {
+    if (!v) {
+      store.sync.set("searchSuggestions", false)
+      return
+    }
+    // Must be synchronous with the click, so nothing is awaited first.
+    requestSuggestOrigins().then((granted) => {
+      store.sync.set("searchSuggestions", granted)
+      if (!granted) (suggestions as any).setChecked(false)
+    })
+  })
+  searchAcc.content.appendChild(settingsRow("Engine suggestions as you type", suggestions))
+  searchAcc.content.appendChild(
+    settingsHint(
+      "Sends each keystroke to your search engine. Google, Bing, DuckDuckGo and Ecosia only."
+    )
+  )
+  store.sync.subscribe("searchSuggestions", (v) => {
+    ;(suggestions as any).setChecked(v)
+  })
+
+  const recents = createCheckbox("", store.sync.get("searchRecents"), (v) =>
+    store.sync.set("searchRecents", v)
+  )
+  searchAcc.content.appendChild(settingsRow("Remember recent searches", recents))
+  searchAcc.content.appendChild(
+    settingsHint("Stored on this device only, and used to rank what you pick most.")
+  )
+  store.sync.subscribe("searchRecents", (v) => {
+    ;(recents as any).setChecked(v)
+  })
+
+  searchAcc.content.appendChild(buildSearchSources())
+
+  const clearHistory = createButton("Clear search history", "destructive-outline", {
+    onClick: () => {
+      clearSearchHistory()
+      showToast("Search history cleared")
+    },
+  })
+  searchAcc.content.appendChild(settingsRow("Recent searches and learned ranking", clearHistory))
+
   panel.appendChild(searchAcc.container)
+
+  sectionHooks["search"] = () => {
+    if (searchAcc.content.hidden) searchAcc.toggle()
+    searchAcc.container.scrollIntoView({ block: "start", behavior: "smooth" })
+  }
 
   // --- Todo ---
   const todoAcc = createAccordion("Todo", {
@@ -1595,6 +1709,11 @@ function buildWidgetsTab(): void {
   todoAcc.content.appendChild(clearRow)
 
   panel.appendChild(todoAcc.container)
+
+  sectionHooks["todo"] = () => {
+    if (todoAcc.content.hidden) todoAcc.toggle()
+    todoAcc.container.scrollIntoView({ block: "start", behavior: "smooth" })
+  }
 
   // --- Notepad ---
   const notepadAcc = createAccordion("Notepad", {
@@ -1650,6 +1769,11 @@ function buildWidgetsTab(): void {
   notepadAcc.content.appendChild(notepadClearRow)
 
   panel.appendChild(notepadAcc.container)
+
+  sectionHooks["notepad"] = () => {
+    if (notepadAcc.content.hidden) notepadAcc.toggle()
+    notepadAcc.container.scrollIntoView({ block: "start", behavior: "smooth" })
+  }
 
   // --- Weather ---
   const weatherAcc = createAccordion("Weather", {
@@ -1782,6 +1906,11 @@ function buildWidgetsTab(): void {
   spotifyAcc.content.appendChild(spotifyDisconnectRow)
   panel.appendChild(spotifyAcc.container)
 
+  sectionHooks["spotify"] = () => {
+    if (spotifyAcc.content.hidden) spotifyAcc.toggle()
+    spotifyAcc.container.scrollIntoView({ block: "start", behavior: "smooth" })
+  }
+
   // --- Google Calendar ---
   const calendarAcc = createAccordion("Google Calendar", {
     variant: "settings",
@@ -1850,6 +1979,11 @@ function buildWidgetsTab(): void {
   calendarAcc.content.appendChild(calConnectRow)
   calendarAcc.content.appendChild(calDisconnectRow)
   panel.appendChild(calendarAcc.container)
+
+  sectionHooks["calendar"] = () => {
+    if (calendarAcc.content.hidden) calendarAcc.toggle()
+    calendarAcc.container.scrollIntoView({ block: "start", behavior: "smooth" })
+  }
 
   // --- Gmail ---
   const mailAcc = createAccordion("Gmail", {
@@ -1980,6 +2114,11 @@ function buildWidgetsTab(): void {
   })
 
   panel.appendChild(mailAcc.container)
+
+  sectionHooks["mail"] = () => {
+    if (mailAcc.content.hidden) mailAcc.toggle()
+    mailAcc.container.scrollIntoView({ block: "start", behavior: "smooth" })
+  }
 
   // --- GitHub ---
   const githubAcc = createAccordion("GitHub", {

@@ -37,3 +37,17 @@ export function invoke<T>(
 
   return isThenable(returned) ? (returned as Promise<T>) : viaCallback
 }
+
+/**
+ * Optional host permissions, requested at the moment a feature that needs them
+ * is switched on. Like every `permissions.request`, this must be called
+ * synchronously from a user gesture — Chrome rejects it otherwise.
+ */
+export function requestOrigins(origins: string[]): Promise<boolean> {
+  const permissions = api?.permissions
+  if (!permissions) return Promise.resolve(false)
+  return invoke<boolean>(
+    (p, cb) => permissions.request(p as ExtPermissions, cb),
+    { origins }
+  ).catch(() => false)
+}

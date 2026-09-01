@@ -3156,3 +3156,425 @@ body.sc-dragging {
     transition-duration: 1ms;
   }
 }
+
+/* ── Command palette ──────────────────────────────────────────────────────
+   Two elements that read as one. `.search-bar` sits in the layout slot and is
+   only ever a target: it holds no text and takes no input. `.palette` is a
+   native <dialog>, which is what puts it in the top layer — above every
+   popover, card and toast — and gives it a real backdrop to blur, an inert
+   page behind it, and focus containment, none of which a positioned div gets.
+
+   Both share --palette-h, so opening animates width and position only. Nothing
+   scales, so no text is ever caught mid-distortion. */
+
+[data-theme="modern"] {
+  --palette-h: 52px;
+  --palette-open: cubic-bezier(0.2, 0.9, 0.24, 1);
+}
+
+/* The resting bar */
+
+.search-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: var(--palette-h);
+  padding: 0 14px;
+  border-radius: var(--radius);
+  corner-shape: var(--corner-shape);
+  border: 1px solid color-mix(in srgb, var(--input-border) 40%, transparent);
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  backdrop-filter: blur(var(--panel-blur));
+  color: var(--muted);
+  font-size: 15px;
+  text-align: left;
+  cursor: text;
+  transition: opacity 120ms ease, border-color 160ms ease, background 160ms ease;
+}
+
+.search-bar:hover,
+.search-bar:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--panel) 96%, transparent);
+  outline: none;
+}
+
+.search-bar-glyph {
+  display: flex;
+  color: var(--muted);
+}
+
+.search-bar-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.search-bar-kbd {
+  padding: 2px 6px;
+  border-radius: calc(5px * var(--corner-reach));
+  border: 1px solid color-mix(in srgb, var(--input-border) 45%, transparent);
+  background: color-mix(in srgb, var(--foreground) 5%, transparent);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+/* Hidden, not removed: the slot has to keep reserving its space while the
+   palette is open, or the layout would jump underneath the morph. */
+.search-bar.is-lifted {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* The dialog */
+
+.palette {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  overflow: visible;
+}
+
+.palette::backdrop {
+  background: transparent;
+  backdrop-filter: blur(0px);
+  transition: background 200ms ease, backdrop-filter 200ms ease;
+}
+
+.palette.is-open::backdrop {
+  background: color-mix(in srgb, var(--page-overlay) 40%, transparent);
+  backdrop-filter: blur(16px);
+}
+
+.palette-frame {
+  position: absolute;
+  left: 50%;
+  top: 14vh;
+  transform: translateX(-50%);
+  width: min(640px, calc(100vw - 32px));
+  border-radius: var(--radius-lg);
+  corner-shape: var(--corner-shape);
+  border: 1px solid var(--dialog-border);
+  background: var(--dialog);
+  backdrop-filter: blur(var(--dialog-blur));
+  box-shadow: 0 24px 70px -12px rgba(0, 0, 0, 0.45);
+  color: var(--foreground);
+  overflow: hidden;
+  will-change: translate, width;
+}
+
+.palette-input-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: var(--palette-h);
+  padding: 0 14px;
+}
+
+.palette-glyph {
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.palette-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  height: 24px;
+  padding: 0 7px;
+  border-radius: calc(7px * var(--corner-reach));
+  corner-shape: var(--corner-shape);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--foreground);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  animation: palette-pill-in 140ms var(--palette-open);
+}
+
+.palette-pill-x {
+  opacity: 0.5;
+}
+
+.palette-pill:hover .palette-pill-x {
+  opacity: 1;
+}
+
+@keyframes palette-pill-in {
+  from {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+}
+
+.palette-input {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--foreground);
+  font-family: var(--font-body);
+  font-size: 16px;
+}
+
+.palette-input::placeholder {
+  color: var(--muted);
+}
+
+.palette-hint {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: var(--muted);
+}
+
+.palette-hint kbd {
+  padding: 1px 5px;
+  border-radius: calc(4px * var(--corner-reach));
+  border: 1px solid color-mix(in srgb, var(--input-border) 45%, transparent);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.palette-hint.is-busy kbd {
+  display: none;
+}
+
+.palette-hint.is-busy::after {
+  content: "";
+  width: 13px;
+  height: 13px;
+  border: 1.5px solid color-mix(in srgb, var(--muted) 45%, transparent);
+  border-top-color: var(--accent);
+  border-radius: 9999px;
+  corner-shape: round;
+  animation: palette-spin 640ms linear infinite;
+}
+
+@keyframes palette-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* The results panel */
+
+.palette-panel {
+  height: 0;
+  overflow: hidden;
+  border-top: 1px solid transparent;
+  transition: height 220ms var(--palette-open), border-color 160ms ease;
+}
+
+.palette-panel:not(.is-empty) {
+  border-top-color: color-mix(in srgb, var(--input-border) 30%, transparent);
+}
+
+/* max-height is set from LIST_MAX_HEIGHT in list.ts, which the panel's height
+   maths also reads — two copies of that number would silently drift. */
+.palette-list {
+  position: relative;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 6px;
+}
+
+.palette-rail {
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  z-index: 0;
+  border-radius: var(--radius-sm);
+  corner-shape: var(--corner-shape);
+  background: color-mix(in srgb, var(--foreground) 8%, transparent);
+  transition: transform 120ms var(--palette-open), height 120ms var(--palette-open);
+  pointer-events: none;
+}
+
+.palette-group {
+  padding: 10px 8px 4px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.palette-group:first-of-type {
+  padding-top: 4px;
+}
+
+.palette-row {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 8px;
+  border-radius: var(--radius-sm);
+  corner-shape: var(--corner-shape);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+@keyframes palette-row-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+.palette-row.is-entering {
+  animation: palette-row-in 160ms ease-out backwards;
+}
+
+.palette-row-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  color: var(--muted);
+}
+
+.palette-row.is-active .palette-row-icon {
+  color: var(--foreground);
+}
+
+.palette-row-text {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.palette-row-title {
+  flex-shrink: 0;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--foreground);
+}
+
+.palette-row.is-destructive .palette-row-title {
+  color: var(--danger);
+}
+
+.palette-mark {
+  background: none;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.palette-row-sub,
+.palette-row-detail {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.palette-row-sub {
+  min-width: 0;
+}
+
+.palette-row-detail {
+  flex-shrink: 0;
+  margin-left: auto;
+  padding-left: 8px;
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+
+.palette-row.is-active .palette-row-detail {
+  opacity: 1;
+}
+
+/* Only on the active row: a column of chevrons down the list is noise, and the
+   affordance is only reachable for the row the keyboard is on anyway. */
+.palette-row-more {
+  flex-shrink: 0;
+  color: var(--muted);
+  opacity: 0;
+  transition: opacity 140ms ease, transform 140ms var(--palette-open);
+}
+
+.palette-row.is-active .palette-row-more {
+  opacity: 0.7;
+}
+
+.palette-row-more:hover {
+  opacity: 1;
+  transform: translateX(2px);
+}
+
+.palette-notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.palette-notice-action {
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  corner-shape: var(--corner-shape);
+  background: var(--accent);
+  color: var(--accent-foreground);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 140ms ease;
+}
+
+.palette-notice-action:hover {
+  background: var(--accent-hover);
+}
+
+.palette-footer {
+  padding: 8px 14px;
+  border-top: 1px solid color-mix(in srgb, var(--input-border) 22%, transparent);
+  color: var(--muted);
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .palette-frame,
+  .palette-panel,
+  .palette-rail,
+  .palette-row,
+  .palette-row-detail,
+  .palette-row-more,
+  .palette::backdrop {
+    transition-duration: 1ms !important;
+    animation-duration: 1ms !important;
+  }
+
+  .palette-hint.is-busy::after {
+    animation-duration: 1200ms !important;
+  }
+}

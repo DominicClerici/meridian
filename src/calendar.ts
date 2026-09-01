@@ -15,7 +15,7 @@ import type { AuthOutcome } from "./google-auth"
 
 export type { AuthOutcome }
 
-type CalendarEvent = {
+export type CalendarEvent = {
   id: string
   title: string
   startTime: string | null
@@ -2076,6 +2076,40 @@ function stopRefreshInterval(): void {
     clearInterval(refreshIntervalId)
     refreshIntervalId = null
   }
+}
+
+/** Every event currently held in memory, for the palette's blended pass. */
+export function calendarSnapshot(): CalendarEvent[] {
+  const out: CalendarEvent[] = []
+  for (const week of weeks.values()) out.push(...week.events)
+  return out
+}
+
+/**
+ * A live search across every calendar, for when the palette is scoped to
+ * Calendar. The cached weeks only cover what the card has drawn; this reaches
+ * the year either side of today, which is the range a search is asked about.
+ */
+export async function searchCalendar(query: string, signal: AbortSignal): Promise<CalendarEvent[]> {
+  if (!store.local.get("calendarConnected")) return []
+
+  const now = new Date()
+  const params = new URLSearchParams({
+    q: query,
+    timeMin: addDays(now, -365).toISOString(),
+    timeMax: addDays(now, 365).toISOString(),
+    singleEvents: "true",
+    orderBy: "startTime",
+    maxResults: "25",
+  })
+
+  const { token, calendars, colorMap } = await getFetchContext()
+  if (signal.aborted) return []
+
+  const results = await Promise.all(
+    calendars.map((cal) => fetchCalendarEvents(cal, params, token, colorMap))
+  )
+  return results.filter((r): r is CalendarEvent[] => r !== null).flat()
 }
 
 export function initCalendar(): void {

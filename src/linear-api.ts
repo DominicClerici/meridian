@@ -503,3 +503,28 @@ export async function markNotificationRead(id: string): Promise<boolean> {
     return false
   }
 }
+
+/**
+ * Live issue search, for when the palette is scoped to Linear. The card only
+ * holds what is assigned to you; this reaches everything you can see, which is
+ * the difference between "my issues" and "search".
+ */
+export async function searchIssues(term: string, limit = 20): Promise<LinearIssue[]> {
+  const trimmed = term.trim()
+  if (!trimmed) return []
+
+  const SEARCH = `
+    query Search($term: String!, $first: Int!, $wantLinks: Boolean!) {
+      searchIssues(term: $term, first: $first) {
+        nodes { ${ISSUE_FIELDS} }
+      }
+    }
+  `
+
+  const { data } = await linearRequest(SEARCH, {
+    term: trimmed,
+    first: limit,
+    wantLinks: false,
+  })
+  return (data?.searchIssues?.nodes ?? []).filter(Boolean).map(mapIssue)
+}

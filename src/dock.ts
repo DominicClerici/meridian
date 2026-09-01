@@ -19,7 +19,8 @@ import { store } from "./store"
 import { closeAllPopovers, createPopover } from "./components"
 import { getRecommendations } from "./recommendations"
 import { renderIcon } from "./shortcut-icon"
-import { normalizeUrl, urlHost } from "./url"
+import { urlHost } from "./url"
+import { navigate as openUrl } from "./navigate"
 import { locate } from "./shortcuts"
 import { initDockDrag, dockDragSuppressedClick } from "./dock-drag"
 import { clearMagnify, initMagnify, refreshMagnify, suspendMagnify } from "./dock-magnify"
@@ -113,14 +114,9 @@ function reducedMotion(): boolean {
  * `location.href` would resolve against the extension page. Normalizing here
  * covers them without a migration.
  */
+/** The dock's surface of the shared helper — see `navigate.ts`. */
 function navigate(url: string, newTab?: boolean): void {
-  const href = normalizeUrl(url)
-  if (!href) return
-  if (newTab || store.sync.get("shortcutsOpenIn") === "new") {
-    window.open(href, "_blank", "noopener")
-  } else {
-    window.location.href = href
-  }
+  openUrl(url, "dock", newTab ? "newTab" : "default")
 }
 
 function getActiveTabDomains(tab: Tab): Set<string> {

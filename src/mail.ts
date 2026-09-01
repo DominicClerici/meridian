@@ -1257,6 +1257,20 @@ registerCard({
 
 // ---------------------------------------------------------------- init
 
+/** Every message any category tab has pulled down, newest first and deduped. */
+export function mailSnapshot(): MailMessage[] {
+  const seen = new Set<string>()
+  const out: MailMessage[] = []
+  for (const entry of tabCache.values()) {
+    for (const message of entry.messages) {
+      if (seen.has(message.id)) continue
+      seen.add(message.id)
+      out.push(message)
+    }
+  }
+  return out.sort((a, b) => b.date - a.date)
+}
+
 export function initMail(): void {
   const trigger = document.getElementById("mail-trigger") as HTMLButtonElement | null
 

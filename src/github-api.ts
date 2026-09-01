@@ -424,3 +424,52 @@ export function actionableCount(data: GithubData): number {
   const blocked = data.mine.filter((i) => urgency(i) >= 3).length
   return data.reviews.length + blocked + data.mentions.length
 }
+
+/**
+ * Live issue and PR search, for when the palette is scoped to GitHub. Uses the
+ * REST search endpoint rather than GraphQL: one call, no scope beyond what the
+ * token already carries, and it honours the org filter the card uses.
+ */
+export async function searchGithub(term: string, limit = 20): Promise<GithubItem[]> {
+  const trimmed = term.trim()
+  if (!trimmed) return []
+
+  const org = store.sync.get("githubOrgFilter").trim()
+  const qualified = org ? `${trimmed} org:${org}` : trimmed
+  const params = new URLSearchParams({
+    q: qualified,
+    sort: "updated",
+    per_page: String(limit),
+  })
+
+  const res = await githubFetch(`/search/issues?${params}`)
+  if (!res.ok) throw new GithubApiError(`GitHub search failed (${res.status})`)
+
+  const payload = (await res.json()) as { items?: any[] }
+  return (payload.items ?? []).map((item): GithubItem => {
+    const repo = String(item.repository_url ?? "").split("/repos/")[1] ?? ""
+    return {
+      id: String(item.id),
+      title: String(item.title ?? ""),
+      repo,
+      number: Number(item.number ?? 0),
+      url: String(item.html_url ?? ""),
+      updatedAt: Date.parse(item.updated_at ?? "") || 0,
+      author: item.user
+        ? { login: String(item.user.login), avatarUrl: String(item.user.avatar_url ?? "") }
+        : null,
+      isBot: item.user?.type === "Bot",
+      isDraft: Boolean(item.draft),
+      reviewDecision: null,
+      approvals: 0,
+      reviewersTotal: 0,
+      ci: null,
+      ciDetail: "",
+      conflicted: false,
+      labels: (item.labels ?? []).slice(0, 3).map((l: any) => ({
+        name: String(l.name ?? ""),
+        color: String(l.color ?? ""),
+      })),
+    }
+  })
+}

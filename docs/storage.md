@@ -122,9 +122,13 @@ Choosing a namespace: put it in `sync` if the user would expect it on their othe
 | `accentColor` | `AccentColor \| "random"` | `"sky"` | `theme.ts` |
 | `bgColor` | `AccentColor \| "auto"` | `"auto"` | `theme.ts` |
 | `mode` | `"light" \| "dark" \| "auto"` | `"auto"` | `theme.ts` |
-| `searchEngine` | 7 engines | `"google"` | `search-provider-engine.ts` |
-| `debounceSearch` | `boolean` | `false` | `search.ts` |
-| `searchOpenInNewTab` | `boolean` | `false` | `search.ts` |
+| `searchEngine` | 7 engines | `"google"` | `search/sources/engine.ts` |
+| `searchOpenInNewTab` | `boolean` | `false` | `navigate.ts` — read at action time, not query time |
+| `searchDisabledSources` | `SearchSourceId[]` | `[]` | `search/registry.ts` — a *disabled* list, so a source added later is on by default without a migration |
+| `searchSuggestions` | `boolean` | `false` | `search/sources/engine.ts` — off by default: it sends keystrokes to the engine, and needs an optional host grant |
+| `searchTypeAnywhere` | `boolean` | `true` | `search/index.ts` |
+| `searchAutofocus` | `boolean` | `true` | `search/index.ts` |
+| `searchRecents` | `boolean` | `true` | `search/recents.ts` |
 | `clockEnabled` | `boolean` | `true` | `clock.ts` |
 | `clockShowSeconds` | `boolean` | `false` | `clock.ts` |
 | `clock24Hour` | `boolean` | `false` | `clock.ts` |
@@ -209,6 +213,8 @@ Choosing a namespace: put it in `sync` if the user would expect it on their othe
 | `bgUnsplashMeta` | `BgImageMeta \| null` | `null` | `background.ts` |
 | `bgUploadMeta` | `BgImageMeta \| null` | `null` | `background.ts` |
 | `dashboardWidget` | `string \| null` | `null` | `layout.ts` — the card id the Dashboard's side carousel was last left on |
+| `searchRecentQueries` | `RecentQuery[]` | `[]` | `search/recents.ts` — newest first, capped at `MAX_RECENT_QUERIES` (20) |
+| `searchLearning` | `SearchLearning` | `{picks:{},byQuery:{}}` | `search/recents.ts` — which result each query ended in, and how often each is picked. `local` on purpose: a record of what you have searched for belongs to this browser |
 
 `RecommendationData` is `{ heatmap: { [domain: string]: number[][] }, builtAt: number }`.
 `BgImageMeta` is `{ id, url, authorName, authorUrl, downloadUrl, cachedAt }`.

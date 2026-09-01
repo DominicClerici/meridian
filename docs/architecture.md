@@ -28,7 +28,7 @@ Card registration happens even earlier: `registerCard()` runs in the module bodi
    initSettings()          creates the settings dialog + all its panels
    initDock()              renders the shortcut dock
    initShortcutSettings()  binds the shortcuts panel, starts the drag engine
-   initSearch()            binds the search bar, registers providers
+   initSearch()            registers sources, builds the palette, binds global keys
    initClock()
    initTodo()
    initNotepad()
@@ -67,7 +67,7 @@ There is no teardown path and no re-init. Modules keep their state in module-lev
                               │
         ┌──────────┬──────────┼───────────┬────────────┬─────────────┐
         │          │          │           │            │             │
-     theme.ts  icons/     components.ts  search.ts  background.ts  feature
+     theme.ts  icons/     components.ts  search/     background.ts  feature
                registry.ts     │  ▲         │        + unsplash.ts  modules
                     ▲          │  │         │        + idb.ts          │
                     │          │  │         │        + mesh-bg.ts → color.ts
@@ -75,8 +75,23 @@ There is no teardown path and no re-init. Modules keep their state in module-lev
                               layout.ts ◄───┼──────────────────────────┘
                                             │       (widgets register cards)
                                    ┌────────┴────────┐
-                          provider-engine    provider-shortcuts
+                            registry.ts        sources/*.ts
+                                                    │
+                          reads snapshots from the feature modules
+                          (github, linear, mail, calendar, spotify,
+                           todo, shortcuts) — never the other way
 ```
+
+The arrow at the bottom is the one that matters: **`search/sources/*` imports the
+feature modules; no feature module imports search.** Each owning module exposes a
+small read-only accessor (`githubSnapshot()`, `mailSnapshot()`, …) and search
+does the rest, so adding a source never creates a cycle.
+
+`settings.ts` is the exception, and deliberately: it imports `search/index` for
+`clearSearchHistory` and `SUGGEST_ORIGINS`, while `search/sources/commands.ts`
+imports `openSettings` from `settings.ts`. Both are hoisted function
+declarations called only after boot, so the cycle resolves the same way the
+settings/weather one does.
 
 Feature modules and what they pull in beyond `store`:
 
@@ -93,7 +108,13 @@ Feature modules and what they pull in beyond `store`:
 | `shortcut-icon.ts` | `icons/registry`, `idb`, `url` — no store |
 | `shortcut-import.ts` | `components`, `shortcuts`, `shortcut-icon`, `history-api`, `bookmarks-api`, `url`, `store` |
 | `shortcut-drag.ts` | `shortcuts` only — no store, no DOM lookups of its own |
-| `search.ts` | its two providers (imported for their registration side effect) |
+| `search/index.ts` | every source under `search/sources/`, `overlay`, `registry`, `store` |
+| `search/registry.ts` | `rank`, `recents`, `store` |
+| `search/overlay.ts` | `components`, `icons/registry`, `navigate`, `list`, `input`, `registry`, `recents`, `empty` |
+| `search/rank.ts`, `search/answers.ts` | — (leaves; `answers` pulls `timezones`) |
+| `search/sources/*.ts` | `navigate`, `icons/registry`, and the feature module that owns the data |
+| `navigate.ts` | `store`, `url` — no DOM lookups |
+| `tabs-api.ts` | `ext-call` only |
 | `todo.ts` | `components`, `icons/registry`, `todos`, `layout`, `store` |
 | `notepad.ts` | `components`, `icons/registry`, `layout`, `defaults`, `store` |
 | `weather.ts` | `components`, `icons/registry`, `layout`, `location`, `settings` |
@@ -133,7 +154,7 @@ The shell holds **no positioning**. Every element that a layout places lives ins
 | `#github-trigger`, `#github-badge` | `index.html` | icon by `index.ts`, rest by `github.ts` |
 | `#linear-trigger`, `#linear-badge` | `index.html` | icon by `index.ts`, rest by `linear.ts` |
 | `#mail-trigger`, `#mail-badge` | `index.html` | icon by `index.ts`, rest by `mail.ts` |
-| `#search-wrapper`, `#search-input`, `#search-results` | `index.html` | `search.ts`; positioned by `layout.ts` |
+| `#search-wrapper`, `#search-bar` | `index.html` | `search/index.ts`; glyph by `index.ts`; positioned by `layout.ts` |
 | `#clock` | `index.html` | `clock.ts`; positioned by `layout.ts` |
 | `#dock-wrapper`, `#dock`, `#dock-scroll`, `#dock-groups`, `#dock-suggestions`, `#dock-divider`, `#dock-items`, `#dock-tabs`, `#dock-tabs-indicator` | `index.html` | `dock.ts`; positioned by `layout.ts`, laid out row-by-row by `dock.ts` itself |
 
@@ -142,6 +163,7 @@ The shell holds **no positioning**. Every element that a layout places lives ins
 | Element | Created in | Consumed by |
 |---|---|---|
 | `#mesh-bg` | `mesh-bg.ts` `startMesh()` — inserted as `<body>`'s first child | `mesh-bg.ts` only |
+| `#palette` and its subtree | `search/overlay.ts` `buildPalette()` — appended to `<body>` | `search/overlay.ts`, `search/list.ts` |
 | Layout frames and their `[data-region]` containers | `layout.ts` frame builders | `layout.ts` |
 | `[data-card]` widget cards | `layout.ts` `mountCards()` via `createCard()` | body from the widget's `render()` |
 | `#bg-attribution` | `background.ts` `renderAttribution()` | `background.ts` only |

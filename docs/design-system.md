@@ -121,6 +121,8 @@ A squircle corner starts further back along the edge than a circular one, so to 
 | `--spacing-panel` | `p-panel` etc. | `1rem` |
 | `--font-body` | `font-body` | Gilroy |
 | `--font-mono` | `font-mono` | Red Hat Mono |
+| `--palette-h` | — | `52px`; the row height the resting search bar and the palette's input row **both** use, which is what lets the morph animate position and width without scaling any text |
+| `--palette-open` | — | `cubic-bezier(0.2, 0.9, 0.24, 1)`; the palette's opening curve, shared by its frame, panel and selection rail |
 
 `--panel-opacity`, `--border-width`, and `--transition-speed` are declared at `styles.css:322`–`329` but nothing reads them.
 
@@ -155,7 +157,7 @@ When `bgSource` is `color`, this token is no longer painted directly — it is t
 
 The circles in the settings color pickers, and the fill behind every colored shortcut, folder and tab icon. Light-mode swatches match the light accents; dark-mode swatches are pushed brighter than the dark accents (teal is `#5eead4` as a swatch versus `#20b8a6` as an accent) so they stay legible as small dots on a dark panel.
 
-**These tokens are the only definition.** `shortcut-icon.ts` emits `var(--swatch-<name>)` rather than resolving to hex in JS, so light and dark stay separate for free. Four JS copies of this palette used to exist — in `dock.ts`, `shortcut-settings.ts`, `settings.ts` and `search-provider-shortcuts.ts` — with values that disagreed both with each other and with these tokens, so the same shortcut rendered one color in the dock and another in settings.
+**These tokens are the only definition.** `shortcut-icon.ts` emits `var(--swatch-<name>)` rather than resolving to hex in JS, so light and dark stay separate for free. Four JS copies of this palette used to exist — in `dock.ts`, `shortcut-settings.ts`, `settings.ts` and the old search shortcut provider — with values that disagreed both with each other and with these tokens, so the same shortcut rendered one color in the dock and another in settings.
 
 ## Component CSS
 

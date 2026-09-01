@@ -24,7 +24,7 @@ Five tabs, defined in the `TABS` array (`settings.ts:33`):
 | General | `buildGeneralTab()` | All seven clock settings, then the world-clock list |
 | Shortcuts | `buildShortcutsPanel()` | An empty `#sc-panel` for `shortcut-settings.ts`, plus a footer with the recommendations toggle and open-in select |
 | Appearance | `buildAppearanceTab()` | Theme, layout, accent, mode, and the three background accordions |
-| Widgets | `buildWidgetsTab()` | Search, Todo, Notepad, Weather, Spotify, Calendar, GitHub accordions |
+| Widgets | `buildWidgetsTab()` | Search, Todo, Notepad, Weather, Spotify, Calendar, Gmail, GitHub, Linear accordions |
 | Advanced | `buildAdvancedPanel()` | Unsplash API key, Google / Spotify / GitHub OAuth client IDs, the GitHub token field, browser-capability report |
 
 Two construction styles coexist. `buildShortcutsPanel()` and `buildAdvancedPanel()` **return** a panel element that `initSettings()` appends; `buildGeneralTab()`, `buildAppearanceTab()`, and `buildWidgetsTab()` **query** for their already-appended panel via `document.querySelector('[data-settings-tab="…"]')` and fill it. That's why the first two run inline in `initSettings()` while the other three are called afterward.
@@ -42,7 +42,14 @@ sectionHooks["weather"] = () => {
 }
 ```
 
-Only the weather accordion registers one today. The hook runs inside a `requestAnimationFrame` so the panel it lives in has been laid out before anything scrolls.
+Every widget accordion registers one — `search`, `todo`, `notepad`, `weather`,
+`spotify`, `calendar`, `mail`, `github`, `linear` — because the command palette
+deep-links to all of them: `Settings: Gmail`, `Settings: Linear` and the rest are
+generated from the `SECTIONS` table in `search/sources/commands.ts`, which pairs
+each label with a `tabId` and a `sectionId`. **A section without a hook silently
+lands on the tab and scrolls nowhere**, so a new accordion needs both halves.
+
+The hook runs inside a `requestAnimationFrame` so the panel it lives in has been laid out before anything scrolls.
 
 ### Navigation
 

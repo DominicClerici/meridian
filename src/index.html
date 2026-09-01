@@ -106,17 +106,11 @@
         ></div>
 
         <div id="search-wrapper" class="w-full">
-          <input
-            id="search-input"
-            type="text"
-            placeholder="Search..."
-            class="w-full px-4 py-3 rounded-theme bg-panel/90 backdrop-blur-md border border-input-border/20 text-foreground placeholder-muted outline-none text-lg"
-          />
-          <div
-            id="search-results"
-            class="mt-1 rounded-theme bg-panel/90 backdrop-blur-md border border-input-border/20 overflow-hidden"
-            hidden
-          ></div>
+          <button id="search-bar" class="search-bar" type="button" aria-haspopup="dialog">
+            <span class="search-bar-glyph"></span>
+            <span class="search-bar-label">Search or run a command</span>
+            <kbd class="search-bar-kbd">⌘K</kbd>
+          </button>
         </div>
 
         <div id="dock-wrapper" class="dock-wrapper pointer-events-none" hidden>

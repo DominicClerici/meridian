@@ -973,6 +973,65 @@ async function handleControlClick(e: MouseEvent): Promise<void> {
   renderCard()
 }
 
+export type SpotifySnapshot = {
+  connected: boolean
+  playing: boolean
+  track: SpotifyTrack | null
+  premium: boolean
+}
+
+export function spotifySnapshot(): SpotifySnapshot {
+  return {
+    connected: Boolean(store.local.get("spotifyAccessToken")),
+    playing: currentPlayerState?.isPlaying ?? false,
+    track: currentPlayerState?.track ?? null,
+    premium: isPremium,
+  }
+}
+
+/** Playback control for the palette. Same calls the card's own buttons make. */
+export const spotifyControls = {
+  play: playerPlay,
+  pause: playerPause,
+  next: playerNext,
+  previous: playerPrevious,
+}
+
+export type SpotifySearchResult = {
+  id: string
+  name: string
+  artists: string
+  url: string
+  albumArt: string | null
+}
+
+/**
+ * Track search for a scoped palette query. Results open in Spotify rather than
+ * starting playback: `PUT /me/player/play` needs an active device, and a search
+ * result that silently fails because nothing is playing anywhere is worse than
+ * one that reliably opens.
+ */
+export async function searchTracks(
+  query: string,
+  limit = 12
+): Promise<SpotifySearchResult[]> {
+  const trimmed = query.trim()
+  if (!trimmed) return []
+
+  const params = new URLSearchParams({ q: trimmed, type: "track", limit: String(limit) })
+  const res = await spotifyFetch(`https://api.spotify.com/v1/search?${params}`)
+  if (!res || !res.ok) return []
+
+  const payload = (await res.json()) as { tracks?: { items?: any[] } }
+  return (payload.tracks?.items ?? []).map((item: any) => ({
+    id: String(item.id),
+    name: String(item.name ?? ""),
+    artists: (item.artists ?? []).map((a: any) => a.name).join(", "),
+    url: String(item.external_urls?.spotify ?? ""),
+    albumArt: item.album?.images?.[item.album.images.length - 1]?.url ?? null,
+  }))
+}
+
 export function initSpotify(): void {
   setupVisibilityHandler()
 
