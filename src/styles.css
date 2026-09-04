@@ -904,6 +904,18 @@ html.is-dock-dragging-active .dock-item:hover .dock-item-glyph {
   transition: transform 260ms cubic-bezier(0.2, 0, 0, 1);
 }
 
+/* Held invisible until the first arrangement has settled (fonts in, viewport
+   size confirmed), and snapped rather than slid when a late viewport
+   correction changes the column count. See card-grid.ts. */
+.card-grid.is-settling {
+  opacity: 0;
+}
+
+.card-grid.is-settling .card-grid-item,
+.card-grid.is-snapping .card-grid-item {
+  transition: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .card-grid-item-placed {
     transition: none;

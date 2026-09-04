@@ -14,7 +14,7 @@ Dashboard's top row is a third host, and the only one that isn't the same conten
 
 ## The pattern
 
-Four widgets — calendar, weather, todo, notepad — are **trigger + popover** in the Immersive layout. Their trigger buttons live in `#widgets` (top-right of the page) in `index.html`, all starting `hidden`. Two widgets break the pattern: the clock renders directly into `#clock` with no trigger, and Spotify renders a fixed card in the bottom-right corner (Immersive only — elsewhere it is a regular card), which idle shrinks and fades back rather than vanishing when `spotifyHideWhenIdle` is off ([spotify.md](spotify.md#the-idle-card)).
+Four widgets — calendar, weather, todo, notepad — are **trigger + popover** in the Immersive layout. Their trigger buttons live in `#widgets` (top-right of the page) in `index.html`, all starting `hidden`. Two widgets break the pattern: the clock renders directly into `#clock` with no trigger, and Spotify renders a fixed card in the bottom-right corner (Immersive only — elsewhere it is a regular card), which hides when nothing is playing, unlike the grid and tile cards, which show an idle body ([spotify.md](spotify.md#the-idle-card)).
 
 The trigger-based widgets share a structure worth knowing before you touch any one of them, because the same six pieces recur in each:
 

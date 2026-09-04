@@ -2,7 +2,7 @@ import { store } from "./store"
 import type { LayoutMode, SyncSettings } from "./defaults"
 import { createCard, closeAllPopovers } from "./components"
 import { createCardGrid } from "./card-grid"
-import type { CardGrid, GridItem } from "./card-grid"
+import type { CardGrid, Columns, GridItem, SavedLayouts } from "./card-grid"
 import { createCardCarousel } from "./card-carousel"
 import type { CardCarousel, CarouselItem } from "./card-carousel"
 
@@ -65,6 +65,9 @@ let switching = false
 let cardGrids: CardGrid[] = []
 let cardCarousels: CardCarousel[] = []
 let packedGrid: CardGrid | null = null
+let booted = false
+/** The last `cardLayouts` value this tab wrote, so its own echo is not a remount. */
+let ownLayoutsWrite: string | null = null
 
 export function getLayout(): LayoutMode {
   return store.sync.get("layout")
@@ -238,7 +241,12 @@ function frameImmersive(): HTMLElement {
 function frameDefault(): HTMLElement {
   const root = el("div", "absolute inset-0")
 
-  const scroll = el("div", "absolute inset-0 overflow-y-auto px-6 pt-[10vh] pb-16")
+  // A reserved gutter, so the region's width doesn't change by a scrollbar
+  // when a widget grows past the fold and every card shifts to make room.
+  const scroll = el(
+    "div",
+    "absolute inset-0 overflow-y-auto [scrollbar-gutter:stable] px-6 pt-[10vh] pb-16"
+  )
 
   // The head stays at reading width while the card region gets its own, wider
   // cap — four columns need room the search bar has no use for.
@@ -293,7 +301,7 @@ function frameDefault(): HTMLElement {
  * flush to the top — see the rule in styles.css.
  */
 function frameDashboard(): HTMLElement {
-  const root = el("div", "absolute inset-0 overflow-y-auto")
+  const root = el("div", "absolute inset-0 overflow-y-auto [scrollbar-gutter:stable]")
   const aligner = el("div", "dash-aligner")
   const wrap = el("div", "mx-auto w-full max-w-7xl p-8 flex flex-col gap-8")
 
@@ -357,21 +365,43 @@ function unmountCards(): void {
 }
 
 /**
- * Sorts the packed region's cards into the user's arrangement. Anything the
- * stored list doesn't name — a widget added since the last rearrange — keeps
- * its registration order and follows the cards that were placed by hand.
+ * Seeds a derived arrangement from the pre-column-stack flat order. Anything
+ * the list doesn't name keeps its registration order and follows the rest.
  */
-function sortIdsByCardOrder(ids: string[]): string[] {
+function applyLegacyOrder(items: GridItem[]): GridItem[] {
   const rank = new Map(store.sync.get("cardOrder").map((id, i) => [id, i] as const))
   const unplaced = Number.MAX_SAFE_INTEGER
-  return [...ids].sort(
-    (a, b) => (rank.get(a) ?? unplaced) - (rank.get(b) ?? unplaced)
-  )
+  return [...items].sort((a, b) => (rank.get(a.id) ?? unplaced) - (rank.get(b.id) ?? unplaced))
 }
 
-function applyCardOrder(items: GridItem[]): GridItem[] {
-  const byId = new Map(items.map((item) => [item.id, item] as const))
-  return sortIdsByCardOrder(items.map((item) => item.id)).map((id) => byId.get(id)!)
+/** Names the inputs a derived arrangement came from; a change means redo it. */
+function layoutSignature(items: GridItem[]): string {
+  return JSON.stringify([
+    store.sync.get("cardLayouts"),
+    store.sync.get("cardOrder"),
+    items.map((item) => `${item.id}:${item.span}`),
+  ])
+}
+
+/** Saved arrangements, plus the cached derivations that still match them. */
+function gridLayouts(sig: string): SavedLayouts {
+  const cache = store.local.get("cardLayoutCache")
+  const derived = cache.sig === sig ? cache.layouts : {}
+  return { ...derived, ...store.sync.get("cardLayouts") }
+}
+
+function cacheDerived(sig: string, cols: number, columns: Columns): void {
+  const cache = store.local.get("cardLayoutCache")
+  const layouts = cache.sig === sig ? { ...cache.layouts } : {}
+  layouts[cols] = columns
+  store.local.set("cardLayoutCache", { sig, layouts })
+}
+
+function rememberHeight(id: string, cols: number, height: number): void {
+  const key = `${id}@${cols}`
+  const heights = store.local.get("cardHeights")
+  if (heights[key] === height) return
+  store.local.set("cardHeights", { ...heights, [key]: height })
 }
 
 /** The Default layout's packed grid, for the rearrange mode. */
@@ -379,8 +409,10 @@ export function getPackedGrid(): CardGrid | null {
   return packedGrid
 }
 
-export function saveCardOrder(order: string[]): void {
-  store.sync.set("cardOrder", order)
+export function saveCardLayout(cols: number, columns: Columns): void {
+  const layouts = { ...store.sync.get("cardLayouts"), [cols]: columns }
+  ownLayoutsWrite = JSON.stringify(layouts)
+  store.sync.set("cardLayouts", layouts)
 }
 
 function mountCards(mode: LayoutMode): void {
@@ -426,8 +458,17 @@ function mountCards(mode: LayoutMode): void {
   }
 
   for (const [host, items] of packed) {
-    const grid = createCardGrid(host)
-    grid.setItems(applyCardOrder(items))
+    const ordered = applyLegacyOrder(items)
+    const grid = createCardGrid(host, {
+      layouts: () => gridLayouts(layoutSignature(ordered)),
+      onDerived: (cols, columns) => cacheDerived(layoutSignature(ordered), cols, columns),
+      heightFor: (id, cols) => store.local.get("cardHeights")[`${id}@${cols}`],
+      onMeasured: rememberHeight,
+      // The stage is unpainted at boot and faded out mid-switch; an in-place
+      // rebuild is the one case where hiding the region would show as a blink.
+      hidden: !booted || switching,
+    })
+    grid.setItems(ordered)
     cardGrids.push(grid)
     packedGrid = grid
   }
@@ -504,17 +545,18 @@ export function applyLayout(): void {
   stageEl = document.getElementById("layout-stage")!
   parkingEl = document.getElementById("layout-parking")!
   build(getLayout())
+  booted = true
 }
 
 export function subscribeLayout(): void {
   store.sync.subscribe("layout", (mode) => {
     void switchTo(mode)
   })
-  // Fires for our own save too, so compare before rebuilding — a rearrange that
-  // just committed is already on screen, and only another tab needs the remount.
-  store.sync.subscribe("cardOrder", () => {
-    const current = packedGrid?.getOrder()
-    if (!current) return
-    if (sortIdsByCardOrder(current).join() !== current.join()) refreshCards()
+  // Fires for our own save too — a rearrange that just committed is already on
+  // screen, and only another tab's write needs the remount.
+  store.sync.subscribe("cardLayouts", (layouts) => {
+    if (!packedGrid) return
+    if (JSON.stringify(layouts) === ownLayoutsWrite) return
+    refreshCards()
   })
 }

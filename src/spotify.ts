@@ -1,6 +1,6 @@
 import { store } from "./store"
 import type { SpotifyRecentTrack } from "./defaults"
-import { getLayout, refreshCard, refreshCards, registerCard } from "./layout"
+import { getLayout, refreshCard, registerCard } from "./layout"
 import { getIconSvg, icon } from "./icons/registry"
 
 /**
@@ -460,11 +460,11 @@ function stopPolling(): void {
   }
 }
 
-/** Whether the idle body will be drawn — the only thing last played is for. */
+/** Whether the idle body will be drawn — the only thing last played is for.
+    The grid and tile cards always draw it; only the Immersive floating card
+    hides instead. */
 function idleBodyWanted(): boolean {
-  return (
-    store.sync.get("spotifyEnabled") && !store.sync.get("spotifyHideWhenIdle")
-  )
+  return store.sync.get("spotifyEnabled") && getLayout() !== "immersive"
 }
 
 async function poll(): Promise<void> {
@@ -496,7 +496,6 @@ function setupVisibilityHandler(): void {
 }
 
 let cardEl: HTMLElement | null = null
-let cardVisible = false
 let controlsDisabled = false
 let loadingAction: string | null = null
 
@@ -876,30 +875,20 @@ function removeFloatingCard(): void {
   }
 }
 
-/**
- * Whether the widget has anything to draw. Playback always counts; with
- * "Hide when nothing is playing" off, the idle body counts too.
- */
-function hasContent(): boolean {
-  return currentPlayerState !== null || !store.sync.get("spotifyHideWhenIdle")
+/** Whether the Immersive floating card has anything to draw: it hides when
+    nothing is playing, unlike the grid and tile cards, which show the idle body. */
+function floatingWanted(): boolean {
+  return store.sync.get("spotifyEnabled") && currentPlayerState !== null
 }
 
 function renderCard(): void {
-  const shouldShow = store.sync.get("spotifyEnabled") && hasContent()
-
   if (getLayout() !== "immersive") {
     removeFloatingCard()
-    if (shouldShow !== cardVisible) {
-      cardVisible = shouldShow
-      refreshCards()
-    } else {
-      refreshCard("spotify")
-    }
+    refreshCard("spotify")
     return
   }
 
-  cardVisible = shouldShow
-  if (!shouldShow) {
+  if (!floatingWanted()) {
     removeFloatingCard()
     return
   }
@@ -927,7 +916,6 @@ registerCard({
   order: 15,
   regions: { default: "grid", dashboard: "top" },
   enabledKey: "spotifyEnabled",
-  isEnabled: hasContent,
   cardTitle: () => (currentPlayerState ? "Now Playing" : "Spotify"),
   render: buildSpotifyBody,
   renderTile: buildSpotifyTile,
@@ -1053,15 +1041,7 @@ export function initSpotify(): void {
     }
     // registerCard's own `enabledKey` subscription has already remounted the
     // grid card by the time this runs; only the floating card is ours to place.
-    cardVisible = enabled && hasContent()
     if (getLayout() === "immersive") renderCard()
-  })
-
-  store.sync.subscribe("spotifyHideWhenIdle", () => {
-    renderCard()
-    if (idleBodyWanted() && !currentPlayerState) {
-      void fetchRecentTrack().then(renderCard)
-    }
   })
 
   store.local.subscribe("spotifyAccessToken", (token) => {
@@ -1081,7 +1061,6 @@ export function initSpotify(): void {
 
   // The idle body has something to say without a session, so the card is placed
   // before the token checks below rather than after them.
-  cardVisible = store.sync.get("spotifyEnabled") && hasContent()
   renderCard()
 
   if (!store.sync.get("spotifyEnabled")) return

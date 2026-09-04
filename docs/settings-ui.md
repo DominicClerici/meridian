@@ -140,7 +140,7 @@ The **Upload accordion** (`settings.ts:565`) previews the current upload by pull
 
 Six `"settings"` accordions, all collapsed by default. Each widget follows the same shape: an enable checkbox, its own options, then any connect/disconnect controls.
 
-Spotify's rows are an enable checkbox, **Hide when nothing is playing** (`spotifyHideWhenIdle`, on by default — off keeps the card up in its idle state, [spotify.md](spotify.md#the-idle-card)), then the connect/disconnect pair.
+Spotify's rows are an enable checkbox, then the connect/disconnect pair. (There is no "hide when idle" option: an enabled card always shows, idle or not, [spotify.md](spotify.md#the-idle-card).)
 
 GitHub's accordion is the longest: enable, `buildGithubAccountRow()` (connect / connected-as / disconnect), one checkbox per section in `GITHUB_SECTIONS`, hide-bots, contribution graph, an org filter and a comma-separated repo ignore-list. `buildGithubAccountRow()` renders the device code inline while a connection is pending and opens github.com/login/device itself — the same flow the widget runs, so settings is a second door to it rather than the only one ([github.md](github.md#the-device-flow)).
 

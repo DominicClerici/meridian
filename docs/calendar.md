@@ -373,6 +373,6 @@ disconnection alone would kill a body that had not been mounted yet.
 - **`viewMode` and `offset` are module-level globals** mutated from button handlers, which is why the popover has to reset them on open.
 - **No calendar filtering.** Every `selected` calendar is fetched and every event is shown; holidays and shared calendars can't be turned off. (`notes.md` lists this as a wanted feature.)
 - **All-day events are bucketed by start date only**, so a multi-day all-day event shows only on the day it starts. Timed events are clipped per day and no longer have this problem.
-- **`renderTrigger` hides the button entirely when `not-connected`**, so a user who enabled the widget but hasn't signed in sees nothing at all and no path to connect except finding it in settings.
+- **`renderTrigger` hides the button entirely when `not-connected`**, so in the Immersive layout a user who enabled the widget but hasn't signed in sees nothing at all and no path to connect except finding it in settings. The card form doesn't have this problem: `buildCalendarBody()` draws `buildConnectPanel()` — a sign-in button inline, the same shape as the GitHub, Linear and Mail cards — until `calendarConnected` flips.
 - **Todo chips only ever appear.** A due date can be read off the calendar but not set from it — dropping a todo on a day is the obvious gesture and does nothing.
 - **The 401 retry path still spells the same two calls twice**, once either side of `invalidateToken()` in `loadFetchContext()`.

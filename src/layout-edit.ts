@@ -19,8 +19,8 @@
  */
 
 import { store } from "./store"
-import { getPackedGrid, getLayout, saveCardOrder } from "./layout"
-import type { CardDragSession } from "./card-grid"
+import { getPackedGrid, getLayout, saveCardLayout } from "./layout"
+import type { CardDragSession, Columns } from "./card-grid"
 import { createButton, closeAllPopovers } from "./components"
 import { icon } from "./icons/registry"
 
@@ -46,7 +46,8 @@ type Drag = {
 
 let editing = false
 let bar: HTMLElement | null = null
-let snapshot: string[] = []
+let snapshot: Columns = []
+let snapshotCols = 0
 let pending: Pending | null = null
 let drag: Drag | null = null
 /** Ends the drop animation early, so a second card can be picked up mid-flight. */
@@ -60,7 +61,9 @@ export function isLayoutEditing(): boolean {
 /** Whether there is anything worth rearranging in the current layout. */
 export function canEditLayout(): boolean {
   if (getLayout() !== "default") return false
-  return (getPackedGrid()?.getOrder().length ?? 0) > 1
+  const grid = getPackedGrid()
+  if (!grid) return false
+  return grid.getLayout().reduce((n, col) => n + col.length, 0) > 1
 }
 
 export function startLayoutEdit(): void {
@@ -70,7 +73,8 @@ export function startLayoutEdit(): void {
 
   closeAllPopovers()
   editing = true
-  snapshot = grid.getOrder()
+  snapshot = grid.getLayout()
+  snapshotCols = grid.getColumns()
 
   document.documentElement.setAttribute("data-editing", "layout")
   bar = buildBar()
@@ -118,8 +122,10 @@ function exit(save: boolean): void {
 
   const grid = getPackedGrid()
   if (grid) {
-    if (save) saveCardOrder(grid.getOrder())
-    else grid.setOrder(snapshot)
+    if (save) saveCardLayout(grid.getColumns(), grid.getLayout())
+    // A window resized mid-edit has a different column count now; the snapshot
+    // no longer describes it, so there is nothing sensible to put back.
+    else if (grid.getColumns() === snapshotCols) grid.setLayout(snapshot)
   }
 
   editing = false

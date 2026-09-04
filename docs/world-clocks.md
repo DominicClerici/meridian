@@ -113,4 +113,4 @@ A heading with an `n / 5` count, one row per clock, and an Add control. Each row
 - **The alias table is hand-maintained.** It covers the searches that came to mind, which is not the same as the searches users will type. There is no country-to-zone data behind it.
 - **`isDaytime` is a 6am–6pm rule.** `timezone-coords.ts` has coordinates for many of these zones and `weather.ts` already computes real sunrise and sunset; the dial could use them instead of guessing.
 - **The hover card duplicates the popover's positioning maths.** `positionHoverCard()` is a smaller copy of what `createPopover` does, because that helper couldn't be reused without its stack and focus trap. Splitting the placement out of `createPopover` would remove the copy.
-- **World clocks can't be rearranged from the page**, only from settings — `cardOrder` and the Default grid's rearrange mode don't reach either the chip row or the Dashboard's top row.
+- **World clocks can't be rearranged from the page**, only from settings — `cardLayouts` and the Default grid's rearrange mode don't reach either the chip row or the Dashboard's top row.

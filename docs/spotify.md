@@ -2,7 +2,7 @@
 
 **File:** `src/spotify.ts` (1037 lines). **API:** Spotify Web API. **Auth:** OAuth 2.0 with PKCE, entirely in the browser — no backend.
 
-The one widget with no trigger button: when something is playing it renders a card — floating bottom-right in the Immersive layout, in the grid elsewhere. When nothing is playing, **`spotifyHideWhenIdle`** decides whether it disappears (the default) or stays up in the idle state below.
+The one widget with no trigger button: when something is playing it renders a card — floating bottom-right in the Immersive layout, in the grid elsewhere. When nothing is playing, the grid and tile cards stay up in the idle state below — an enabled card is always on the page, so the grid never reflows around it — while the Immersive floating card hides (`floatingWanted()`).
 
 ## Auth
 
@@ -60,7 +60,7 @@ Worth noting this isn't only a Firefox concern: a Spotify app in development mod
 
 ## The idle card
 
-With **Hide when nothing is playing** off (`spotifyHideWhenIdle: false`), `isEnabled` stops meaning "something is playing" and the card stays mounted with nothing to report. `buildIdleBody(size)` gives it something, picking one of three states in order of how much there is to say:
+Idle, the grid and tile cards stay mounted with nothing to report. `buildIdleBody(size)` gives them something, picking one of three states in order of how much there is to say:
 
 1. **Last played** — `lastPlayedRow()`, the now-playing row turned down: same shape and rhythm, album art at `opacity-45 saturate-50` (both released on hover), a `LAST PLAYED` eyebrow, and *artist · 2h ago*. The track name links to Spotify; premium accounts also get a round resume button carrying `data-spotify-action="play"`, so it rides the same delegated handler as the transport.
 2. **Nothing playing** — a music glyph and a line, once there is a session but no history to show.
@@ -82,7 +82,7 @@ With **Hide when nothing is playing** off (`spotifyHideWhenIdle: false`), `isEna
 
 ### Last played
 
-The API is the source of truth — `GET /me/player/recently-played?limit=1`, at most once a minute (`RECENT_MAX_AGE`), and **only when the idle body would actually be drawn**, so the default setting adds no requests at all. `poll()` resets the timer whenever something is playing, since that track becomes the last-played entry the moment it stops.
+The API is the source of truth — `GET /me/player/recently-played?limit=1`, at most once a minute (`RECENT_MAX_AGE`), and **only when the idle body would actually be drawn** (`idleBodyWanted()` — any layout but Immersive, whose floating card hides instead), so the Immersive layout adds no requests at all. `poll()` resets the timer whenever something is playing, since that track becomes the last-played entry the moment it stops.
 
 The result is cached in `store.local.spotifyRecentTrack` purely so a new tab draws the row on its first frame instead of after a round trip. `clearTokens()` deletes it — it describes an account, not a browser.
 
@@ -96,7 +96,7 @@ Rendered by assigning a template string to `innerHTML`. Track name and artists a
 
 ## Init
 
-`initSpotify()` installs the visibility handler, subscribes to `spotifyEnabled`, `spotifyHideWhenIdle` and `spotifyAccessToken` (so connecting or disconnecting in settings starts or stops polling immediately), places the card, then — if enabled and a token exists — validates the token, checks premium, and starts polling.
+`initSpotify()` installs the visibility handler, subscribes to `spotifyEnabled` and `spotifyAccessToken` (so connecting or disconnecting in settings starts or stops polling immediately), places the card, then — if enabled and a token exists — validates the token, checks premium, and starts polling.
 
 The card is placed **before** those two token checks, not after: the idle body has something to say without a session, so returning early would leave the Immersive floating card unplaced for a user who has never connected.
 

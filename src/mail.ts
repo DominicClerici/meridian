@@ -926,6 +926,7 @@ function buildError(onChange: () => void): HTMLElement {
 function buildSkeleton(): HTMLElement {
   const wrap = document.createElement("div")
   wrap.className = "flex flex-col flex-1 min-h-0 gap-3 py-1 overflow-hidden"
+  wrap.dataset.loading = "true"
   for (let i = 0; i < 4; i++) {
     const row = document.createElement("div")
     row.className = "flex items-start gap-2.5"

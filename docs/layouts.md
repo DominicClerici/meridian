@@ -62,7 +62,7 @@ registerCard({
 | `regions` | Which region this card mounts into, **per layout**. A layout that isn't listed doesn't show the card at all. |
 | `span` | Optional column span per layout. A packed region (Default's `grid`) hands it to the packer; an unpacked region gets a Tailwind class from `SPAN_CLASSES`, which holds literal class names because the scanner can't see interpolated ones. |
 | `enabledKey` | A `SyncSettings` key that gates the card. `registerCard` subscribes to it and rebuilds when it flips. |
-| `isEnabled` | Extra gate for state the store doesn't hold — Spotify uses it for "something is playing, or the idle card is switched on". |
+| `isEnabled` | Extra gate for state the store doesn't hold. Only the Dashboard's summary tiles use it (GitHub, Linear and Mail stay out of the row until connected). No Default-grid card may: an enabled card is always on the page there, so the grid never reflows around one appearing later — see *First paint*. |
 | `cardTitle` | Header text that tracks live state, for a card whose name changes with what it is showing — Spotify is *Now Playing* while something is, and *Spotify* when it isn't. Re-read on every `refreshCard`. Falls back to `title`. |
 | `render` | Builds the body. Called on every mount and every `refreshCard`. |
 | `renderTile` | Compact body for a tile region (Dashboard's top row). Falls back to `render` when absent. |
@@ -181,6 +181,8 @@ the full width.
 
 Default's `grid` region is not a CSS grid. It carries `data-packed`, and `mountCards` hands its cards to `createCardGrid()` (`src/card-grid.ts`) instead of appending them into a grid flow. Every card is `position: absolute` and placed by measured geometry, so a short card never leaves a row-height hole under it.
 
+The region is **N columns, each an ordered stack of card ids**. Which column a card is in is explicit, never inferred from heights: a widget that grows when its data lands pushes the cards below it in its own column and nothing else, and a card dragged to a slot lands in exactly that slot.
+
 **Source:** `src/card-grid.ts`, the `.card-grid-item` rules in `styles.css`, and the `packed` branch of `mountCards`.
 
 ### Column count
@@ -198,24 +200,42 @@ A card's span is clamped to the column count, so Calendar still spans the full w
 
 ### Packing
 
-Cards are placed in order into the position whose top edge is highest; for a spanning card that top is the lowest point of the columns it covers. Ties go leftmost. This is a per-column height cursor, which is why the region can't be a flex row of column elements — a spanning card has to advance two cursors at once.
+`packColumns()` walks the stacks with one height cursor per column. A card is
+placed once it is at the head of every column it covers, at the lowest of those
+columns' cursors; heads are visited left to right, so a tie goes to the
+leftmost card. A spanning card is listed in **each** column it covers, at the
+same relative position in each, which is what lets it advance two cursors at
+once and is why the region can't be a flex row of column elements. Two spanning
+cards listed in opposite orders in a shared column could never both reach the
+head; the packer forces the leftmost one through rather than hang.
 
-### Card order
+### Arrangements
 
-The region's cards are **one linear list**, packed directly at whatever column
-count the viewport calls for. There is no separate per-width arrangement and
-nothing is derived from a wider one: 4 → 2 → 4 returns to the original layout
-because every pass re-packs the same list.
+An arrangement is exact **at the column count it was made at**. They live in
+`store.sync.cardLayouts`, keyed by count:
 
-That is what makes drag-to-rearrange honest. The arrangement a user drags at
-three columns *is* what the stored order produces at three columns, so nothing
-shifts under them the moment they hit Save.
+```json
+{ "3": [["notepad", "spotify"], ["weather", "todo"], []] }
+```
 
-The list comes from `store.sync.cardOrder`, applied by `applyCardOrder()` in
-`layout.ts` before `setItems()`. A card the stored list doesn't name — a widget
-added since the last rearrange — keeps its registration `order` and sorts after
-every hand-placed card, so a new widget appears at the end instead of displacing
-anything.
+When the viewport calls for a count with no saved arrangement, the grid
+**derives** one: it reads the nearest saved count (the closest larger one,
+else the closest smaller) in visual order — top edge, then column — and packs
+that list greedily into the new columns, each card into whichever column ends
+highest. With nothing saved at all, the list is the registration order, sorted
+by the pre-column-stack `store.sync.cardOrder` if one is still around.
+
+A derived arrangement is **held** once made: it is pinned in
+`store.local.cardLayoutCache` under a signature of the saved layouts, the
+legacy order and the visible card set, so a reload at that width lands on the
+same arrangement rather than re-balancing against whatever heights the widgets
+happen to have that morning. Any change to the inputs drops the cache.
+
+`reconcile()` fits any stored arrangement to the cards actually mounted: ids
+that are no longer on the page are dropped, a spanning card is made to cover
+exactly its span of adjacent columns, and a card the arrangement never named —
+a widget switched on since it was saved — is appended to whichever column ends
+highest.
 
 ### Staying current
 
@@ -226,6 +246,42 @@ Three things trigger a repack, all coalesced into one `requestAnimationFrame`:
 - `window`'s `resize` event — needed on its own, because crossing 1699 → 1700px changes the column count without changing the capped container width.
 
 The per-card observer compares against the height the last pass recorded and ignores anything that matches, which is what keeps it from looping against the width it just set. Because the repack is on `rAF`, a hidden tab defers it until it is shown again; the initial `setItems()` lays out synchronously, so a tab opened in the background is still correct on first paint.
+
+A repack only ever moves cards vertically within their columns. Column
+membership changes when the column count changes, and then only by arranging
+for the new count as above.
+
+### First paint
+
+Nothing in the region may move on load. Three things make that true:
+
+- **The region is held invisible until it has settled.** The grid gets
+  `.is-settling` (opacity 0, transitions off) on the page's first build and
+  during a layout switch, and drops it once the web fonts are in (or 300ms
+  have passed) and the viewport has reported the same size two frames running.
+  While it is on, the two `ResizeObserver`s repack synchronously instead of on
+  the next frame, so a body that just re-rendered for its real width — the
+  weather chart, say — is packed before the reveal rather than sliding toward
+  its place after it. An in-place `refreshCards()` skips the hold, because
+  hiding a region that is already painted would show as a blink.
+- **A late viewport correction snaps.** A window that is still being sized
+  reports its old width to the first pass and corrects itself up to a second
+  later. A column-count change inside `SETTLE_MS` of the grid's creation is
+  applied under `.is-snapping`, which turns the transforms' transition off for
+  that one pass.
+- **A loading body is floored at the card's last height.** Any element in a
+  card body marked `data-loading` — the weather stub, the GitHub, Linear, Mail
+  and Calendar skeletons — makes the grid apply the height it last measured
+  for that card at this column count (`store.local.cardHeights`, keyed
+  `id@cols`) as a `min-height`, so the column doesn't reflow when the data
+  lands. Heights are recorded on every pass that isn't loading.
+
+The other half is that **an enabled widget is always on the page**. No card in
+the Default grid is gated on state that arrives after the first paint: Spotify
+shows its idle body until something plays, Calendar shows a sign-in panel until
+Google is connected, and the widgets that fetch render from their caches first.
+The scroll frame also reserves its scrollbar gutter, so a widget growing past
+the fold doesn't narrow every column by the width of the bar.
 
 ### Keeping a card current
 
@@ -263,8 +319,10 @@ page behind it. `startLayoutEdit()` then stamps `data-editing="layout"` on
   handle and no widget control can swallow the grab.
 
 A fixed Save / Cancel pair sits in the top-right corner. Save writes
-`grid.getOrder()` to `store.sync.cardOrder`; Cancel calls `grid.setOrder()` with
-the snapshot taken on entry. **Escape backs out one level** — an in-flight drag
+`grid.getLayout()` to `store.sync.cardLayouts` under the current column count;
+Cancel calls `grid.setLayout()` with the snapshot taken on entry — unless the
+window was resized across a breakpoint mid-edit, in which case the snapshot
+describes a different column count and is left alone. **Escape backs out one level** — an in-flight drag
 first, then the mode. A layout change from another tab exits the mode, since the
 switch takes the grid with it.
 
@@ -283,17 +341,23 @@ Three things move at once:
 | **The outline** | A dashed accent box marking the slot it would drop into, transitioned as the slot changes | `card-grid.ts` |
 | **The other cards** | Slide aside, because the packer re-runs with the dragged card at its previewed index | `card-grid.ts` |
 
-The lifted card **stays in the packing order** — that is what makes the others
+The lifted card **keeps a slot in the stacks** — that is what makes the others
 move — and is only rendered invisible (`.is-card-dragging`). Its height still
 feeds the packer, so the outline is always the size of the real thing.
 
 **Choosing the slot.** `hover(x, y)` doesn't hit-test rectangles. For every
-insertion index it re-packs the whole list with the dragged card at that index
-and measures how far the card *would* land from the floating clone's centre;
-closest wins. Spanning cards and the reflow they cause are therefore accounted
-for by construction rather than by special cases. A `SNAP_STICKINESS` bonus of
-28px on the index it is already at is what keeps it from flickering between two
-equidistant slots.
+column the card could start in and every index in that column's stack, it
+packs the stacks with the card inserted there and measures how far the card
+*would* land from the floating clone's centre; closest wins. A card dragged
+straight down its own column therefore trades places with the card below it,
+and the other columns never move. A `SNAP_STICKINESS` bonus of 28px on the slot
+it is already in is what keeps it from flickering between two equidistant
+ones.
+
+A spanning card is inserted into its further columns too, above whichever
+cards there sit lower than the slot it was given in its first column —
+measured against the stacks *without* it, so the answer doesn't depend on
+where it is currently previewed.
 
 **Dropping.** The clone flies to the outline's slot over 280ms while fading up
 to full opacity; the real card is revealed and the clone removed at the end of
@@ -335,6 +399,7 @@ Card registration happens in the widget modules' **module bodies**, which ES mod
 - **Some card bodies are still sized for popovers.** Weather and Calendar measure their host with a `ResizeObserver`; the todo list and the calendar scroller still cap themselves at a width-derived max height, which is why the carousel follows its slides' heights rather than stretching them to fill the column.
 - **`refreshCard` re-renders the whole body.** Fine for the current widgets, but a card that holds focus or scroll position will lose it.
 - **Cards are only in the top-level regions.** There's no nesting and no per-card size preference. Empty regions hide themselves in Dashboard, but Default's packed grid still leaves a blank area when every widget is off.
+- **A card can't sit above a spanning card in one column and below it in the other.** A spanning card holds the same relative position in every column it covers, so "Weather under the Calendar, Todos beside it" is expressible but "Todos above the Calendar's right half" leaves a hole the packer can't describe. Only Calendar spans today.
 - **`span` only means something in a packed region.** Dashboard's `main` is the one plain region left, so `SPAN_CLASSES` exists for a case no card uses; `top` and `side` ignore `span` outright.
 - **Dashboard's `main` region is empty.** Nothing mounts there. It is kept as the place a full-width panel under the shortcuts would go, and hides itself when unused.
 - **Region assignment is hardcoded, and so is form.** `regions` is a literal in each widget, and `renderTile` fixes what it looks like there. Rearranging moves cards within Default's grid, but which *region* a card lives in — and whether it renders as a tile or a panel — is still fixed in code. Making that user-configurable means moving the map into the store and letting either form appear in either region: the carousel would have to accept a tile and the top row a full panel.

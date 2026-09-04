@@ -634,6 +634,7 @@ function buildError(onChange: () => void): HTMLElement {
 function buildSkeleton(): HTMLElement {
   const wrap = document.createElement("div")
   wrap.className = "flex flex-col gap-3 py-1"
+  wrap.dataset.loading = "true"
   for (let i = 0; i < 3; i++) {
     const row = document.createElement("div")
     row.className = "flex items-center gap-2"

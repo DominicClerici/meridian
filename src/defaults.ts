@@ -175,8 +175,12 @@ export type SearchLearning = {
 export type SyncSettings = {
   theme: "modern";
   layout: LayoutMode;
-  /** User arrangement of the Default layout's card region, by card id. Cards
-      absent from the list keep their registration order and follow it. */
+  /** Exact arrangements of the Default layout's card region, keyed by column
+      count: one ordered stack of card ids per column, a spanning card listed
+      in each column it covers. Counts with no entry derive from the nearest. */
+  cardLayouts: Record<string, string[][]>;
+  /** Pre-column-stack arrangement — a flat card order. Only read as the seed
+      for a derived layout when `cardLayouts` is empty. */
   cardOrder: string[];
   accentColor: AccentColor | "random";
   bgColor: AccentColor | "auto";
@@ -213,7 +217,6 @@ export type SyncSettings = {
   weatherUnit: "f" | "c";
   weatherMetric: WeatherMetric;
   spotifyEnabled: boolean;
-  spotifyHideWhenIdle: boolean;
   spotifyClientId: string;
   recommendationsEnabled: boolean;
   shortcutsOpenIn: "current" | "new";
@@ -311,6 +314,13 @@ export type LocalSettings = {
   /** Newest first, capped at `MAX_RECENT_QUERIES`. Local, never synced. */
   searchRecentQueries: RecentQuery[]
   searchLearning: SearchLearning
+  /** Derived card arrangements for column counts the user never arranged,
+      pinned so a reload lands on the same one. `sig` names the saved layouts
+      and card set they were derived from; a mismatch throws them away. */
+  cardLayoutCache: { sig: string; layouts: Record<string, string[][]> }
+  /** Last measured card heights by `id@columns`, the floor under a card whose
+      body is still loading. */
+  cardHeights: Record<string, number>
 }
 
 /** Enough to fill an empty palette twice over; more is a history, not a hint. */
@@ -319,6 +329,7 @@ export const MAX_RECENT_QUERIES = 20
 export const syncDefaults: SyncSettings = {
   theme: "modern",
   layout: "default",
+  cardLayouts: {},
   cardOrder: [],
   accentColor: "sky",
   bgColor: "auto",
@@ -346,7 +357,6 @@ export const syncDefaults: SyncSettings = {
   weatherUnit: "f",
   weatherMetric: "apparent",
   spotifyEnabled: true,
-  spotifyHideWhenIdle: true,
   spotifyClientId: "",
   shortcutsOpenIn: "current",
   recommendationsEnabled: false,
@@ -414,4 +424,6 @@ export const localDefaults: LocalSettings = {
   dashboardWidget: null,
   searchRecentQueries: [],
   searchLearning: { picks: {}, byQuery: {} },
+  cardLayoutCache: { sig: "", layouts: {} },
+  cardHeights: {},
 }

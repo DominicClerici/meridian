@@ -118,7 +118,8 @@ Choosing a namespace: put it in `sync` if the user would expect it on their othe
 |---|---|---|---|
 | `theme` | `"modern"` | `"modern"` | `theme.ts`, `icons/registry.ts` |
 | `layout` | `"default" \| "dashboard" \| "immersive"` | `"default"` | `layout.ts` |
-| `cardOrder` | `string[]` | `[]` | `layout.ts`, `layout-edit.ts` — card ids in the order the user dragged them in Default's grid. Empty means "registration order"; ids it omits sort after the ones it names |
+| `cardLayouts` | `Record<string, string[][]>` | `{}` | `layout.ts`, `card-grid.ts`, `layout-edit.ts` — the user's arrangements of Default's grid, keyed by column count: one ordered stack of card ids per column, a spanning card listed in each column it covers. Counts without an entry derive from the nearest ([layouts.md](layouts.md#arrangements)) |
+| `cardOrder` | `string[]` | `[]` | `layout.ts` — legacy flat order from before column stacks. Only read as the seed for a derived arrangement when `cardLayouts` is empty |
 | `accentColor` | `AccentColor \| "random"` | `"sky"` | `theme.ts` |
 | `bgColor` | `AccentColor \| "auto"` | `"auto"` | `theme.ts` |
 | `mode` | `"light" \| "dark" \| "auto"` | `"auto"` | `theme.ts` |
@@ -144,7 +145,6 @@ Choosing a namespace: put it in `sync` if the user would expect it on their othe
 | `weatherEnabled` | `boolean` | `true` | `weather.ts` |
 | `weatherUnit` | `"f" \| "c"` | `"f"` | `weather.ts` |
 | `spotifyEnabled` | `boolean` | `true` | `spotify.ts` |
-| `spotifyHideWhenIdle` | `boolean` | `true` | `spotify.ts` — off keeps the card up with an idle body ([spotify.md](spotify.md#the-idle-card)) |
 | `spotifyClientId` | `string` | `""` | `spotify.ts`, `capabilities.ts` — a user-supplied Spotify app, needed where the bundled one's redirect URI can't apply |
 | `recommendationsEnabled` | `boolean` | `false` | `recommendations.ts`, `dock.ts` |
 | `shortcutsOpenIn` | `"current" \| "new"` | `"current"` | `dock.ts` |
@@ -215,6 +215,8 @@ Choosing a namespace: put it in `sync` if the user would expect it on their othe
 | `dashboardWidget` | `string \| null` | `null` | `layout.ts` — the card id the Dashboard's side carousel was last left on |
 | `searchRecentQueries` | `RecentQuery[]` | `[]` | `search/recents.ts` — newest first, capped at `MAX_RECENT_QUERIES` (20) |
 | `searchLearning` | `SearchLearning` | `{picks:{},byQuery:{}}` | `search/recents.ts` — which result each query ended in, and how often each is picked. `local` on purpose: a record of what you have searched for belongs to this browser |
+| `cardLayoutCache` | `{ sig: string; layouts: Record<string, string[][]> }` | `{ sig: "", layouts: {} }` | `layout.ts` — derived grid arrangements for column counts the user never arranged, pinned so a reload lands on the same one. `sig` names the saved layouts, legacy order and card set they came from; a mismatch throws them away |
+| `cardHeights` | `Record<string, number>` | `{}` | `layout.ts`, `card-grid.ts` — last measured card heights keyed `id@columns`, the floor under a card whose body is still loading ([layouts.md](layouts.md#first-paint)) |
 
 `RecommendationData` is `{ heatmap: { [domain: string]: number[][] }, builtAt: number }`.
 `BgImageMeta` is `{ id, url, authorName, authorUrl, downloadUrl, cachedAt }`.

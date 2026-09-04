@@ -1,7 +1,8 @@
 import { store } from "./store"
-import { refreshCards, registerCard } from "./layout"
+import { registerCard } from "./layout"
 import { icon } from "./icons/registry"
-import { createPopover } from "./components"
+import { createButton, createPopover } from "./components"
+import { openSettings } from "./settings"
 import { getDueOn, normalizeTodos } from "./todos"
 import type { Todo } from "./todos"
 import { showTodoPopover } from "./todo"
@@ -1658,6 +1659,7 @@ function renderWeekView(events: CalendarEvent[], width: number): ViewParts {
   const todayIndex = days.findIndex(d => d.isToday)
   const root = document.createElement("div")
   root.className = "flex flex-col gap-1.5 min-w-0 pt-2"
+  root.dataset.loading = "true"
   root.appendChild(weekHeaderRow(days.map(d => d.date), m))
 
   if (days.some(d => d.allDay.length > 0 || d.todos.length > 0)) {
@@ -1795,6 +1797,7 @@ function daySkeleton(width: number): HTMLElement {
   const m = dayMetrics(width)
   const root = document.createElement("div")
   root.className = "flex flex-col gap-2.5 min-w-0 pt-2.5 animate-pulse"
+  root.dataset.loading = "true"
 
   if (offset === 0) {
     const nextUp = document.createElement("div")
@@ -1934,6 +1937,56 @@ function retire(entry: LiveBody): void {
  * viewport, because the same builder fills a 660px popover in Immersive and a
  * grid card everywhere else. See docs/layouts.md.
  */
+/**
+ * The sign-in rendered inline, so an enabled-but-unconnected card is a way in
+ * rather than a dead box pointing at Settings — the same shape as the GitHub,
+ * Linear and Mail cards.
+ */
+function buildConnectPanel(): HTMLElement {
+  const wrap = document.createElement("div")
+  wrap.className = "flex flex-col items-center justify-center gap-2.5 px-4 py-6 text-center"
+
+  wrap.appendChild(icon("calendar", { size: 30, class: "text-popover-foreground/25" }))
+
+  const heading = document.createElement("p")
+  heading.className = "text-[13px] font-medium text-popover-foreground/70"
+  heading.textContent = "Connect Google Calendar"
+  wrap.appendChild(heading)
+
+  const sub = document.createElement("p")
+  sub.className = "max-w-[260px] text-[11px] leading-relaxed text-popover-foreground/40"
+  sub.textContent = "See today and the week ahead without leaving this tab."
+  wrap.appendChild(sub)
+
+  const status = document.createElement("p")
+  status.className = "max-w-[270px] text-[11px] leading-relaxed text-warning/80"
+  status.hidden = true
+
+  const connect = createButton("Sign in with Google", "primary", {
+    tone: "popover",
+    icon: icon("calendar", { size: 15 }),
+    onClick: async () => {
+      connect.disabled = true
+      status.hidden = true
+      const result = await authenticate()
+      connect.disabled = false
+      if (result.ok) return
+      status.hidden = false
+      status.textContent = result.error
+      if (result.needsClientId) {
+        const link = document.createElement("button")
+        link.className = "underline text-accent ml-1"
+        link.textContent = "Open Advanced settings"
+        link.addEventListener("click", () => openSettings("advanced"))
+        status.appendChild(link)
+      }
+    },
+  })
+  wrap.appendChild(connect)
+  wrap.appendChild(status)
+  return wrap
+}
+
 export function buildCalendarBody(): { el: HTMLElement; rebuild: () => void; dispose: () => void } {
   const content = document.createElement("div")
   content.className = "flex flex-col gap-0 min-w-0"
@@ -1981,6 +2034,10 @@ export function buildCalendarBody(): { el: HTMLElement; rebuild: () => void; dis
 
   function rebuild(): void {
     content.replaceChildren()
+    if (!store.local.get("calendarConnected")) {
+      content.appendChild(buildConnectPanel())
+      return
+    }
     content.appendChild(
       renderControls(() => {
         // Redraw first — the new period is already in hand, or is a skeleton.
@@ -2048,7 +2105,6 @@ registerCard({
   regions: { default: "grid", dashboard: "side" },
   span: { default: 2 },
   enabledKey: "calendarEnabled",
-  isEnabled: () => store.local.get("calendarConnected"),
   render: () => {
     viewMode = "1d"
     offset = 0
@@ -2142,7 +2198,9 @@ export function initCalendar(): void {
   })
 
   store.local.subscribe("calendarConnected", (connected) => {
-    refreshCards()
+    // Every live body redraws itself off the state change below; the connect
+    // panel and the calendar are two branches of the same rebuild.
+    notifyDataChanged()
     if (connected && store.sync.get("calendarEnabled")) {
       void refreshCalendar()
       startRefreshInterval()

@@ -97,7 +97,7 @@ The tile deliberately shows **no** countdown. It is only rebuilt on a fetch, and
 | State | Renders |
 |---|---|
 | `no-location` | `locationOff` icon + "Set location" — click opens settings |
-| `loading` | "Loading…" |
+| `loading` | "Loading…" — but only with no cache to show: a body built before the first fetch hydrates `currentData` from `getCachedData()` first, so a warm load paints the last readings and the fetch refreshes underneath |
 | `error` | `refresh` icon — click retries |
 | `loaded` | Condition icon + the selected metric, e.g. `93°F Clear sky`, `12 mph Clear sky`, `AQI 46 Clear sky` |
 

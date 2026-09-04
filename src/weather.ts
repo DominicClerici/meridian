@@ -139,7 +139,9 @@ type State = "no-location" | "loading" | "loaded" | "error"
 
 let currentState: State = "loading"
 let currentData: CurrentData | null = null
-let currentLocation: ResolvedLocation | null = null
+/** Read at module scope, so a card built from cache before `initWeather()`
+    already knows whether the location is only an estimate. */
+let currentLocation: ResolvedLocation | null = getStoredLocation()
 let seriesCache: Series | null = null
 let aqiCache: AqiData | null = null
 let refreshIntervalId: ReturnType<typeof setInterval> | null = null
@@ -1232,6 +1234,10 @@ export function buildWeatherBody(): HTMLElement {
   const root = document.createElement("div")
   root.className = "flex flex-col gap-2 text-popover-foreground min-w-0"
 
+  // A card built before the first fetch paints the last readings rather than a
+  // stub that the real body then replaces at three times the height.
+  if (currentState === "loading" && !currentData) currentData = getCachedData()
+
   if (currentState === "no-location") {
     const p = document.createElement("p")
     p.className = "text-sm text-popover-foreground/70 leading-snug"
@@ -1247,6 +1253,7 @@ export function buildWeatherBody(): HTMLElement {
   if (currentState === "loading" && !currentData) {
     const p = document.createElement("p")
     p.className = "text-sm text-popover-foreground/60"
+    p.dataset.loading = "true"
     p.textContent = "Loading…"
     root.appendChild(p)
     return root
@@ -1704,8 +1711,6 @@ export function initWeather(): void {
 
   seriesCache = getCachedSeries()
   aqiCache = getCachedAqi()
-  // So a cached render on load can still say the location is only an estimate.
-  currentLocation = getStoredLocation()
 
   trigger.addEventListener("click", (e) => {
     e.stopPropagation()
